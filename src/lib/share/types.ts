@@ -21,6 +21,10 @@ export interface CloudShare {
   baked?: boolean;
   /** False when the operator turned slow-mo off; guests should play at 1×. */
   slowMoEnabled?: boolean;
+  /** Event music bed label (None = silence). Used for live overlay when the file has no audio. */
+  musicBedLabel?: string;
+  /** True when the uploaded file includes a mixed music-bed track. */
+  hasAudio?: boolean;
   destination?: "blob" | "drive";
   driveFileId?: string | null;
   webViewLink?: string | null;
@@ -66,7 +70,7 @@ export function eventFromCloud(share: CloudShare): BoothEvent {
     clientNames: share.clientNames,
     accentColor: share.accentColor,
     logoDataUrl: share.logoDataUrl,
-    musicBedLabel: "None",
+    musicBedLabel: share.musicBedLabel || "None",
     frameStyle: share.frameStyle,
     createdAt: share.createdAt,
     updatedAt: share.createdAt,
@@ -96,7 +100,10 @@ export function cloudShareFrom(
   videoUrl: string,
   videoContentType: string,
   baked = true,
-  extra?: Pick<CloudShare, "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled">,
+  extra?: Pick<
+    CloudShare,
+    "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled" | "musicBedLabel" | "hasAudio"
+  >,
 ): CloudShare {
   return {
     clipId: clip.id,
@@ -117,6 +124,8 @@ export function cloudShareFrom(
     demoAssetPath: clip.demoAssetPath,
     baked,
     slowMoEnabled: extra?.slowMoEnabled ?? baked,
+    musicBedLabel: extra?.musicBedLabel ?? event.musicBedLabel,
+    hasAudio: extra?.hasAudio,
     destination: extra?.destination,
     driveFileId: extra?.driveFileId,
     webViewLink: extra?.webViewLink,

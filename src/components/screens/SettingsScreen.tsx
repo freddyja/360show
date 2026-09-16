@@ -109,6 +109,22 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
           />
         </label>
 
+        <label className="booth-card flex min-h-14 items-center justify-between rounded-2xl border px-4">
+          <span>
+            <span className="block text-white">Mute booth music</span>
+            <span className="block text-sm text-slate-400">
+              Silences looping beds on this operator tablet. Guests still hear overlay playback; mixed
+              Download / Share files keep their audio.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.boothMusicMuted === true}
+            onChange={(e) => saveSettings({ ...settings, boothMusicMuted: e.target.checked })}
+            className="h-5 w-5 accent-blue-500"
+          />
+        </label>
+
         <div>
           <span className="mb-2 block text-sm text-slate-400">Video quality</span>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -263,8 +279,9 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
         <p className="mt-2 text-sm leading-6 text-slate-400">
           Operator MVP for a 360 photo booth. Camera capture is real in the browser. Video quality
           (Settings) requests 1080p high or 720p standard. Slow-mo can be toggled: on uses a live
-          playback-rate ramp and bakes it into Download / Share files; off keeps normal speed. Share
-          can upload to Vercel Blob or Google Drive. Platform motor and GoPro control are stubbed.
+          playback-rate ramp and bakes it into Download / Share files; off keeps normal speed. Event
+          music beds loop under spin / preview / share and mix into exports when the browser allows.
+          Share can upload to Vercel Blob or Google Drive. Platform motor and GoPro control are stubbed.
         </p>
         <p className="mt-3 text-sm text-slate-500">
           {events.length} event{events.length === 1 ? "" : "s"} · {clips.length} clip{clips.length === 1 ? "" : "s"} on this tablet

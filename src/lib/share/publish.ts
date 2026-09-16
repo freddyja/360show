@@ -131,16 +131,22 @@ export async function publishClipToCloud(options: {
   localBlob: Blob | null;
   baked?: boolean;
   slowMoEnabled?: boolean;
+  musicBedLabel?: string;
+  hasAudio?: boolean;
   blobAccess?: BlobAccess | null;
-  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled"> | CloudShare | null;
+  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled" | "musicBedLabel" | "hasAudio"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, existing } = options;
   const baked = options.baked ?? true;
   const slowMoEnabled = options.slowMoEnabled ?? baked;
+  const musicBedLabel = options.musicBedLabel ?? event.musicBedLabel;
+  const hasAudio = options.hasAudio;
   const reusable = Boolean(
     existing?.destination !== "drive" &&
       existing?.baked === baked &&
       (existing?.slowMoEnabled ?? true) === slowMoEnabled &&
+      (existing?.musicBedLabel ?? "None") === (musicBedLabel || "None") &&
+      Boolean(existing?.hasAudio) === Boolean(hasAudio) &&
       (existing.videoUrl || clip.remoteVideoUrl),
   );
   let videoUrl = reusable ? existing?.videoUrl || clip.remoteVideoUrl || "" : "";
@@ -164,6 +170,8 @@ export async function publishClipToCloud(options: {
     cloudShareFrom(event, clip, videoUrl, videoContentType, baked, {
       destination: "blob",
       slowMoEnabled,
+      musicBedLabel,
+      hasAudio,
     }),
   );
 }
@@ -175,15 +183,21 @@ export async function publishClipToDrive(options: {
   folderName: string;
   baked?: boolean;
   slowMoEnabled?: boolean;
-  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled"> | CloudShare | null;
+  musicBedLabel?: string;
+  hasAudio?: boolean;
+  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled" | "musicBedLabel" | "hasAudio"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, folderName, existing } = options;
   const baked = options.baked ?? true;
   const slowMoEnabled = options.slowMoEnabled ?? baked;
+  const musicBedLabel = options.musicBedLabel ?? event.musicBedLabel;
+  const hasAudio = options.hasAudio;
   const reusable = Boolean(
     existing?.destination === "drive" &&
       existing?.baked === baked &&
       (existing?.slowMoEnabled ?? true) === slowMoEnabled &&
+      (existing?.musicBedLabel ?? "None") === (musicBedLabel || "None") &&
+      Boolean(existing?.hasAudio) === Boolean(hasAudio) &&
       existing.driveFileId &&
       existing.videoUrl,
   );
@@ -195,6 +209,8 @@ export async function publishClipToDrive(options: {
         driveFileId: existing.driveFileId,
         webViewLink: existing.webViewLink,
         slowMoEnabled,
+        musicBedLabel,
+        hasAudio,
       }),
       { allowDriveFallback: true },
     );
@@ -225,6 +241,8 @@ export async function publishClipToDrive(options: {
       driveFileId: uploaded.fileId,
       webViewLink: uploaded.webViewLink,
       slowMoEnabled,
+      musicBedLabel,
+      hasAudio,
     }),
     { allowDriveFallback: true },
   );

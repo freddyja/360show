@@ -10,7 +10,7 @@ export function sampleEvent(now = Date.now()): BoothEvent {
     clientNames: "Maya & Jordan",
     accentColor: "#3B82F6",
     logoDataUrl: null,
-    musicBedLabel: "Can't Help Falling in Love (instrumental)",
+    musicBedLabel: "Romantic piano",
     frameStyle: "gold-oval",
     createdAt: now,
     updatedAt: now,

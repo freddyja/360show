@@ -1,4 +1,6 @@
 import type { RampProfileId } from "../types";
+import { MUSIC_BED_CATALOG } from "../music/beds";
+import { mixMusicIntoStream } from "../music/mix";
 import { playbackRateAt, rampKeyframes } from "./ramp";
 import { createVideoRecorder, fitWithinQuality, resolveVideoQuality, type VideoQuality } from "./quality";
 
@@ -10,29 +12,53 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function bakedBlobKey(clipId: string) {
-  return `${clipId}__baked`;
+export function bakedBlobKey(clipId: string, musicId = "none", applyRamp = true) {
+  if (applyRamp && musicId === "none") return `${clipId}__baked`;
+  return `${clipId}__baked__${applyRamp ? "sm" : "1x"}__${musicId}`;
+}
+
+export function bakedBlobKeysForClip(clipId: string) {
+  const keys = new Set<string>([bakedBlobKey(clipId)]);
+  for (const bed of MUSIC_BED_CATALOG) {
+    keys.add(bakedBlobKey(clipId, bed.id, true));
+    keys.add(bakedBlobKey(clipId, bed.id, false));
+  }
+  return [...keys];
+}
+
+export interface BakeResult {
+  blob: Blob;
+  mixedAudio: boolean;
 }
 
 /**
- * Re-encode a source clip so the time-ramp is in the file itself.
+ * Re-encode a source clip so the time-ramp (and optional music bed) is in the file.
  * Records a canvas of the video playing at the profile's playbackRate
  * (wall-clock MediaRecorder), then holds a freeze if the profile ends at 0.
+ * When `musicBedLabel` is set, Web Audio loops the bed onto a MediaStream
+ * audio track. If the browser drops that track, the video still bakes and
+ * `mixedAudio` is false (live overlay remains the fallback).
  */
 export async function bakeTimeRamp(options: {
   source: Blob | string;
   profile: RampProfileId;
   expectedDurationSec?: number;
   quality?: VideoQuality;
+  musicBedLabel?: string | null;
+  applyRamp?: boolean;
   onProgress?: (progress: number) => void;
-}): Promise<Blob> {
+}): Promise<BakeResult> {
   if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
     throw new Error("Baking slow-mo needs a browser with MediaRecorder");
   }
 
   const src = typeof options.source === "string" ? options.source : URL.createObjectURL(options.source);
   const revoke = typeof options.source !== "string";
-  const keyframes = rampKeyframes(options.profile);
+  const applyRamp = options.applyRamp !== false;
+  const keyframes = applyRamp ? rampKeyframes(options.profile) : [
+    { at: 0, rate: 1 },
+    { at: 1, rate: 1 },
+  ];
 
   const video = document.createElement("video");
   video.muted = true;
@@ -48,6 +74,8 @@ export async function bakeTimeRamp(options: {
   host.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;";
   host.append(video, canvas);
   document.body.appendChild(host);
+
+  let mixStop: (() => void) | undefined;
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -79,8 +107,25 @@ export async function bakeTimeRamp(options: {
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Canvas 2D unavailable");
 
-    const stream = canvas.captureStream(fitted.fps);
-    const recorder = createVideoRecorder(stream, fitted.bitrate);
+    const canvasStream = canvas.captureStream(fitted.fps);
+    const mix = await mixMusicIntoStream(canvasStream, options.musicBedLabel);
+    mixStop = mix.stop;
+
+    let recorder: MediaRecorder;
+    let mixedAudio = mix.mixedAudio;
+    try {
+      recorder = createVideoRecorder(mix.stream, fitted.bitrate);
+    } catch {
+      mix.stop();
+      mixStop = undefined;
+      mixedAudio = false;
+      recorder = createVideoRecorder(canvasStream, fitted.bitrate);
+    }
+
+    if (mixedAudio && recorder.stream && recorder.stream.getAudioTracks().length === 0) {
+      mixedAudio = false;
+    }
+
     const chunks: BlobPart[] = [];
     const recorded = new Promise<Blob>((resolve, reject) => {
       recorder.ondataavailable = (event) => {
@@ -119,7 +164,7 @@ export async function bakeTimeRamp(options: {
         options.onProgress?.(progress);
         const rate = playbackRateAt(progress, keyframes);
 
-        if (rate <= 0.04) {
+        if (applyRamp && rate <= 0.04) {
           video.pause();
           options.onProgress?.(1);
           window.setTimeout(resolve, FREEZE_HOLD_MS);
@@ -142,9 +187,12 @@ export async function bakeTimeRamp(options: {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     await wait(250);
     if (recorder.state !== "inactive") recorder.stop();
-    stream.getTracks().forEach((track) => track.stop());
-    return await recorded;
+    mix.stream.getTracks().forEach((track) => track.stop());
+    canvasStream.getTracks().forEach((track) => track.stop());
+    const blob = await recorded;
+    return { blob, mixedAudio };
   } finally {
+    mixStop?.();
     video.pause();
     video.removeAttribute("src");
     video.load();

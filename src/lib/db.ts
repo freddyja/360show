@@ -1,4 +1,4 @@
-import { bakedBlobKey } from "./capture/bake";
+import { bakedBlobKeysForClip } from "./capture/bake";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { AppSettings, BoothEvent, Clip } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
@@ -78,7 +78,9 @@ export async function deleteEvent(id: string) {
   for (const clip of clips) {
     await tx.objectStore("clips").delete(clip.id);
     await tx.objectStore("blobs").delete(clip.id);
-    await tx.objectStore("blobs").delete(bakedBlobKey(clip.id));
+    for (const key of bakedBlobKeysForClip(clip.id)) {
+      await tx.objectStore("blobs").delete(key);
+    }
   }
   await tx.done;
 }
@@ -111,14 +113,14 @@ export async function getClipBlob(id: string) {
   return (await db.get("blobs", id)) ?? null;
 }
 
-export async function getBakedBlob(id: string) {
+export async function getBakedBlob(id: string, key?: string) {
   const db = await getDb();
-  return (await db.get("blobs", bakedBlobKey(id))) ?? null;
+  return (await db.get("blobs", key ?? `${id}__baked`)) ?? null;
 }
 
-export async function putBakedBlob(clipId: string, blob: Blob) {
+export async function putBakedBlob(clipId: string, blob: Blob, key?: string) {
   const db = await getDb();
-  await db.put("blobs", blob, bakedBlobKey(clipId));
+  await db.put("blobs", blob, key ?? `${clipId}__baked`);
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -131,6 +133,7 @@ export async function getSettings(): Promise<AppSettings> {
     driveFolderName: stored?.driveFolderName?.trim() || DEFAULT_SETTINGS.driveFolderName,
     slowMoEnabled: stored?.slowMoEnabled !== false,
     videoQuality: stored?.videoQuality === "standard" ? "standard" : "high",
+    boothMusicMuted: stored?.boothMusicMuted === true,
   };
 }
 

@@ -40,6 +40,14 @@ const RECORDER_MIME_CANDIDATES = [
   "video/webm",
 ];
 
+/** Prefer containers that can actually keep an audio track when mixing a bed. */
+const AV_RECORDER_MIME_CANDIDATES = [
+  "video/webm;codecs=vp9,opus",
+  "video/webm;codecs=vp8,opus",
+  "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+  "video/webm",
+];
+
 export function isVideoQuality(value: unknown): value is VideoQuality {
   return (VIDEO_QUALITIES as readonly string[]).includes(value as string);
 }
@@ -52,15 +60,21 @@ export function videoQualityProfile(quality?: VideoQuality | null): VideoQuality
   return VIDEO_QUALITY_PROFILES[resolveVideoQuality(quality)];
 }
 
-export function pickRecorderMimeType() {
+export function pickRecorderMimeType(withAudio = false) {
   if (typeof MediaRecorder === "undefined") return "";
-  return RECORDER_MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+  const list = withAudio ? AV_RECORDER_MIME_CANDIDATES : RECORDER_MIME_CANDIDATES;
+  return list.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
 }
 
 export function createVideoRecorder(stream: MediaStream, bitrate: number) {
-  const mimeType = pickRecorderMimeType();
+  const withAudio = stream.getAudioTracks().length > 0;
+  const mimeType = pickRecorderMimeType(withAudio);
   const withMime = mimeType
-    ? { mimeType, videoBitsPerSecond: bitrate }
+    ? {
+        mimeType,
+        videoBitsPerSecond: bitrate,
+        ...(withAudio ? { audioBitsPerSecond: 128_000 } : {}),
+      }
     : { videoBitsPerSecond: bitrate };
   try {
     return new MediaRecorder(stream, withMime);

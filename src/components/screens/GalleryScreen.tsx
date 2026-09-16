@@ -66,7 +66,9 @@ export function GalleryScreen({ eventId }: { eventId: string }) {
                   </p>
                   <p className="text-xs text-slate-400">
                     {clip.hasBakedBlob
-                      ? "Slow-mo baked"
+                      ? clip.hasMixedAudio
+                        ? "Export baked + music"
+                        : "Export baked"
                       : settings.slowMoEnabled === false
                         ? "Normal speed"
                         : "Ramp on preview · bake on save"}

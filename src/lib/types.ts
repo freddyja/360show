@@ -42,6 +42,8 @@ export interface Clip {
   cloudShareAt?: number | null;
   hasBakedBlob?: boolean;
   bakedAt?: number | null;
+  /** True when the cached export includes a mixed music-bed audio track. */
+  hasMixedAudio?: boolean;
 }
 
 export type CloudDestination = "blob" | "drive";
@@ -62,6 +64,8 @@ export interface AppSettings {
   slowMoEnabled: boolean;
   /** Capture + bake resolution / bitrate. Default high (1080p). */
   videoQuality: VideoQuality;
+  /** Mute looping booth beds on the operator tablet. Guests still hear overlay / mixed files. */
+  boothMusicMuted: boolean;
 }
 
 export interface KvState {
@@ -69,14 +73,7 @@ export interface KvState {
   activeEventId: string | null;
 }
 
-export const MUSIC_BEDS = [
-  "None",
-  "Cinematic swell",
-  "Can't Help Falling in Love (instrumental)",
-  "First Dance piano",
-  "Upbeat house bed",
-  "Silent disco pulse",
-] as const;
+export { MUSIC_BEDS, type MusicBedLabel } from "./music/beds";
 
 export const DEFAULT_SETTINGS: AppSettings = {
   deviceName: "Booth Tablet 1",
@@ -86,6 +83,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   driveFolderName: "360show",
   slowMoEnabled: true,
   videoQuality: "high",
+  boothMusicMuted: false,
 };
 
 export const CAPTURE_DURATION_MS = 10_000;

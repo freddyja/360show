@@ -10,7 +10,9 @@ import { RampPlayer } from "@/components/RampPlayer";
 import { BootScreen } from "@/components/BootScreen";
 import { OperatorShell } from "@/components/OperatorShell";
 import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/capture/record";
-import { bakeSourceForClip, ensureBakedClip } from "@/lib/capture/ensureBaked";
+import { bakeSourceForClip, ensureBakedClip, needsExportBake } from "@/lib/capture/ensureBaked";
+import { hasMusicBed, musicBedSrc } from "@/lib/music/beds";
+import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
 import { createStubMotor, probeCamera, type CameraStatus } from "@/lib/hardware";
 import { cn } from "@/lib/cn";
 import { createId } from "@/lib/ids";
@@ -37,6 +39,13 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const motor = useMemo(() => createStubMotor(), []);
   const lastSrc = useClipSrc(latestClip?.id, latestClip?.demoAssetPath);
+  const musicActive = phase !== "idle" || previewOpen;
+
+  useBoothMusic({
+    label: event?.musicBedLabel,
+    active: musicActive && Boolean(event && hasMusicBed(event.musicBedLabel)),
+    muted: settings.boothMusicMuted,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +72,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
 
   async function runSpin() {
     if (busy || !event) return;
+    syncBoothMusic({
+      src: musicBedSrc(event.musicBedLabel),
+      playing: true,
+      muted: settings.boothMusicMuted,
+    });
+    nudgeBoothMusic();
     setMessage(null);
     setPreviewOpen(false);
     setPhase("countdown");
@@ -112,7 +127,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       rampProfile: rampProfileForFrame(event.frameStyle),
     };
     await saveClip(clip, blob);
-    if (settings.slowMoEnabled !== false) {
+    if (needsExportBake(settings.slowMoEnabled !== false, event.musicBedLabel)) {
       void bakeExportInBackground(clip, blob);
     }
     await wait(600);
@@ -120,22 +135,32 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     setMessage(
       recorded.source === "demo"
         ? settings.slowMoEnabled !== false
-          ? "Demo spin saved — camera was unavailable. Baking slow-mo export in the background."
-          : "Demo spin saved — camera was unavailable. Slow-mo is off, so the file stays normal speed."
+          ? "Demo spin saved — camera was unavailable. Baking export in the background."
+          : hasMusicBed(event.musicBedLabel)
+            ? "Demo spin saved — camera was unavailable. Mixing music bed into the export."
+            : "Demo spin saved — camera was unavailable. Slow-mo is off, so the file stays normal speed."
         : settings.slowMoEnabled !== false
-          ? "Spin saved. Baking slow-mo export in the background."
-          : "Spin saved at normal speed.",
+          ? "Spin saved. Baking export in the background."
+          : hasMusicBed(event.musicBedLabel)
+            ? "Spin saved. Mixing music bed into the export."
+            : "Spin saved at normal speed.",
     );
   }
 
   async function bakeExportInBackground(clip: Clip, blob: Blob | null) {
     try {
-      await ensureBakedClip({
+      const result = await ensureBakedClip({
         clip,
         source: bakeSourceForClip(clip, blob),
         quality: settings.videoQuality,
+        musicBedLabel: event?.musicBedLabel,
+        applyRamp: settings.slowMoEnabled !== false,
       });
-      await patchClip(clip.id, { hasBakedBlob: true, bakedAt: Date.now() });
+      await patchClip(clip.id, {
+        hasBakedBlob: true,
+        bakedAt: Date.now(),
+        hasMixedAudio: result.mixedAudio,
+      });
     } catch {
       // Download / Share will retry the bake.
     }
@@ -215,7 +240,17 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           icon={Eye}
           title="Preview"
           subtitle="Review 360 view"
-          onClick={() => setPreviewOpen(true)}
+          onClick={() => {
+            if (event) {
+              syncBoothMusic({
+                src: musicBedSrc(event.musicBedLabel),
+                playing: true,
+                muted: settings.boothMusicMuted,
+              });
+              nudgeBoothMusic();
+            }
+            setPreviewOpen(true);
+          }}
           disabled={!hasClip || busy}
         />
         <ActionCard
@@ -243,8 +278,13 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             <div className="flex items-center justify-between px-5 py-4">
               <p className="text-slate-300">
                 {settings.slowMoEnabled !== false
-                  ? "Live playback ramp · Download / Share save a baked slow-mo file"
+                  ? "Live playback ramp · Download / Share bake slow-mo"
                   : "Normal speed · Download / Share save the original file (slow-mo is off)"}
+                {hasMusicBed(event.musicBedLabel)
+                  ? settings.boothMusicMuted
+                    ? " · booth music muted"
+                    : ` · ${event.musicBedLabel}`
+                  : ""}
               </p>
               <button type="button" className="rounded-full bg-blue-500 px-4 py-2 text-sm font-medium text-white" onClick={() => setPreviewOpen(false)}>
                 Close

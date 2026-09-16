@@ -9,6 +9,8 @@ import { createId } from "@/lib/ids";
 import { capturePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
 import { MUSIC_BEDS, type BoothEvent } from "@/lib/types";
+import { SOFT_MUSIC_BEDS, hasMusicBed, musicBedSrc, normalizeMusicBedLabel } from "@/lib/music/beds";
+import { nudgeBoothMusic, syncBoothMusic } from "@/lib/music/player";
 import { cn } from "@/lib/cn";
 
 export function EventSetupScreen({ eventId }: { eventId?: string }) {
@@ -41,6 +43,10 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
     if (existing) setForm(existing);
   }, [existing]);
 
+  useEffect(() => {
+    return () => syncBoothMusic({ src: null, playing: false });
+  }, []);
+
   if (!ready) return <BootScreen />;
   if (eventId && !existing) {
     return (
@@ -67,7 +73,13 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
   }
 
   async function persist(andOpen: boolean) {
-    const next = { ...form, updatedAt: Date.now(), clientNames: form.clientNames.trim() || "Guests" };
+    const next = {
+      ...form,
+      updatedAt: Date.now(),
+      clientNames: form.clientNames.trim() || "Guests",
+      musicBedLabel: normalizeMusicBedLabel(form.musicBedLabel),
+    };
+    syncBoothMusic({ src: null, playing: false });
     await saveEvent(next, true);
     setSaved(true);
     if (andOpen) router.push(capturePath(next.id));
@@ -123,10 +135,19 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
             <input value={form.accentColor} onChange={(e) => update("accentColor", e.target.value)} className={inputClass} />
           </div>
         </Field>
-        <Field label="Music bed (label only in MVP)">
+        <Field label="Music bed">
           <select
-            value={form.musicBedLabel}
-            onChange={(e) => update("musicBedLabel", e.target.value)}
+            value={normalizeMusicBedLabel(form.musicBedLabel)}
+            onChange={(e) => {
+              const next = e.target.value;
+              update("musicBedLabel", next);
+              syncBoothMusic({
+                src: musicBedSrc(next),
+                playing: hasMusicBed(next),
+                muted: false,
+              });
+              nudgeBoothMusic();
+            }}
             className={inputClass}
           >
             {MUSIC_BEDS.map((bed) => (
@@ -135,6 +156,11 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
               </option>
             ))}
           </select>
+          <span className="mt-1 block text-xs text-slate-500">
+            Plays under spin, preview, and guest share. Mixed into Download / Share when this browser
+            can record an audio track. Softer beds ({SOFT_MUSIC_BEDS.join(", ")}) suit Christian
+            Fellowship and gentle events.
+          </span>
         </Field>
         <Field label="Logo (stored locally)">
           <input

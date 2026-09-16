@@ -15,8 +15,8 @@ Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample
 
 1. **Open booth** on the sample event (or create your own).
 2. Tap **START SPIN**. Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
-3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files.
-4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), force-offline chip, and mock battery %.
+3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files. If the event has a music bed (not None), it loops under spin / preview / share and is mixed into the export when the browser can record audio.
+4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), booth music mute, force-offline chip, and mock battery %.
 
 Local demo works **without** Blob or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
 
@@ -130,10 +130,10 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 | --- | --- |
 | `/` | Events list — create / select tonight’s event |
 | `/events/new` | New event setup |
-| `/e/[eventId]` | Event setup — name, date, couple names, accent, logo, music bed label, frame style |
+| `/e/[eventId]` | Event setup — name, date, couple names, accent, logo, **music bed**, frame style |
 | `/e/[eventId]/capture` | Operator capture (mockup 1) |
 | `/e/[eventId]/gallery` | Tonight’s clips |
-| `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, force offline, **Blob vs Drive destination**, Google Drive connect |
+| `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, **mute booth music**, force offline, **Blob vs Drive destination**, Google Drive connect |
 | `/e/[eventId]/share/[clipId]` | Operator guest-share screen (mockup 2) |
 | `/s/[clipId]` | Share page encoded in the QR |
 
@@ -150,6 +150,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - Copy link, `sms:` “Text me”, download when a blob, demo file, or cloud URL exists
 - **Live time-ramp preview**: `playbackRate` keyframes when **Slow-mo / time ramp** is on (Settings)
 - **Baked slow-mo export**: same ramp re-encoded for Download / Share when slow-mo is on; skipped when off
+- **Music beds**: original CC0 instrumentals under `/music/`. Looping playback on spin / preview / share; best-effort mix into Download / Share via Web Audio + MediaRecorder
 - Event frames overlaid on **web preview** (gold oval, neon ring, midnight arch, classic plaque, minimal, **Christian Fellowship** PNG pack) — not composited into the downloaded file yet
 - **Christian Fellowship** look-pack: navy/gold plaque overlay (`/frames/christian-fellowship.png`), default accent `#C9A227`, gentle slow-mo ramp (no freeze-flash)
 - Force-offline chip, mock battery, Camera OK / demo status
@@ -159,7 +160,6 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - **Platform motor** — `src/lib/hardware/motor.ts` (`createStubMotor`). Swap in serial / BLE / USB without changing capture orchestration.
 - **GoPro** — `src/lib/hardware/gopro.ts`. Unused on the live path; capture uses the tablet/USB camera.
 - **Frame burned into the file** — overlays stay on the web player; the download is ramp-baked video only.
-- **Music bed** — stored as a label only (no audio mix).
 - **TV mirror / AI frames** — not built.
 
 ## Stack
@@ -170,7 +170,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 ## Capture pipeline
 
-`START SPIN` → 3-2-1 countdown → timed record (quality from Settings) → save original → if slow-mo is on, background-bake the time-ramp at the same quality cap → gallery / share (upload uses baked file when slow-mo is on).
+`START SPIN` → 3-2-1 countdown → timed record (quality from Settings) → save original → if slow-mo is on and/or a music bed is selected, background-bake the time-ramp (and mix the bed) at the same quality cap → gallery / share (upload uses that export).
 
 Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during record so a future motor implementation can run in lockstep.
 
@@ -180,13 +180,31 @@ Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during recor
 | --- | --- | --- |
 | Operator **Preview** / booth share player | Live `playbackRate` on the original capture | Web overlay |
 | Guest `/s/[clipId]` after cloud upload | File is already baked; player runs at 1× | Web overlay |
-| **Download / Save to gallery** | Baked into the file (slow-mo without this app) | Not in the file (web only) |
+| **Download / Save to gallery** | Baked into the file (slow-mo without this app). Music mixed in when the browser allowed it. | Not in the file (web only) |
 | Vercel Blob `export.*` | Baked once on the booth before upload | Not in the file |
 | Google Drive (anyone-with-link) | Baked file uploaded from the booth | Not in the file |
 
 Bake uses a hidden `<video>` + canvas `captureStream` + `MediaRecorder`. It follows the clip’s ramp profile (`time-ramp-v1` freeze vs `time-ramp-gentle`). Wall-clock encode is longer than the 10s source (typically tens of seconds). The original blob remains in IndexedDB for recapture/debug.
 
-**Settings → Slow-mo / time ramp** (default on) controls this. Off: Preview plays at 1× and Download / Share upload the original capture (no bake). Guest pages honor `slowMoEnabled` on the cloud share so they do not re-apply a live ramp.
+**Settings → Slow-mo / time ramp** (default on) controls this. Off: Preview plays at 1× and Download / Share skip the slow-mo bake (they still re-encode if a music bed needs mixing). Guest pages honor `slowMoEnabled` on the cloud share so they do not re-apply a live ramp.
+
+## Music beds
+
+Event setup picks a bed. **None** is silence. Everything else is an original 16-second looping WAV in `public/music/` (see [MUSIC_CREDITS.md](MUSIC_CREDITS.md)). Labels are generic on purpose — there are no commercial recordings (including no “Can't Help Falling in Love”).
+
+| Label | Mood | Typical use |
+| --- | --- | --- |
+| Cinematic swell | Soft pad | Formal / gentle events |
+| Romantic piano | Soft waltz | Weddings, Christian Fellowship |
+| First Dance piano | Soft arpeggios | Weddings, gentle events |
+| Upbeat house | Party | Club / reception energy |
+| Silent disco pulse | Party | Electronic / silent-disco nights |
+
+**Live playback:** an `HTMLAudioElement` loops under operator spin, Preview, and the guest share player. Volume defaults to ~0.28. Browsers block autoplay without a gesture — **START SPIN**, Preview, changing the bed in setup, or tapping the share player counts. **Settings → Mute booth music** silences the operator tablet only; guest phones still overlay the bed, and mixed files keep their audio.
+
+**Export mix (best-effort):** Download / Share decode the WAV with Web Audio, loop it onto a `MediaStreamDestination`, and record it with the canvas video (`webm` + Opus when `MediaRecorder` supports it). Chrome/Android usually produce a file you can hear in Photos. Some browsers (notably iOS Safari, or mp4-only recorders) drop the audio track — then the downloaded file is video-only and the **web player still plays the looping bed**. Drive guest links pass `?m=` so overlay works even without Blob metadata; `?a=1` means the uploaded file already has audio (skip a second overlay on the Drive iframe).
+
+Regenerate assets with `npm run music:generate`.
 
 ## Video quality
 
@@ -213,7 +231,6 @@ Dark nightclub wash: hot magenta, cyan, violet, and neon gold, painted on `html`
 
 - GoPro Open GoPro / USB webcam ingest
 - Real platform motor (ESP32 / GRBL / vendor SDK)
-- Server-side mix of a music bed onto the baked export
 - AI / custom frame builder
 - HDMI / TV mirror for the crowd display
 - Burn the selected frame overlay into the baked export

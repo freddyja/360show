@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "music:generate": "node scripts/generate-music-beds.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
