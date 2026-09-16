@@ -172,7 +172,7 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
                 <img
                   src={style.assetSrc}
                   alt=""
-                  className="mb-3 h-16 w-full rounded-lg object-cover"
+                  className="mb-3 h-16 w-full rounded-lg object-cover object-bottom"
                 />
               )}
               <span className="block font-medium text-white">{style.name}</span>
