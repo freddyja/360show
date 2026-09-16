@@ -164,7 +164,7 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
                 "rounded-2xl border px-3 py-4 text-left transition",
                 form.frameStyle === style.id
                   ? "border-blue-400 bg-blue-500/10"
-                  : "border-white/10 bg-[#0c1424]",
+                  : "booth-card border-white/10",
               )}
             >
               {style.assetSrc && (
@@ -203,8 +203,8 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
 
   if (isNew) {
     return (
-      <div className="min-h-dvh bg-[#05080f] p-3 sm:p-5">
-        <div className="mx-auto max-w-5xl rounded-[28px] border border-white/10 bg-[#0a101c] p-6 sm:p-10">{body}</div>
+      <div className="booth-page p-3 sm:p-5">
+        <div className="booth-frame mx-auto max-w-5xl rounded-[28px] p-6 sm:p-10">{body}</div>
       </div>
     );
   }
@@ -230,7 +230,7 @@ function Field({
 }
 
 const inputClass =
-  "min-h-12 w-full rounded-2xl border border-white/10 bg-[#0c1424] px-4 text-white outline-none focus:border-blue-400";
+  "booth-card min-h-12 w-full rounded-2xl border px-4 text-white outline-none focus:border-blue-400";
 
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {

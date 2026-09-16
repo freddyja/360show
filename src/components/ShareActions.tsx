@@ -58,7 +58,7 @@ export function ShareActions({
       {items.map((item) => {
         const Icon = item.icon;
         const className = cn(
-          "flex min-h-[84px] items-center gap-4 rounded-2xl border border-white/10 bg-[#0c1424] px-5 text-left transition hover:border-blue-400/40 hover:bg-[#101a2e]",
+          "flex min-h-[84px] items-center gap-4 rounded-2xl border booth-card px-5 text-left transition hover:border-blue-400/40 hover:bg-white/5",
         );
         const inner = (
           <>

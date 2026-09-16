@@ -14,8 +14,8 @@ export function EventsListScreen() {
   if (!ready) return <BootScreen />;
 
   return (
-    <div className="min-h-dvh bg-[#05080f] p-3 sm:p-4 md:p-5">
-      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-[1400px] flex-col rounded-[28px] border border-white/10 bg-[#0a101c] p-6 sm:p-10 md:min-h-[calc(100dvh-2.5rem)]">
+    <div className="booth-page p-3 sm:p-4 md:p-5">
+      <div className="booth-frame mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-[1400px] flex-col p-6 sm:p-10 md:min-h-[calc(100dvh-2.5rem)]">
         <p className="text-sm tracking-[0.28em] text-slate-400 uppercase">360show</p>
         <h1 className="mt-2 text-4xl font-semibold text-white">Tonight’s events</h1>
         <p className="mt-2 max-w-2xl text-slate-400">
@@ -27,7 +27,7 @@ export function EventsListScreen() {
           {events.map((event) => (
             <article
               key={event.id}
-              className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-[#0c1424] p-5 sm:flex-row sm:items-center sm:justify-between"
+              className="booth-card flex flex-col gap-4 rounded-3xl border p-5 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex items-start gap-4">
                 <div

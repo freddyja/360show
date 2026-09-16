@@ -74,7 +74,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
         <label className="block">
           <span className="mb-2 block text-sm text-slate-400">Device name</span>
           <input
-            className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#0c1424] px-4 text-white"
+            className="booth-card min-h-12 w-full rounded-2xl border px-4 text-white"
             value={settings.deviceName}
             onChange={(e) => saveSettings({ ...settings, deviceName: e.target.value })}
           />
@@ -94,7 +94,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
           />
         </label>
 
-        <label className="flex min-h-14 items-center justify-between rounded-2xl border border-white/10 bg-[#0c1424] px-4">
+        <label className="booth-card flex min-h-14 items-center justify-between rounded-2xl border px-4">
           <span>
             <span className="block text-white">Slow-mo / time ramp</span>
             <span className="block text-sm text-slate-400">
@@ -119,7 +119,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
                 "flex min-h-[88px] flex-col items-start rounded-2xl border px-4 py-3 text-left",
                 settings.videoQuality !== "standard"
                   ? "border-blue-400/60 bg-blue-500/10"
-                  : "border-white/10 bg-[#0c1424]",
+                  : "booth-card border-white/10",
               )}
             >
               <span className="text-white">High</span>
@@ -132,7 +132,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
                 "flex min-h-[88px] flex-col items-start rounded-2xl border px-4 py-3 text-left",
                 settings.videoQuality === "standard"
                   ? "border-blue-400/60 bg-blue-500/10"
-                  : "border-white/10 bg-[#0c1424]",
+                  : "booth-card border-white/10",
               )}
             >
               <span className="text-white">Standard</span>
@@ -145,7 +145,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
           </p>
         </div>
 
-        <label className="flex min-h-14 items-center justify-between rounded-2xl border border-white/10 bg-[#0c1424] px-4">
+        <label className="booth-card flex min-h-14 items-center justify-between rounded-2xl border px-4">
           <span>
             <span className="block text-white">Force offline</span>
             <span className="block text-sm text-slate-400">Shows the Offline mode chip; clips stay on-device</span>
@@ -159,7 +159,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
         </label>
       </div>
 
-      <section className="mt-10 max-w-2xl rounded-3xl border border-white/10 bg-[#0c1424] p-5">
+      <section className="booth-card mt-10 max-w-2xl rounded-3xl border p-5">
         <h2 className="text-lg font-medium text-white">Cloud destination</h2>
         <p className="mt-1 text-sm text-slate-400">
           Where Share uploads guest clips. Preview always stays on this tablet.
@@ -173,7 +173,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
               "flex min-h-[96px] items-start gap-3 rounded-2xl border px-4 py-3 text-left",
               destination === "blob"
                 ? "border-blue-400/60 bg-blue-500/10"
-                : "border-white/10 bg-[#0a101c]",
+                : "booth-card border-white/10",
             )}
           >
             <Cloud className="mt-0.5 h-6 w-6 shrink-0 text-blue-400" />
@@ -191,7 +191,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
               "flex min-h-[96px] items-start gap-3 rounded-2xl border px-4 py-3 text-left",
               destination === "drive"
                 ? "border-blue-400/60 bg-blue-500/10"
-                : "border-white/10 bg-[#0a101c]",
+                : "booth-card border-white/10",
             )}
           >
             <HardDrive className="mt-0.5 h-6 w-6 shrink-0 text-blue-400" />
@@ -219,7 +219,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
             <label className="block">
               <span className="mb-2 block text-sm text-slate-400">Drive folder name</span>
               <input
-                className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#0a101c] px-4 text-white"
+                className="booth-card min-h-12 w-full rounded-2xl border px-4 text-white"
                 value={settings.driveFolderName}
                 onChange={(e) => saveSettings({ ...settings, driveFolderName: e.target.value || "360show" })}
                 placeholder="360show"
@@ -258,7 +258,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
         )}
       </section>
 
-      <section className="mt-10 max-w-2xl rounded-3xl border border-white/10 bg-[#0c1424] p-5">
+      <section className="booth-card mt-10 max-w-2xl rounded-3xl border p-5">
         <h2 className="text-lg font-medium text-white">About 360show</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
           Operator MVP for a 360 photo booth. Camera capture is real in the browser. Video quality

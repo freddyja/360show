@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #05080f;
+  --background: #14061f;
   --foreground: #f8fafc;
   --booth-blue: #3b82f6;
+  --booth-magenta: #ec4899;
+  --booth-violet: #7c3aed;
 }
 
 @theme inline {
@@ -15,11 +17,58 @@
 
 html,
 body {
-  background: var(--background);
   color: var(--foreground);
   min-height: 100%;
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   overscroll-behavior: none;
+}
+
+html {
+  background-color: var(--background);
+}
+
+body {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--background);
+  background-image:
+    radial-gradient(1100px 720px at 6% -8%, rgba(236, 72, 153, 0.42), transparent 58%),
+    radial-gradient(900px 640px at 108% 4%, rgba(59, 130, 246, 0.5), transparent 52%),
+    radial-gradient(820px 560px at 48% 112%, rgba(124, 58, 237, 0.38), transparent 58%),
+    radial-gradient(420px 320px at 78% 72%, rgba(250, 204, 21, 0.08), transparent 70%),
+    linear-gradient(158deg, #1a0533 0%, #3b0764 26%, #4c1d95 48%, #1e3a8a 72%, #0f172a 100%);
+  background-attachment: fixed;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    radial-gradient(1.4px 1.4px at 8% 18%, rgba(255, 255, 255, 0.75), transparent),
+    radial-gradient(1.2px 1.2px at 22% 42%, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1.6px 1.6px at 36% 12%, rgba(253, 224, 71, 0.55), transparent),
+    radial-gradient(1.2px 1.2px at 48% 64%, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(1.5px 1.5px at 61% 28%, rgba(196, 181, 253, 0.7), transparent),
+    radial-gradient(1.2px 1.2px at 73% 76%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(1.8px 1.8px at 84% 16%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.3px 1.3px at 91% 48%, rgba(244, 114, 182, 0.55), transparent),
+    radial-gradient(1.2px 1.2px at 14% 82%, rgba(147, 197, 253, 0.55), transparent),
+    radial-gradient(1.4px 1.4px at 96% 88%, rgba(255, 255, 255, 0.4), transparent);
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 768px) {
+  body {
+    background-attachment: scroll;
+  }
 }
 
 button,
@@ -30,5 +79,37 @@ select {
 }
 
 ::selection {
-  background: rgba(59, 130, 246, 0.35);
+  background: rgba(236, 72, 153, 0.35);
+}
+
+@layer components {
+  .booth-page {
+    min-height: 100dvh;
+    background: transparent;
+  }
+
+  .booth-frame {
+    background: linear-gradient(180deg, rgba(10, 6, 24, 0.72), rgba(8, 10, 26, 0.78));
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 28px;
+    box-shadow:
+      0 0 0 1px rgba(236, 72, 153, 0.08),
+      0 28px 80px rgba(76, 29, 149, 0.28);
+  }
+
+  .booth-card {
+    background: rgba(8, 6, 22, 0.42);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .booth-stage {
+    background:
+      radial-gradient(120% 80% at 92% 42%, rgba(59, 130, 246, 0.4), transparent 56%),
+      radial-gradient(90% 70% at 4% 88%, rgba(236, 72, 153, 0.32), transparent 52%),
+      rgba(8, 6, 22, 0.5);
+  }
 }

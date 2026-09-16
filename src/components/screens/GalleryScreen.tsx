@@ -43,7 +43,7 @@ export function GalleryScreen({ eventId }: { eventId: string }) {
             <Link
               key={clip.id}
               href={operatorSharePath(eventId, clip.id)}
-              className="overflow-hidden rounded-3xl border border-white/10 bg-[#0c1424]"
+              className="booth-card overflow-hidden rounded-3xl border"
             >
               <div className="relative aspect-video bg-[#070b14]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}

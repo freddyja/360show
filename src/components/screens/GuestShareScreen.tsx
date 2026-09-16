@@ -321,7 +321,7 @@ export function GuestShareScreen({
       </header>
 
       <div className="mt-5 grid flex-1 gap-4 lg:grid-cols-[1.35fr_0.9fr]">
-        <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[#0c1424]">
+        <div className="booth-card relative overflow-hidden rounded-[24px] border">
           <div className="relative aspect-video">
             <RampPlayer
               src={src}
@@ -469,8 +469,8 @@ function guestShareLink(
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh bg-[#05080f] p-3 sm:p-4 md:p-5">
-      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-[1400px] flex-col rounded-[28px] border border-white/10 bg-[#0a101c] p-4 sm:p-6 md:p-8">
+    <div className="booth-page p-3 sm:p-4 md:p-5">
+      <div className="booth-frame mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-[1400px] flex-col p-4 sm:p-6 md:p-8">
         {children}
       </div>
     </div>

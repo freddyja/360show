@@ -207,7 +207,7 @@ Demo fallback (canvas scene / bundled `/demo/spin.mp4`) is unchanged when the ca
 
 ## Design
 
-Dark charcoal (`#05080f` / `#0a101c`), white type, electric blue (`#3B82F6`), green Camera OK. Large touch targets, landscape and portrait. Event name stays on Capture and Share.
+Dark nightclub wash: deep purple → magenta → electric blue, with a faint sparkle overlay. Operator shells and cards sit as translucent dark glass on that gradient so white type, START SPIN, Share, and status chips stay high-contrast. Event name stays on Capture and Share. Large touch targets, landscape and portrait.
 
 ## Future
 

@@ -170,12 +170,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           disabled={busy}
           className={cn(
             "group relative flex min-h-[240px] w-full flex-1 items-center justify-center overflow-hidden rounded-[28px] border border-white/10 px-6 text-left disabled:cursor-wait",
-            livePreview ? "bg-black/45" : "bg-[#0c1528]",
+            livePreview ? "bg-black/50" : "booth-stage",
           )}
         >
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_90%_50%,rgba(59,130,246,0.35),transparent_55%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_8%_90%,rgba(236,72,153,0.22),transparent_50%)]" />
           <div className="relative flex w-full max-w-3xl items-center gap-6 sm:gap-10">
-            <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-blue-400/40 bg-blue-500/10 sm:h-24 sm:w-24">
+            <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-blue-400/50 bg-blue-500/15 shadow-[0_0_32px_rgba(59,130,246,0.35)] sm:h-24 sm:w-24">
               <SpinIcon
                 className={cn("h-10 w-10 text-blue-400 sm:h-12 sm:w-12", busy && "animate-spin")}
               />
@@ -229,7 +229,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
 
       {previewOpen && latestClip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setPreviewOpen(false)}>
-          <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-[#0a101c]" onClick={(e) => e.stopPropagation()}>
+          <div className="booth-frame relative w-full max-w-4xl overflow-hidden rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="relative aspect-video">
               <RampPlayer
                 src={lastSrc}
@@ -276,7 +276,7 @@ function ActionCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-[96px] items-center gap-4 rounded-2xl border border-white/10 bg-[#0c1424] px-5 text-left transition hover:border-blue-400/30 disabled:opacity-40"
+      className="booth-card flex min-h-[96px] items-center gap-4 rounded-2xl border px-5 text-left transition hover:border-blue-400/40 disabled:opacity-40"
     >
       <Icon className="h-9 w-9 text-blue-400" strokeWidth={1.7} />
       <span>
