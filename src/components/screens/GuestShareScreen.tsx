@@ -119,6 +119,7 @@ export function GuestShareScreen({
           exportBlob = await ensureBakedClip({
             clip: clipToPublish,
             source: bakeSourceForClip(clipToPublish, sourceBlob),
+            quality: settings.videoQuality,
             onProgress: (progress) => {
               if (!cancelled) setPublishState(`Baking slow-mo… ${Math.round(progress * 100)}%`);
             },
@@ -252,6 +253,7 @@ export function GuestShareScreen({
           file = await ensureBakedClip({
             clip: clipRecord,
             source,
+            quality: settings.videoQuality,
             onProgress: (progress) => setStatus(`Baking slow-mo… ${Math.round(progress * 100)}%`),
           });
           if (localClip) {

@@ -109,6 +109,42 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
           />
         </label>
 
+        <div>
+          <span className="mb-2 block text-sm text-slate-400">Video quality</span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => void saveSettings({ ...settings, videoQuality: "high" })}
+              className={cn(
+                "flex min-h-[88px] flex-col items-start rounded-2xl border px-4 py-3 text-left",
+                settings.videoQuality !== "standard"
+                  ? "border-blue-400/60 bg-blue-500/10"
+                  : "border-white/10 bg-[#0c1424]",
+              )}
+            >
+              <span className="text-white">High</span>
+              <span className="mt-1 text-sm text-slate-400">1920×1080 · ~8 Mbps. Best for Fold / tablet cameras.</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveSettings({ ...settings, videoQuality: "standard" })}
+              className={cn(
+                "flex min-h-[88px] flex-col items-start rounded-2xl border px-4 py-3 text-left",
+                settings.videoQuality === "standard"
+                  ? "border-blue-400/60 bg-blue-500/10"
+                  : "border-white/10 bg-[#0c1424]",
+              )}
+            >
+              <span className="text-white">Standard</span>
+              <span className="mt-1 text-sm text-slate-400">1280×720 · ~4 Mbps. Smaller files.</span>
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Browser cameras cannot use the full sensor (a Fold 7 still tops out around 1080p here). High
+            clips are larger — Vercel Hobby Blob is 1 GB.
+          </p>
+        </div>
+
         <label className="flex min-h-14 items-center justify-between rounded-2xl border border-white/10 bg-[#0c1424] px-4">
           <span>
             <span className="block text-white">Force offline</span>
@@ -225,10 +261,10 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
       <section className="mt-10 max-w-2xl rounded-3xl border border-white/10 bg-[#0c1424] p-5">
         <h2 className="text-lg font-medium text-white">About 360show</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Operator MVP for a 360 photo booth. Camera capture is real in the browser. Slow-mo can be
-          toggled in Settings: on uses a live playback-rate ramp and bakes it into Download / Share
-          files; off keeps normal speed. Share can upload to Vercel Blob or Google Drive. Platform
-          motor and GoPro control are stubbed.
+          Operator MVP for a 360 photo booth. Camera capture is real in the browser. Video quality
+          (Settings) requests 1080p high or 720p standard. Slow-mo can be toggled: on uses a live
+          playback-rate ramp and bakes it into Download / Share files; off keeps normal speed. Share
+          can upload to Vercel Blob or Google Drive. Platform motor and GoPro control are stubbed.
         </p>
         <p className="mt-3 text-sm text-slate-500">
           {events.length} event{events.length === 1 ? "" : "s"} · {clips.length} clip{clips.length === 1 ? "" : "s"} on this tablet

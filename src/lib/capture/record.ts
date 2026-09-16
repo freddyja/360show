@@ -1,6 +1,7 @@
 import { DEMO_ASSET_PATH } from "../types";
 import { getCameraStream, stopStream } from "../hardware/camera";
 import { createDemoScene } from "./demoScene";
+import { createVideoRecorder, resolveVideoQuality, videoQualityProfile, type VideoQuality } from "./quality";
 
 export type RecordResult = {
   blob: Blob | null;
@@ -9,24 +10,13 @@ export type RecordResult = {
   stopPreview: () => void;
 };
 
-const RECORDER_TYPES = [
-  "video/webm;codecs=vp9",
-  "video/webm;codecs=vp8",
-  "video/webm",
-  "video/mp4",
-];
-
-function pickMimeType() {
-  if (typeof MediaRecorder === "undefined") return "";
-  return RECORDER_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
-}
-
-async function recordStream(stream: MediaStream, durationMs: number): Promise<Blob | null> {
+async function recordStream(
+  stream: MediaStream,
+  durationMs: number,
+  quality: VideoQuality,
+): Promise<Blob | null> {
   if (typeof MediaRecorder === "undefined") return null;
-  const mimeType = pickMimeType();
-  const recorder = mimeType
-    ? new MediaRecorder(stream, { mimeType })
-    : new MediaRecorder(stream);
+  const recorder = createVideoRecorder(stream, videoQualityProfile(quality).bitrate);
   const chunks: BlobPart[] = [];
 
   const blobPromise = new Promise<Blob | null>((resolve) => {
@@ -39,7 +29,7 @@ async function recordStream(stream: MediaStream, durationMs: number): Promise<Bl
         resolve(null);
         return;
       }
-      resolve(new Blob(chunks, { type: recorder.mimeType || mimeType || "video/webm" }));
+      resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
     };
   });
 
@@ -63,14 +53,18 @@ async function blobFromDemoAsset() {
   }
 }
 
-export async function beginLivePreview(preferCamera: boolean): Promise<{
+export async function beginLivePreview(
+  preferCamera: boolean,
+  quality: VideoQuality = "high",
+): Promise<{
   stream: MediaStream;
   source: "camera" | "demo";
   stop: () => void;
 }> {
+  const resolved = resolveVideoQuality(quality);
   if (preferCamera) {
     try {
-      const stream = await getCameraStream();
+      const stream = await getCameraStream(resolved);
       return {
         stream,
         source: "camera",
@@ -97,8 +91,9 @@ export async function beginLivePreview(preferCamera: boolean): Promise<{
 export async function recordCapture(
   durationMs: number,
   live: { stream: MediaStream; source: "camera" | "demo" },
+  quality: VideoQuality = "high",
 ): Promise<Omit<RecordResult, "previewStream" | "stopPreview">> {
-  let blob = await recordStream(live.stream, durationMs);
+  let blob = await recordStream(live.stream, durationMs, resolveVideoQuality(quality));
   if (!blob || blob.size < 1000) {
     blob = await blobFromDemoAsset();
   }

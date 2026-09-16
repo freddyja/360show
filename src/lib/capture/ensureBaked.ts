@@ -3,6 +3,7 @@
 import { getBakedBlob, putBakedBlob } from "@/lib/db";
 import { DEMO_ASSET_PATH, type Clip } from "@/lib/types";
 import { bakeTimeRamp } from "./bake";
+import type { VideoQuality } from "./quality";
 
 const inflight = new Map<string, Promise<Blob>>();
 
@@ -18,6 +19,7 @@ export function bakeSourceForClip(clip: Clip, localBlob?: Blob | null): Blob | s
 export async function ensureBakedClip(options: {
   clip: Clip;
   source?: Blob | string | null;
+  quality?: VideoQuality;
   onProgress?: (progress: number) => void;
 }): Promise<Blob> {
   const { clip, onProgress } = options;
@@ -36,6 +38,7 @@ export async function ensureBakedClip(options: {
     source,
     profile: clip.rampProfile ?? "time-ramp-v1",
     expectedDurationSec: clip.durationMs / 1000,
+    quality: options.quality,
     onProgress,
   }).then(async (baked) => {
     await putBakedBlob(clip.id, baked);

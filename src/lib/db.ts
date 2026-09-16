@@ -130,6 +130,7 @@ export async function getSettings(): Promise<AppSettings> {
     cloudDestination: stored?.cloudDestination === "drive" ? "drive" : "blob",
     driveFolderName: stored?.driveFolderName?.trim() || DEFAULT_SETTINGS.driveFolderName,
     slowMoEnabled: stored?.slowMoEnabled !== false,
+    videoQuality: stored?.videoQuality === "standard" ? "standard" : "high",
   };
 }
 

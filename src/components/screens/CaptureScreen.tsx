@@ -68,7 +68,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     setPhase("countdown");
     setLivePreview(true);
 
-    const live = await beginLivePreview(true);
+    const live = await beginLivePreview(true, settings.videoQuality);
     if (live.source === "camera") setCamera("ok");
     if (videoRef.current) {
       videoRef.current.srcObject = live.stream;
@@ -88,7 +88,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     }, 80);
 
     void motor.spin(CAPTURE_DURATION_MS);
-    const recorded = await recordCapture(CAPTURE_DURATION_MS, live);
+    const recorded = await recordCapture(CAPTURE_DURATION_MS, live, settings.videoQuality);
     window.clearInterval(tick);
     setProgress(1);
     live.stop();
@@ -133,6 +133,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       await ensureBakedClip({
         clip,
         source: bakeSourceForClip(clip, blob),
+        quality: settings.videoQuality,
       });
       await patchClip(clip.id, { hasBakedBlob: true, bakedAt: Date.now() });
     } catch {

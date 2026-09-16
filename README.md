@@ -16,7 +16,7 @@ Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample
 1. **Open booth** on the sample event (or create your own).
 2. Tap **START SPIN**. Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
 3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files.
-4. **Gallery** lists tonight’s clips. **Settings** picks the cloud destination (Vercel Blob or Google Drive), force-offline chip, and mock battery %.
+4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), force-offline chip, and mock battery %.
 
 Local demo works **without** Blob or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
 
@@ -133,7 +133,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 | `/e/[eventId]` | Event setup — name, date, couple names, accent, logo, music bed label, frame style |
 | `/e/[eventId]/capture` | Operator capture (mockup 1) |
 | `/e/[eventId]/gallery` | Tonight’s clips |
-| `/e/[eventId]/settings` | Device name, mock battery, **slow-mo on/off**, force offline, **Blob vs Drive destination**, Google Drive connect |
+| `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, force offline, **Blob vs Drive destination**, Google Drive connect |
 | `/e/[eventId]/share/[clipId]` | Operator guest-share screen (mockup 2) |
 | `/s/[clipId]` | Share page encoded in the QR |
 
@@ -141,7 +141,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 **Real in this MVP**
 
-- `getUserMedia` capture when the browser allows it (typically ~10s)
+- `getUserMedia` capture when the browser allows it (typically ~10s). **High** quality (default) requests 1920×1080 at ~8 Mbps; **Standard** is 1280×720 at ~4 Mbps. MediaRecorder prefers mp4/h264, else vp9/vp8 webm.
 - Fallback to a live canvas demo scene, then a bundled `/demo/spin.mp4` if recording fails
 - IndexedDB persistence for events, clip metadata, and video blobs (`idb`)
 - Guest QR (public origin + `/s/[clipId]`) via `qrcode.react`
@@ -170,7 +170,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 ## Capture pipeline
 
-`START SPIN` → 3-2-1 countdown → timed record → save original → if slow-mo is on, background-bake the time-ramp → gallery / share (upload uses baked file when slow-mo is on).
+`START SPIN` → 3-2-1 countdown → timed record (quality from Settings) → save original → if slow-mo is on, background-bake the time-ramp at the same quality cap → gallery / share (upload uses baked file when slow-mo is on).
 
 Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during record so a future motor implementation can run in lockstep.
 
@@ -187,6 +187,23 @@ Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during recor
 Bake uses a hidden `<video>` + canvas `captureStream` + `MediaRecorder`. It follows the clip’s ramp profile (`time-ramp-v1` freeze vs `time-ramp-gentle`). Wall-clock encode is longer than the 10s source (typically tens of seconds). The original blob remains in IndexedDB for recapture/debug.
 
 **Settings → Slow-mo / time ramp** (default on) controls this. Off: Preview plays at 1× and Download / Share upload the original capture (no bake). Guest pages honor `slowMoEnabled` on the cloud share so they do not re-apply a live ramp.
+
+## Video quality
+
+**Settings → Video quality** (default **High**) is for booth phones with a real camera (e.g. a Samsung Fold 7).
+
+| Profile | Capture + bake cap | Bitrate | Typical use |
+| --- | --- | --- | --- |
+| **High** (default) | 1920×1080 · 30 fps | ~8 Mbps | Fold / tablet rear camera |
+| **Standard** | 1280×720 · 30 fps | ~4 Mbps | Smaller files, weaker devices |
+
+The app asks the browser for 1080p (`facingMode: environment`) and falls back to 720p, then any camera. If `getCapabilities()` reports more than 1080p, capture still **caps at 1080p** — browser `getUserMedia` cannot use the full Fold sensor, and 4K would balloon bake time and cloud size.
+
+Prefer `video/mp4` + H.264 when `MediaRecorder.isTypeSupported`; otherwise VP9/VP8 WebM.
+
+**Files vs Vercel Hobby Blob (1 GB):** a baked high-quality slow-mo clip is often tens of MB. A busy night can fill a 1 GB store; use Google Drive for lots of 1080p clips, or Standard quality, or a paid Blob quota.
+
+Demo fallback (canvas scene / bundled `/demo/spin.mp4`) is unchanged when the camera is denied or missing.
 
 ## Design
 

@@ -48,6 +48,10 @@ export type CloudDestination = "blob" | "drive";
 
 export const CLOUD_DESTINATIONS = ["blob", "drive"] as const;
 
+export type VideoQuality = "standard" | "high";
+
+export const VIDEO_QUALITIES = ["standard", "high"] as const;
+
 export interface AppSettings {
   deviceName: string;
   mockBatteryPct: number;
@@ -56,6 +60,8 @@ export interface AppSettings {
   driveFolderName: string;
   /** Live preview ramp + baked slow-mo exports. Default on. */
   slowMoEnabled: boolean;
+  /** Capture + bake resolution / bitrate. Default high (1080p). */
+  videoQuality: VideoQuality;
 }
 
 export interface KvState {
@@ -79,6 +85,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cloudDestination: "blob",
   driveFolderName: "360show",
   slowMoEnabled: true,
+  videoQuality: "high",
 };
 
 export const CAPTURE_DURATION_MS = 10_000;

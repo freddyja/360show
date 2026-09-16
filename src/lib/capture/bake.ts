@@ -1,21 +1,10 @@
 import type { RampProfileId } from "../types";
 import { playbackRateAt, rampKeyframes } from "./ramp";
-
-const RECORDER_TYPES = [
-  "video/webm;codecs=vp9",
-  "video/webm;codecs=vp8",
-  "video/webm",
-  "video/mp4",
-];
+import { createVideoRecorder, fitWithinQuality, resolveVideoQuality, type VideoQuality } from "./quality";
 
 const FREEZE_HOLD_MS = 1200;
 const MAX_BAKE_MS = 120_000;
 const MIN_RATE = 0.08;
-
-function pickMimeType() {
-  if (typeof MediaRecorder === "undefined") return "";
-  return RECORDER_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
-}
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -34,6 +23,7 @@ export async function bakeTimeRamp(options: {
   source: Blob | string;
   profile: RampProfileId;
   expectedDurationSec?: number;
+  quality?: VideoQuality;
   onProgress?: (progress: number) => void;
 }): Promise<Blob> {
   if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
@@ -82,18 +72,15 @@ export async function bakeTimeRamp(options: {
       throw new Error("Clip has no duration to bake");
     }
 
-    const width = Math.min(1280, video.videoWidth || 1280);
-    const height = Math.min(720, video.videoHeight || 720);
-    canvas.width = width || 1280;
-    canvas.height = height || 720;
+    const quality = resolveVideoQuality(options.quality);
+    const fitted = fitWithinQuality(video.videoWidth, video.videoHeight, quality);
+    canvas.width = fitted.width;
+    canvas.height = fitted.height;
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Canvas 2D unavailable");
 
-    const stream = canvas.captureStream(30);
-    const mimeType = pickMimeType();
-    const recorder = mimeType
-      ? new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 })
-      : new MediaRecorder(stream);
+    const stream = canvas.captureStream(fitted.fps);
+    const recorder = createVideoRecorder(stream, fitted.bitrate);
     const chunks: BlobPart[] = [];
     const recorded = new Promise<Blob>((resolve, reject) => {
       recorder.ondataavailable = (event) => {
@@ -105,7 +92,7 @@ export async function bakeTimeRamp(options: {
           reject(new Error("Bake produced an empty file"));
           return;
         }
-        resolve(new Blob(chunks, { type: recorder.mimeType || mimeType || "video/webm" }));
+        resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
       };
     });
 
