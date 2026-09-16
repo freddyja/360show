@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+:root {
+  --background: #05080f;
+  --foreground: #f8fafc;
+  --booth-blue: #3b82f6;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  min-height: 100%;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  overscroll-behavior: none;
+}
+
+button,
+a,
+input,
+select {
+  touch-action: manipulation;
+}
+
+::selection {
+  background: rgba(59, 130, 246, 0.35);
+}
