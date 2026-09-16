@@ -394,7 +394,7 @@ export function GuestShareScreen({
         />
       </div>
 
-      <footer className="mt-5 flex items-center justify-center gap-3 rounded-2xl border border-white/10 py-4 text-xl font-medium text-blue-300">
+      <footer className="booth-card mt-5 flex items-center justify-center gap-3 rounded-2xl border py-4 text-xl font-medium text-blue-300">
         <Heart className="h-5 w-5 fill-blue-400 text-blue-400" />
         {event.clientNames} · {year}
         <Heart className="h-5 w-5 fill-blue-400 text-blue-400" />

@@ -23,7 +23,7 @@ export function GalleryScreen({ eventId }: { eventId: string }) {
             {eventClips.length === 1 ? "" : "s"}
           </p>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-3 py-1 text-xs text-slate-300">
           <CloudOff className="h-3.5 w-3.5" />
           {settings.forceOffline ? "Offline" : "On this device"}
         </span>
@@ -45,7 +45,7 @@ export function GalleryScreen({ eventId }: { eventId: string }) {
               href={operatorSharePath(eventId, clip.id)}
               className="booth-card overflow-hidden rounded-3xl border"
             >
-              <div className="relative aspect-video bg-[#070b14]">
+              <div className="relative aspect-video bg-black/45">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={clip.thumbnailDataUrl || "/demo/poster.png"}

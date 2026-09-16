@@ -89,21 +89,21 @@ select {
   }
 
   .booth-frame {
-    background: linear-gradient(180deg, rgba(10, 6, 24, 0.72), rgba(8, 10, 26, 0.78));
+    background: linear-gradient(180deg, rgba(12, 6, 28, 0.58), rgba(8, 10, 28, 0.64));
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 28px;
     box-shadow:
-      0 0 0 1px rgba(236, 72, 153, 0.08),
-      0 28px 80px rgba(76, 29, 149, 0.28);
+      0 0 0 1px rgba(236, 72, 153, 0.12),
+      0 28px 80px rgba(76, 29, 149, 0.32);
   }
 
   .booth-card {
-    background: rgba(8, 6, 22, 0.42);
+    background: rgba(8, 6, 22, 0.34);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.14);
   }
 
   .booth-stage {
