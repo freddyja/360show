@@ -20,6 +20,12 @@ import {
   type ShareConfig,
 } from "@/lib/share/types";
 import { fetchCloudShare, fetchShareConfig, publishClipToCloud } from "@/lib/share/publish";
+import {
+  bakeSourceForClip,
+  ensureBakedClip,
+  extensionForBlob,
+  triggerBlobDownload,
+} from "@/lib/capture/ensureBaked";
 
 export function GuestShareScreen({
   eventId,
@@ -30,7 +36,7 @@ export function GuestShareScreen({
   clipId: string;
   publicMode?: boolean;
 }) {
-  const { ready, clips, getBlob, settings, saveClip } = useBooth();
+  const { ready, clips, getBlob, settings, patchClip } = useBooth();
   const localClip = clips.find((item) => item.id === clipId);
   const resolvedEventId = eventId ?? localClip?.eventId;
   const { event: localEvent } = useEvent(resolvedEventId);
@@ -53,6 +59,8 @@ export function GuestShareScreen({
   const year = event?.date?.slice(0, 4) ?? "2026";
   const hudTop = event?.frameStyle === "christian-fellowship";
   const rampProfile = event ? rampProfileForFrame(event.frameStyle) : "time-ramp-v1";
+  const liveRamp = Boolean(localClip) || !cloud?.baked;
+  const downloading = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,23 +91,33 @@ export function GuestShareScreen({
     if (publishOnce.current === clipId) return;
     publishOnce.current = clipId;
     let cancelled = false;
+    const clipToPublish = localClip;
+    const eventToPublish = localEvent;
     (async () => {
       try {
+        setPublishState("Baking slow-mo export…");
+        const sourceBlob = await getBlob(clipToPublish.id);
+        const baked = await ensureBakedClip({
+          clip: clipToPublish,
+          source: bakeSourceForClip(clipToPublish, sourceBlob),
+          onProgress: (progress) => {
+            if (!cancelled) setPublishState(`Baking slow-mo… ${Math.round(progress * 100)}%`);
+          },
+        });
+        if (cancelled) return;
         setPublishState("Uploading to guest cloud…");
-        const existing = await fetchCloudShare(localClip.id);
-        const localBlob = await getBlob(localClip.id);
+        const existing = await fetchCloudShare(clipToPublish.id);
         const published = await publishClipToCloud({
-          event: localEvent,
-          clip: localClip,
-          localBlob,
-          existing: existing ?? (localClip.remoteVideoUrl
-            ? { videoUrl: localClip.remoteVideoUrl, videoContentType: "video/webm" }
-            : null),
+          event: eventToPublish,
+          clip: clipToPublish,
+          localBlob: baked,
+          existing,
         });
         if (cancelled) return;
         setCloud(published);
-        await saveClip({
-          ...localClip,
+        await patchClip(clipToPublish.id, {
+          hasBakedBlob: true,
+          bakedAt: Date.now(),
           remoteVideoUrl: published.videoUrl,
           cloudShareAt: Date.now(),
         });
@@ -114,16 +132,19 @@ export function GuestShareScreen({
     return () => {
       cancelled = true;
     };
+    // localClip / localEvent objects are read once per clip id so a bake metadata
+    // saveClip does not cancel an in-flight upload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     publicMode,
     ready,
-    localClip,
-    localEvent,
+    localClip?.id,
+    localEvent?.id,
     config,
     settings.forceOffline,
     clipId,
     getBlob,
-    saveClip,
+    patchClip,
   ]);
 
   if (!ready || (!clip && !cloudReady)) {
@@ -145,26 +166,55 @@ export function GuestShareScreen({
     );
   }
 
-  const clipRecord = clip;
-  const eventRecord = event;
-
   async function download() {
-    const blob = await getBlob(clipRecord.id).catch(() => null);
-    const file =
-      blob ??
-      (await fetch(remoteUrl || clipRecord.demoAssetPath || "/demo/spin.mp4")
-        .then((r) => r.blob())
-        .catch(() => null));
-    if (!file) {
-      setStatus("Nothing to download");
-      return;
+    if (downloading.current) return;
+    downloading.current = true;
+    setStatus("Preparing slow-mo file…");
+    try {
+      const clipRecord = clip;
+      const eventRecord = event;
+      if (!clipRecord || !eventRecord) {
+        setStatus("Nothing to download");
+        return;
+      }
+
+      let file: Blob | null = null;
+      if (publicMode && cloud?.baked && remoteUrl) {
+        file = await fetch(remoteUrl).then((res) => res.blob());
+      } else {
+        const sourceBlob = await getBlob(clipRecord.id).catch(() => null);
+        const source =
+          sourceBlob && sourceBlob.size > 500
+            ? sourceBlob
+            : remoteUrl && !cloud?.baked
+              ? remoteUrl
+              : bakeSourceForClip(clipRecord, sourceBlob);
+        file = await ensureBakedClip({
+          clip: clipRecord,
+          source,
+          onProgress: (progress) => setStatus(`Baking slow-mo… ${Math.round(progress * 100)}%`),
+        });
+        if (localClip) {
+          await patchClip(localClip.id, {
+            hasBakedBlob: true,
+            bakedAt: Date.now(),
+          });
+        }
+      }
+
+      if (!file || file.size < 100) {
+        setStatus("Nothing to download");
+        return;
+      }
+      const ext = extensionForBlob(file);
+      const base = eventRecord.clientNames.replace(/\s+/g, "-") || "360-spin";
+      triggerBlobDownload(file, `${base}-360-spin-slowmo.${ext}`);
+      setStatus("Saved baked slow-mo");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Download failed");
+    } finally {
+      downloading.current = false;
     }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(file);
-    const ext = file.type.includes("mp4") ? "mp4" : "webm";
-    a.download = `${eventRecord.clientNames.replace(/\s+/g, "-")}-360-spin.${ext}`;
-    a.click();
-    setStatus("Saved on this device");
   }
 
   const readyLabel = publishState
@@ -209,6 +259,7 @@ export function GuestShareScreen({
               poster={clip.thumbnailDataUrl}
               className={cn("h-full w-full object-cover", frameMediaClass(event.frameStyle))}
               rampProfile={rampProfile}
+              liveRamp={liveRamp}
               onPlayingChange={setPlaying}
             />
             <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />
@@ -224,7 +275,13 @@ export function GuestShareScreen({
               <span>
                 <span className="block text-sm font-medium text-white">360° Spin</span>
                 <span className="block text-xs text-slate-300">
-                  {playing ? (rampProfile === "time-ramp-gentle" ? "Slow-mo" : "Playing") : "Freeze"}
+                  {playing
+                    ? liveRamp
+                      ? rampProfile === "time-ramp-gentle"
+                        ? "Slow-mo"
+                        : "Playing"
+                      : "Baked slow-mo"
+                    : "Freeze"}
                 </span>
               </span>
             </div>
@@ -265,7 +322,8 @@ export function GuestShareScreen({
       {publicMode && (
         <p className="mt-3 text-center text-xs text-slate-500">
           Guest phones load this clip from cloud storage when the booth has uploaded it. Use the
-          deployed HTTPS URL in the QR, not a LAN IP.
+          deployed HTTPS URL in the QR, not a LAN IP. Downloads are ramp-baked; the frame stays as
+          a web overlay.
         </p>
       )}
     </Shell>

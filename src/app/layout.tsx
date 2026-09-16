@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "360show — Photo booth operator",
   description:
-    "Tablet-first 360 photo booth operator app. Capture spins, apply a live time-ramp, and share with QR.",
+    "Tablet-first 360 photo booth operator app. Capture spins, preview a live time-ramp, and share a baked slow-mo clip with QR.",
   applicationName: "360show",
   appleWebApp: {
     capable: true,

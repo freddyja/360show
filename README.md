@@ -15,7 +15,7 @@ Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample
 
 1. **Open booth** on the sample event (or create your own).
 2. Tap **START SPIN**. Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
-3. After the timed capture, use **Preview** (live time-ramp) or **Share** (guest QR screen).
+3. After the timed capture, use **Preview** (live time-ramp on the original) or **Share** (guest QR). Download / Save / cloud upload use a **baked slow-mo** file.
 4. **Gallery** lists tonight’s clips. **Settings** can force the Offline chip and mock battery %.
 
 Local demo works **without** Blob credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
@@ -52,7 +52,9 @@ Without `BLOB_READ_WRITE_TOKEN`, Share shows **Local-only share** and `/s/[clipI
 
 ### How it works
 
-Opening operator Share uploads the video with `@vercel/blob` **client upload** (files can exceed the 4.5 MB Function body limit) to `shares/{clipId}/video.*`, then writes `shares/{clipId}/meta.json` (event branding + video URL). `/s/[clipId]` loads IndexedDB when present, otherwise `GET /api/share/[clipId]`.
+Opening operator Share **bakes the time-ramp** into a new file (canvas + `MediaRecorder`), then uploads that export with `@vercel/blob` **client upload** (files can exceed the 4.5 MB Function body limit) to `shares/{clipId}/export.*`, then writes `shares/{clipId}/meta.json` (event branding + video URL, `baked: true`). `/s/[clipId]` loads IndexedDB when present, otherwise `GET /api/share/[clipId]`.
+
+The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch the cloud clip get the baked file, so slow-mo plays in Photos / Files without this app’s `playbackRate` logic.
 
 
 ## Screens
@@ -78,8 +80,9 @@ Opening operator Share uploads the video with `@vercel/blob` **client upload** (
 - Guest QR (public origin + `/s/[clipId]`) via `qrcode.react`
 - **Vercel Blob** cloud clips so guest phones can open `/s/[clipId]` without IndexedDB
 - Copy link, `sms:` “Text me”, download when a blob, demo file, or cloud URL exists
-- **Live time-ramp playback**: `playbackRate` keyframes (normal → slow-mo → freeze) in `RampPlayer`
-- Event frames overlaid on preview (gold oval, neon ring, midnight arch, classic plaque, minimal, **Christian Fellowship** PNG pack)
+- **Live time-ramp preview**: `playbackRate` keyframes (normal → slow-mo → freeze) in `RampPlayer` on the original capture
+- **Baked slow-mo export**: the same ramp is re-encoded into a new WebM/MP4 (`ensureBakedClip`) for Download / Save and Vercel Blob guest shares. Original stays in IndexedDB. Christian Fellowship uses the gentle ramp (no freeze-flash)
+- Event frames overlaid on **web preview** (gold oval, neon ring, midnight arch, classic plaque, minimal, **Christian Fellowship** PNG pack) — not composited into the downloaded file yet
 - **Christian Fellowship** look-pack: navy/gold plaque overlay (`/frames/christian-fellowship.png`), default accent `#C9A227`, gentle slow-mo ramp (no freeze-flash)
 - Force-offline chip, mock battery, Camera OK / demo status
 
@@ -87,7 +90,7 @@ Opening operator Share uploads the video with `@vercel/blob` **client upload** (
 
 - **Platform motor** — `src/lib/hardware/motor.ts` (`createStubMotor`). Swap in serial / BLE / USB without changing capture orchestration.
 - **GoPro** — `src/lib/hardware/gopro.ts`. Unused on the live path; capture uses the tablet/USB camera.
-- **Baked slow-mo file** — the ramp is live in the player, **not** re-encoded into the downloaded MP4/WebM.
+- **Frame burned into the file** — overlays stay on the web player; the download is ramp-baked video only.
 - **Music bed** — stored as a label only (no audio mix).
 - **TV mirror / AI frames** — not built.
 
@@ -99,9 +102,20 @@ Opening operator Share uploads the video with `@vercel/blob` **client upload** (
 
 ## Capture pipeline
 
-`START SPIN` → 3-2-1 countdown (camera or demo preview) → timed record via `MediaRecorder` → save clip + blob → gallery / share.
+`START SPIN` → 3-2-1 countdown (camera or demo preview) → timed record via `MediaRecorder` → save original clip + blob → background bake of the time-ramp → gallery / share (upload prefers the baked export).
 
 Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during record so a future motor implementation can run in lockstep.
+
+## Baked export vs live preview
+
+| Surface | Time-ramp | Frame overlay |
+| --- | --- | --- |
+| Operator **Preview** / booth share player | Live `playbackRate` on the original capture | Web overlay |
+| Guest `/s/[clipId]` after cloud upload | File is already baked; player runs at 1× | Web overlay |
+| **Download / Save to gallery** | Baked into the file (slow-mo without this app) | Not in the file (web only) |
+| Vercel Blob `export.*` | Baked once on the booth before upload | Not in the file |
+
+Bake uses a hidden `<video>` + canvas `captureStream` + `MediaRecorder`. It follows the clip’s ramp profile (`time-ramp-v1` freeze vs `time-ramp-gentle`). Wall-clock encode is longer than the 10s source (typically tens of seconds). The original blob remains in IndexedDB for recapture/debug.
 
 ## Design
 
@@ -111,6 +125,7 @@ Dark charcoal (`#05080f` / `#0a101c`), white type, electric blue (`#3B82F6`), gr
 
 - GoPro Open GoPro / USB webcam ingest
 - Real platform motor (ESP32 / GRBL / vendor SDK)
-- Server-side re-encode of the time-ramp + music bed
+- Server-side mix of a music bed onto the baked export
 - AI / custom frame builder
 - HDMI / TV mirror for the crowd display
+- Burn the selected frame overlay into the baked export

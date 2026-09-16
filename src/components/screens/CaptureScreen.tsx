@@ -10,6 +10,7 @@ import { RampPlayer } from "@/components/RampPlayer";
 import { BootScreen } from "@/components/BootScreen";
 import { OperatorShell } from "@/components/OperatorShell";
 import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/capture/record";
+import { bakeSourceForClip, ensureBakedClip } from "@/lib/capture/ensureBaked";
 import { createStubMotor, probeCamera, type CameraStatus } from "@/lib/hardware";
 import { cn } from "@/lib/cn";
 import { createId } from "@/lib/ids";
@@ -24,7 +25,7 @@ type Phase = "idle" | "countdown" | "recording" | "processing";
 
 export function CaptureScreen({ eventId }: { eventId: string }) {
   const router = useRouter();
-  const { ready, settings, saveClip } = useBooth();
+  const { ready, settings, saveClip, patchClip } = useBooth();
   const { event, latestClip } = useEvent(eventId);
   const [camera, setCamera] = useState<CameraStatus>("unavailable");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -111,13 +112,26 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       rampProfile: rampProfileForFrame(event.frameStyle),
     };
     await saveClip(clip, blob);
+    void bakeExportInBackground(clip, blob);
     await wait(600);
     setPhase("idle");
     setMessage(
       recorded.source === "demo"
-        ? "Demo spin saved — camera was unavailable."
-        : "Spin saved to tonight’s gallery.",
+        ? "Demo spin saved — camera was unavailable. Baking slow-mo export in the background."
+        : "Spin saved. Baking slow-mo export in the background.",
     );
+  }
+
+  async function bakeExportInBackground(clip: Clip, blob: Blob | null) {
+    try {
+      await ensureBakedClip({
+        clip,
+        source: bakeSourceForClip(clip, blob),
+      });
+      await patchClip(clip.id, { hasBakedBlob: true, bakedAt: Date.now() });
+    } catch {
+      // Download / Share will retry the bake.
+    }
   }
 
   return (
@@ -169,7 +183,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
               <span className="mt-1 block text-base text-slate-300 sm:text-xl">
                 {phase === "countdown" && "Hold still — capture starting"}
                 {phase === "recording" && `Recording ${Math.round(progress * 10)}s / 10s`}
-                {phase === "processing" && "Applying live time-ramp preview"}
+                {phase === "processing" && "Saving spin"}
                 {phase === "idle" && "Launch 360° photo booth spin"}
               </span>
             </span>
@@ -219,7 +233,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
               <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />
             </div>
             <div className="flex items-center justify-between px-5 py-4">
-              <p className="text-slate-300">Live playback ramp · original file is stored unbaked</p>
+              <p className="text-slate-300">Live playback ramp · Download / Share save a baked slow-mo file</p>
               <button type="button" className="rounded-full bg-blue-500 px-4 py-2 text-sm font-medium text-white" onClick={() => setPreviewOpen(false)}>
                 Close
               </button>

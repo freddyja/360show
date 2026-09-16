@@ -46,7 +46,7 @@ export function ShareActions({
       key: "save",
       icon: Download,
       title: "Save to gallery",
-      subtitle: canDownload ? "Download to this device" : "Demo file only",
+      subtitle: canDownload ? "Baked slow-mo for this device" : "Demo file only",
       onClick: onDownload,
     },
   ];

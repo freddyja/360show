@@ -6,7 +6,7 @@ import { isClipId } from "@/lib/share/types";
 export const dynamic = "force-dynamic";
 
 function isAllowedVideoPath(pathname: string) {
-  const match = pathname.match(/^shares\/([^/]+)\/video\.(webm|mp4|mov)$/);
+  const match = pathname.match(/^shares\/([^/]+)\/(video|export)\.(webm|mp4|mov)$/);
   return Boolean(match && isClipId(match[1]));
 }
 

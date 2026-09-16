@@ -40,6 +40,8 @@ export interface Clip {
   rampProfile: RampProfileId;
   remoteVideoUrl?: string | null;
   cloudShareAt?: number | null;
+  hasBakedBlob?: boolean;
+  bakedAt?: number | null;
 }
 
 export interface AppSettings {

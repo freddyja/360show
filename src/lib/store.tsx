@@ -24,7 +24,9 @@ interface BoothStore {
   saveEvent: (event: BoothEvent, makeActive?: boolean) => Promise<void>;
   removeEvent: (id: string) => Promise<void>;
   saveClip: (clip: Clip, blob?: Blob | null) => Promise<void>;
+  patchClip: (clipId: string, patch: Partial<Clip>) => Promise<void>;
   getBlob: (clipId: string) => Promise<Blob | null>;
+  getBakedBlob: (clipId: string) => Promise<Blob | null>;
   saveSettings: (settings: AppSettings) => Promise<void>;
   setActive: (id: string | null) => Promise<void>;
   resetAll: () => Promise<void>;
@@ -98,7 +100,16 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
     await refresh();
   }, [refresh]);
 
+  const patchClip = useCallback(async (clipId: string, patch: Partial<Clip>) => {
+    const current = await db.getClip(clipId);
+    if (!current) return;
+    await db.putClip({ ...current, ...patch });
+    await refresh();
+  }, [refresh]);
+
   const getBlob = useCallback(async (clipId: string) => db.getClipBlob(clipId), []);
+
+  const getBakedBlob = useCallback(async (clipId: string) => db.getBakedBlob(clipId), []);
 
   const saveSettings = useCallback(async (next: AppSettings) => {
     await db.putSettings(next);
@@ -132,7 +143,9 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
       saveEvent,
       removeEvent,
       saveClip,
+      patchClip,
       getBlob,
+      getBakedBlob,
       saveSettings,
       setActive,
       resetAll,
@@ -148,7 +161,9 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
       saveEvent,
       removeEvent,
       saveClip,
+      patchClip,
       getBlob,
+      getBakedBlob,
       saveSettings,
       setActive,
       resetAll,

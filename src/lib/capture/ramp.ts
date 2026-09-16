@@ -3,12 +3,10 @@ import type { RampProfileId } from "../types";
 /**
  * Time-ramp playback profile.
  *
- * REAL: the RampPlayer applies these playbackRate keyframes live in the
- * browser (normal → slow-mo → freeze). That is what guests see on the
- * tablet preview and share screen.
- *
- * SIMULATED / NOT IN MVP: baking the ramp into a re-encoded MP4. Downloaded
- * files are the original capture (camera or demo) without the ramp baked in.
+ * Preview uses RampPlayer playbackRate keyframes live (normal → slow-mo → freeze).
+ * Download / Save / cloud share bake the same keyframes into a new file via
+ * canvas + MediaRecorder (`ensureBakedClip`). Per-frame packs pick a profile
+ * (gentle for Christian Fellowship).
  */
 
 export interface RampKeyframe {

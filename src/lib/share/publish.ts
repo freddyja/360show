@@ -48,11 +48,12 @@ export async function publishClipToCloud(options: {
   event: BoothEvent;
   clip: Clip;
   localBlob: Blob | null;
-  existing?: Pick<CloudShare, "videoUrl" | "videoContentType"> | CloudShare | null;
+  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, existing } = options;
-  let videoUrl = existing?.videoUrl || clip.remoteVideoUrl || "";
-  let videoContentType = existing?.videoContentType || "video/webm";
+  const reusable = Boolean(existing?.baked && (existing.videoUrl || clip.remoteVideoUrl));
+  let videoUrl = reusable ? existing?.videoUrl || clip.remoteVideoUrl || "" : "";
+  let videoContentType = reusable ? existing?.videoContentType || "video/webm" : "video/webm";
 
   if (!videoUrl) {
     const prepared = await fileForUpload(clip, localBlob);
@@ -69,7 +70,7 @@ export async function publishClipToCloud(options: {
     videoContentType = prepared.contentType;
   }
 
-  const payload = cloudShareFrom(event, clip, videoUrl, videoContentType);
+  const payload = cloudShareFrom(event, clip, videoUrl, videoContentType, true);
   const res = await fetch(`/api/share/${encodeURIComponent(clip.id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

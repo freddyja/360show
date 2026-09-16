@@ -9,19 +9,22 @@ export function RampPlayer({
   poster,
   className,
   rampProfile = "time-ramp-v1",
+  liveRamp = true,
   onPlayingChange,
 }: {
   src: string | null;
   poster?: string | null;
   className?: string;
   rampProfile?: RampProfileId;
+  /** When false, play the file as-is (already ramp-baked). */
+  liveRamp?: boolean;
   onPlayingChange?: (playing: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !liveRamp) return;
     const keyframes = rampKeyframes(rampProfile);
 
     let raf = 0;
@@ -47,7 +50,7 @@ export function RampPlayer({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [src, rampProfile, onPlayingChange]);
+  }, [src, rampProfile, liveRamp, onPlayingChange]);
 
   return (
     <video
@@ -58,6 +61,7 @@ export function RampPlayer({
       autoPlay
       muted
       playsInline
+      loop={!liveRamp}
       onPlay={() => onPlayingChange?.(true)}
       onPause={() => onPlayingChange?.(false)}
     />

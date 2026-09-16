@@ -17,6 +17,8 @@ export interface CloudShare {
   videoContentType: string;
   thumbnailDataUrl: string | null;
   demoAssetPath: string | null;
+  /** True when videoUrl is a ramp-baked export (slow-mo is in the file). */
+  baked?: boolean;
 }
 
 export interface ShareConfig {
@@ -38,7 +40,7 @@ export function shareMetaPath(clipId: string) {
 
 export function shareVideoPath(clipId: string, contentType: string) {
   const ext = contentType.includes("mp4") ? "mp4" : contentType.includes("quicktime") ? "mov" : "webm";
-  return `shares/${clipId}/video.${ext}`;
+  return `shares/${clipId}/export.${ext}`;
 }
 
 export function eventFromCloud(share: CloudShare): BoothEvent {
@@ -69,10 +71,17 @@ export function clipFromCloud(share: CloudShare): Clip {
     rampProfile: share.rampProfile,
     remoteVideoUrl: share.videoUrl,
     cloudShareAt: Date.now(),
+    hasBakedBlob: Boolean(share.baked),
   };
 }
 
-export function cloudShareFrom(event: BoothEvent, clip: Clip, videoUrl: string, videoContentType: string): CloudShare {
+export function cloudShareFrom(
+  event: BoothEvent,
+  clip: Clip,
+  videoUrl: string,
+  videoContentType: string,
+  baked = true,
+): CloudShare {
   return {
     clipId: clip.id,
     eventId: event.id,
@@ -90,5 +99,6 @@ export function cloudShareFrom(event: BoothEvent, clip: Clip, videoUrl: string, 
     videoContentType,
     thumbnailDataUrl: clip.thumbnailDataUrl,
     demoAssetPath: clip.demoAssetPath,
+    baked,
   };
 }

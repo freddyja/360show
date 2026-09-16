@@ -1,3 +1,4 @@
+import { bakedBlobKey } from "./capture/bake";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { AppSettings, BoothEvent, Clip } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
@@ -77,6 +78,7 @@ export async function deleteEvent(id: string) {
   for (const clip of clips) {
     await tx.objectStore("clips").delete(clip.id);
     await tx.objectStore("blobs").delete(clip.id);
+    await tx.objectStore("blobs").delete(bakedBlobKey(clip.id));
   }
   await tx.done;
 }
@@ -107,6 +109,16 @@ export async function putClip(clip: Clip, blob?: Blob | null) {
 export async function getClipBlob(id: string) {
   const db = await getDb();
   return (await db.get("blobs", id)) ?? null;
+}
+
+export async function getBakedBlob(id: string) {
+  const db = await getDb();
+  return (await db.get("blobs", bakedBlobKey(id))) ?? null;
+}
+
+export async function putBakedBlob(clipId: string, blob: Blob) {
+  const db = await getDb();
+  await db.put("blobs", blob, bakedBlobKey(clipId));
 }
 
 export async function getSettings(): Promise<AppSettings> {

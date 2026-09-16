@@ -64,7 +64,9 @@ export function GalleryScreen({ eventId }: { eventId: string }) {
                   <p className="text-white">
                     {new Date(clip.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                   </p>
-                  <p className="text-xs text-slate-400">Time-ramp preview</p>
+                  <p className="text-xs text-slate-400">
+                    {clip.hasBakedBlob ? "Slow-mo baked" : "Ramp on preview · bake on save"}
+                  </p>
                 </div>
                 <Share2 className="h-5 w-5 text-blue-400" />
               </div>
