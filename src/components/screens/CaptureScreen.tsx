@@ -173,15 +173,15 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             livePreview ? "bg-black/50" : "booth-stage",
           )}
         >
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_8%_90%,rgba(236,72,153,0.22),transparent_50%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_8%_90%,rgba(255,45,149,0.45),transparent_52%),radial-gradient(80%_60%_at_95%_20%,rgba(34,211,238,0.35),transparent_50%)]" />
           <div className="relative flex w-full max-w-3xl items-center gap-6 sm:gap-10">
-            <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-blue-400/50 bg-blue-500/15 shadow-[0_0_32px_rgba(59,130,246,0.35)] sm:h-24 sm:w-24">
+            <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-cyan-300/60 bg-cyan-400/20 shadow-[0_0_36px_rgba(34,211,238,0.55)] sm:h-24 sm:w-24">
               <SpinIcon
                 className={cn("h-10 w-10 text-blue-400 sm:h-12 sm:w-12", busy && "animate-spin")}
               />
             </span>
             <span>
-              <span className="block text-4xl font-semibold tracking-wide text-white sm:text-6xl">
+              <span className="block text-4xl font-semibold tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)] sm:text-6xl">
                 {phase === "countdown" && count}
                 {phase === "recording" && "SPINNING"}
                 {phase === "processing" && "RAMP"}

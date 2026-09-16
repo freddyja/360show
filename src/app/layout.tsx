@@ -29,7 +29,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#3b0764",
+  themeColor: "#db2777",
 };
 
 export default function RootLayout({
@@ -38,8 +38,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}>
+    <html lang="en" className="booth-root">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans min-h-dvh`}>
         <Providers>{children}</Providers>
       </body>
     </html>

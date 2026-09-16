@@ -207,7 +207,7 @@ Demo fallback (canvas scene / bundled `/demo/spin.mp4`) is unchanged when the ca
 
 ## Design
 
-Dark nightclub wash: deep purple → magenta → electric blue, with a faint sparkle overlay. Operator shells and cards sit as translucent dark glass on that gradient so white type, START SPIN, Share, and status chips stay high-contrast. Event name stays on Capture and Share. Large touch targets, landscape and portrait.
+Dark nightclub wash: hot magenta, cyan, violet, and neon gold, painted on `html`/`body` **and** every `.booth-page` so it still reads on phones if a parent blocks the body (Samsung often ignores `background-attachment: fixed`). Operator shells are light glass, not opaque charcoal. White type, START SPIN, Share, and status chips stay high-contrast.
 
 ## Future
 

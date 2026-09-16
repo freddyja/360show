@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "360 photo booth operator",
     start_url: "/",
     display: "standalone",
-    background_color: "#1a0533",
-    theme_color: "#3b0764",
+    background_color: "#db2777",
+    theme_color: "#db2777",
     orientation: "any",
   };
 }

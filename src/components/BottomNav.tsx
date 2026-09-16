@@ -15,7 +15,7 @@ export function BottomNav({ eventId }: { eventId: string }) {
   ];
 
   return (
-    <nav className="grid grid-cols-4 border-t border-white/10 bg-black/20 backdrop-blur-md">
+    <nav className="grid grid-cols-4 border-t border-white/20 bg-fuchsia-950/25 backdrop-blur-md">
       {items.map((item) => {
         const active =
           item.match === "event"
