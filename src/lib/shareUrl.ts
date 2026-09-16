@@ -1,11 +1,11 @@
+import { clientShareOrigin } from "./share/origin";
+
 export function clipSharePath(clipId: string) {
   return `/s/${clipId}`;
 }
 
 export function clipShareUrl(clipId: string, origin?: string) {
-  const base =
-    origin ??
-    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const base = clientShareOrigin(origin);
   return `${base}${clipSharePath(clipId)}`;
 }
 

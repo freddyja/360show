@@ -38,6 +38,8 @@ export interface Clip {
   demoAssetPath: string | null;
   thumbnailDataUrl: string | null;
   rampProfile: RampProfileId;
+  remoteVideoUrl?: string | null;
+  cloudShareAt?: number | null;
 }
 
 export interface AppSettings {

@@ -6,13 +6,17 @@ import { useBooth } from "@/lib/store";
 
 const urlCache = new Map<string, string>();
 
-export function useClipSrc(clipId: string | undefined, fallback?: string | null) {
+export function useClipSrc(
+  clipId: string | undefined,
+  fallback?: string | null,
+  remoteUrl?: string | null,
+) {
   const { getBlob } = useBooth();
-  const [src, setSrc] = useState<string | null>(fallback ?? null);
+  const [src, setSrc] = useState<string | null>(remoteUrl || fallback || null);
 
   useEffect(() => {
     if (!clipId) {
-      setSrc(fallback ?? DEMO_ASSET_PATH);
+      setSrc(remoteUrl || fallback || DEMO_ASSET_PATH);
       return;
     }
     const cached = urlCache.get(clipId);
@@ -22,20 +26,25 @@ export function useClipSrc(clipId: string | undefined, fallback?: string | null)
     }
     let revoked = false;
     (async () => {
-      const blob = await getBlob(clipId);
-      if (revoked) return;
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        urlCache.set(clipId, url);
-        setSrc(url);
-      } else {
-        setSrc(fallback ?? DEMO_ASSET_PATH);
+      try {
+        const blob = await getBlob(clipId);
+        if (revoked) return;
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          urlCache.set(clipId, url);
+          setSrc(url);
+          return;
+        }
+      } catch {
+        // Guest phones have no local clip store.
       }
+      if (revoked) return;
+      setSrc(remoteUrl || fallback || DEMO_ASSET_PATH);
     })();
     return () => {
       revoked = true;
     };
-  }, [clipId, fallback, getBlob]);
+  }, [clipId, fallback, remoteUrl, getBlob]);
 
   return src;
 }

@@ -57,8 +57,8 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
         <h2 className="text-lg font-medium text-white">About 360show</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
           Operator MVP for a 360 photo booth. Camera capture and live playback-rate ramping are real
-          in the browser. Platform motor and GoPro control are stubbed extension points. Guest QR
-          codes use this origin — phones need a deployed public URL plus cloud clip storage.
+          in the browser. Platform motor and GoPro control are stubbed. Guest QR links use the public
+          site origin; clips upload to Vercel Blob when <code>BLOB_READ_WRITE_TOKEN</code> is set.
         </p>
         <p className="mt-3 text-sm text-slate-500">
           {events.length} event{events.length === 1 ? "" : "s"} · {clips.length} clip{clips.length === 1 ? "" : "s"} on this tablet
