@@ -75,11 +75,18 @@ export async function publishClipToCloud(options: {
   event: BoothEvent;
   clip: Clip;
   localBlob: Blob | null;
-  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink"> | CloudShare | null;
+  baked?: boolean;
+  slowMoEnabled?: boolean;
+  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, existing } = options;
+  const baked = options.baked ?? true;
+  const slowMoEnabled = options.slowMoEnabled ?? baked;
   const reusable = Boolean(
-    existing?.baked && existing.destination !== "drive" && (existing.videoUrl || clip.remoteVideoUrl),
+    existing?.destination !== "drive" &&
+      existing?.baked === baked &&
+      (existing?.slowMoEnabled ?? true) === slowMoEnabled &&
+      (existing.videoUrl || clip.remoteVideoUrl),
   );
   let videoUrl = reusable ? existing?.videoUrl || clip.remoteVideoUrl || "" : "";
   let videoContentType = reusable ? existing?.videoContentType || "video/webm" : "video/webm";
@@ -99,7 +106,12 @@ export async function publishClipToCloud(options: {
     videoContentType = prepared.contentType;
   }
 
-  return persistShareMeta(cloudShareFrom(event, clip, videoUrl, videoContentType, true, { destination: "blob" }));
+  return persistShareMeta(
+    cloudShareFrom(event, clip, videoUrl, videoContentType, baked, {
+      destination: "blob",
+      slowMoEnabled,
+    }),
+  );
 }
 
 export async function publishClipToDrive(options: {
@@ -107,19 +119,28 @@ export async function publishClipToDrive(options: {
   clip: Clip;
   localBlob: Blob | null;
   folderName: string;
-  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink"> | CloudShare | null;
+  baked?: boolean;
+  slowMoEnabled?: boolean;
+  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, folderName, existing } = options;
+  const baked = options.baked ?? true;
+  const slowMoEnabled = options.slowMoEnabled ?? baked;
   const reusable = Boolean(
-    existing?.baked && existing.destination === "drive" && existing.driveFileId && existing.videoUrl,
+    existing?.destination === "drive" &&
+      existing?.baked === baked &&
+      (existing?.slowMoEnabled ?? true) === slowMoEnabled &&
+      existing.driveFileId &&
+      existing.videoUrl,
   );
 
   if (reusable && existing?.videoUrl) {
     return persistShareMeta(
-      cloudShareFrom(event, clip, existing.videoUrl, existing.videoContentType || "video/webm", true, {
+      cloudShareFrom(event, clip, existing.videoUrl, existing.videoContentType || "video/webm", baked, {
         destination: "drive",
         driveFileId: existing.driveFileId,
         webViewLink: existing.webViewLink,
+        slowMoEnabled,
       }),
     );
   }
@@ -144,10 +165,11 @@ export async function publishClipToDrive(options: {
   });
 
   return persistShareMeta(
-    cloudShareFrom(event, clip, uploaded.previewUrl, prepared.contentType, true, {
+    cloudShareFrom(event, clip, uploaded.previewUrl, prepared.contentType, baked, {
       destination: "drive",
       driveFileId: uploaded.fileId,
       webViewLink: uploaded.webViewLink,
+      slowMoEnabled,
     }),
   );
 }

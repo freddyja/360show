@@ -54,6 +54,8 @@ export interface AppSettings {
   forceOffline: boolean;
   cloudDestination: CloudDestination;
   driveFolderName: string;
+  /** Live preview ramp + baked slow-mo exports. Default on. */
+  slowMoEnabled: boolean;
 }
 
 export interface KvState {
@@ -76,6 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   forceOffline: false,
   cloudDestination: "blob",
   driveFolderName: "360show",
+  slowMoEnabled: true,
 };
 
 export const CAPTURE_DURATION_MS = 10_000;

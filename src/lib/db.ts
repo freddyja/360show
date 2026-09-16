@@ -129,6 +129,7 @@ export async function getSettings(): Promise<AppSettings> {
     ...stored,
     cloudDestination: stored?.cloudDestination === "drive" ? "drive" : "blob",
     driveFolderName: stored?.driveFolderName?.trim() || DEFAULT_SETTINGS.driveFolderName,
+    slowMoEnabled: stored?.slowMoEnabled !== false,
   };
 }
 

@@ -112,13 +112,19 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       rampProfile: rampProfileForFrame(event.frameStyle),
     };
     await saveClip(clip, blob);
-    void bakeExportInBackground(clip, blob);
+    if (settings.slowMoEnabled !== false) {
+      void bakeExportInBackground(clip, blob);
+    }
     await wait(600);
     setPhase("idle");
     setMessage(
       recorded.source === "demo"
-        ? "Demo spin saved — camera was unavailable. Baking slow-mo export in the background."
-        : "Spin saved. Baking slow-mo export in the background.",
+        ? settings.slowMoEnabled !== false
+          ? "Demo spin saved — camera was unavailable. Baking slow-mo export in the background."
+          : "Demo spin saved — camera was unavailable. Slow-mo is off, so the file stays normal speed."
+        : settings.slowMoEnabled !== false
+          ? "Spin saved. Baking slow-mo export in the background."
+          : "Spin saved at normal speed.",
     );
   }
 
@@ -229,11 +235,16 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
                 poster={latestClip.thumbnailDataUrl}
                 className={cn("h-full w-full object-cover", frameMediaClass(event.frameStyle))}
                 rampProfile={rampProfileForFrame(event.frameStyle)}
+                liveRamp={settings.slowMoEnabled !== false}
               />
               <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />
             </div>
             <div className="flex items-center justify-between px-5 py-4">
-              <p className="text-slate-300">Live playback ramp · Download / Share save a baked slow-mo file</p>
+              <p className="text-slate-300">
+                {settings.slowMoEnabled !== false
+                  ? "Live playback ramp · Download / Share save a baked slow-mo file"
+                  : "Normal speed · Download / Share save the original file (slow-mo is off)"}
+              </p>
               <button type="button" className="rounded-full bg-blue-500 px-4 py-2 text-sm font-medium text-white" onClick={() => setPreviewOpen(false)}>
                 Close
               </button>

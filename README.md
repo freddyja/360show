@@ -15,7 +15,7 @@ Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample
 
 1. **Open booth** on the sample event (or create your own).
 2. Tap **START SPIN**. Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
-3. After the timed capture, use **Preview** (live time-ramp on the original) or **Share** (guest QR). Download / Save / cloud upload use a **baked slow-mo** file.
+3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files.
 4. **Gallery** lists tonight’s clips. **Settings** picks the cloud destination (Vercel Blob or Google Drive), force-offline chip, and mock battery %.
 
 Local demo works **without** Blob or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
@@ -125,7 +125,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 | `/e/[eventId]` | Event setup — name, date, couple names, accent, logo, music bed label, frame style |
 | `/e/[eventId]/capture` | Operator capture (mockup 1) |
 | `/e/[eventId]/gallery` | Tonight’s clips |
-| `/e/[eventId]/settings` | Device name, mock battery, force offline, **Blob vs Drive destination**, Google Drive connect |
+| `/e/[eventId]/settings` | Device name, mock battery, **slow-mo on/off**, force offline, **Blob vs Drive destination**, Google Drive connect |
 | `/e/[eventId]/share/[clipId]` | Operator guest-share screen (mockup 2) |
 | `/s/[clipId]` | Share page encoded in the QR |
 
@@ -140,8 +140,8 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - **Vercel Blob** cloud clips so guest phones can open `/s/[clipId]` without IndexedDB
 - **Google Drive** destination: OAuth connect in Settings, baked upload to `360show/{event}/`, anyone-with-link guest playback
 - Copy link, `sms:` “Text me”, download when a blob, demo file, or cloud URL exists
-- **Live time-ramp preview**: `playbackRate` keyframes (normal → slow-mo → freeze) in `RampPlayer` on the original capture
-- **Baked slow-mo export**: the same ramp is re-encoded into a new WebM/MP4 (`ensureBakedClip`) for Download / Save and guest shares (Blob or Drive). Original stays in IndexedDB. Christian Fellowship uses the gentle ramp (no freeze-flash)
+- **Live time-ramp preview**: `playbackRate` keyframes when **Slow-mo / time ramp** is on (Settings)
+- **Baked slow-mo export**: same ramp re-encoded for Download / Share when slow-mo is on; skipped when off
 - Event frames overlaid on **web preview** (gold oval, neon ring, midnight arch, classic plaque, minimal, **Christian Fellowship** PNG pack) — not composited into the downloaded file yet
 - **Christian Fellowship** look-pack: navy/gold plaque overlay (`/frames/christian-fellowship.png`), default accent `#C9A227`, gentle slow-mo ramp (no freeze-flash)
 - Force-offline chip, mock battery, Camera OK / demo status
@@ -162,7 +162,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 ## Capture pipeline
 
-`START SPIN` → 3-2-1 countdown (camera or demo preview) → timed record via `MediaRecorder` → save original clip + blob → background bake of the time-ramp → gallery / share (upload prefers the baked export to Blob or Drive).
+`START SPIN` → 3-2-1 countdown → timed record → save original → if slow-mo is on, background-bake the time-ramp → gallery / share (upload uses baked file when slow-mo is on).
 
 Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during record so a future motor implementation can run in lockstep.
 
@@ -177,6 +177,8 @@ Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during recor
 | Google Drive (anyone-with-link) | Baked file uploaded from the booth | Not in the file |
 
 Bake uses a hidden `<video>` + canvas `captureStream` + `MediaRecorder`. It follows the clip’s ramp profile (`time-ramp-v1` freeze vs `time-ramp-gentle`). Wall-clock encode is longer than the 10s source (typically tens of seconds). The original blob remains in IndexedDB for recapture/debug.
+
+**Settings → Slow-mo / time ramp** (default on) controls this. Off: Preview plays at 1× and Download / Share upload the original capture (no bake). Guest pages honor `slowMoEnabled` on the cloud share so they do not re-apply a live ramp.
 
 ## Design
 

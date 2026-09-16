@@ -96,6 +96,21 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
 
         <label className="flex min-h-14 items-center justify-between rounded-2xl border border-white/10 bg-[#0c1424] px-4">
           <span>
+            <span className="block text-white">Slow-mo / time ramp</span>
+            <span className="block text-sm text-slate-400">
+              On: live preview ramp and baked slow-mo downloads. Off: normal-speed preview and files.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.slowMoEnabled !== false}
+            onChange={(e) => saveSettings({ ...settings, slowMoEnabled: e.target.checked })}
+            className="h-5 w-5 accent-blue-500"
+          />
+        </label>
+
+        <label className="flex min-h-14 items-center justify-between rounded-2xl border border-white/10 bg-[#0c1424] px-4">
+          <span>
             <span className="block text-white">Force offline</span>
             <span className="block text-sm text-slate-400">Shows the Offline mode chip; clips stay on-device</span>
           </span>
@@ -111,8 +126,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
       <section className="mt-10 max-w-2xl rounded-3xl border border-white/10 bg-[#0c1424] p-5">
         <h2 className="text-lg font-medium text-white">Cloud destination</h2>
         <p className="mt-1 text-sm text-slate-400">
-          Where Share uploads the baked slow-mo clip for guest QR codes. Preview always stays on this
-          tablet.
+          Where Share uploads guest clips. Preview always stays on this tablet.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -157,7 +171,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
         {destination === "blob" && (
           <p className="mt-4 text-sm text-slate-400">
             {config?.blobConfigured
-              ? "Blob token is set. Share will upload baked clips to Vercel Blob."
+              ? "Blob token is set. Share will upload clips to Vercel Blob."
               : "Blob is not configured on this deploy. Local preview still works; guest phones need a token or Drive."}
           </p>
         )}
@@ -209,9 +223,10 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
       <section className="mt-10 max-w-2xl rounded-3xl border border-white/10 bg-[#0c1424] p-5">
         <h2 className="text-lg font-medium text-white">About 360show</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Operator MVP for a 360 photo booth. Camera capture and live playback-rate ramping are real
-          in the browser. Download, Save, and guest cloud clips bake that ramp into the file. Share
-          can upload to Vercel Blob or Google Drive. Platform motor and GoPro control are stubbed.
+          Operator MVP for a 360 photo booth. Camera capture is real in the browser. Slow-mo can be
+          toggled in Settings: on uses a live playback-rate ramp and bakes it into Download / Share
+          files; off keeps normal speed. Share can upload to Vercel Blob or Google Drive. Platform
+          motor and GoPro control are stubbed.
         </p>
         <p className="mt-3 text-sm text-slate-500">
           {events.length} event{events.length === 1 ? "" : "s"} · {clips.length} clip{clips.length === 1 ? "" : "s"} on this tablet

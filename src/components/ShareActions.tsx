@@ -8,10 +8,12 @@ export function ShareActions({
   url,
   onDownload,
   canDownload,
+  downloadSubtitle,
 }: {
   url: string;
   onDownload: () => void;
   canDownload: boolean;
+  downloadSubtitle?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -46,7 +48,7 @@ export function ShareActions({
       key: "save",
       icon: Download,
       title: "Save to gallery",
-      subtitle: canDownload ? "Baked slow-mo for this device" : "Demo file only",
+      subtitle: canDownload ? downloadSubtitle || "Download to this device" : "Demo file only",
       onClick: onDownload,
     },
   ];

@@ -51,6 +51,7 @@ export function GuestShareScreen({
   const remoteUrl = localClip?.remoteVideoUrl || resolvedCloud?.videoUrl || null;
   const src = useClipSrc(clip?.id, clip?.demoAssetPath, remoteUrl);
   const destination = settings.cloudDestination || "blob";
+  const operatorSlowMo = settings.slowMoEnabled !== false;
   const shareUrl = useMemo(
     () => guestShareLink(clipId, config, resolvedCloud, event),
     [clipId, config, resolvedCloud, event],
@@ -58,7 +59,11 @@ export function GuestShareScreen({
   const year = event?.date?.slice(0, 4) ?? "2026";
   const hudTop = event?.frameStyle === "christian-fellowship";
   const rampProfile = event ? rampProfileForFrame(event.frameStyle) : "time-ramp-v1";
-  const liveRamp = Boolean(localClip) || (!resolvedCloud?.baked && !isDrivePlaybackUrl(src));
+  const liveRamp = isDrivePlaybackUrl(src)
+    ? false
+    : localClip && !publicMode
+      ? operatorSlowMo
+      : Boolean(resolvedCloud && resolvedCloud.slowMoEnabled !== false && !resolvedCloud.baked);
   const downloading = useRef(false);
 
   useEffect(() => {
@@ -99,7 +104,7 @@ export function GuestShareScreen({
       setPublishState("Connect Google Drive in Settings, then open Share again");
       return;
     }
-    const publishKey = `${clipId}:${destination}`;
+    const publishKey = `${clipId}:${destination}:${operatorSlowMo ? "slowmo" : "1x"}`;
     if (publishOnce.current === publishKey) return;
     publishOnce.current = publishKey;
     let cancelled = false;
@@ -107,15 +112,18 @@ export function GuestShareScreen({
     const eventToPublish = localEvent;
     (async () => {
       try {
-        setPublishState("Baking slow-mo export…");
         const sourceBlob = await getBlob(clipToPublish.id);
-        const baked = await ensureBakedClip({
-          clip: clipToPublish,
-          source: bakeSourceForClip(clipToPublish, sourceBlob),
-          onProgress: (progress) => {
-            if (!cancelled) setPublishState(`Baking slow-mo… ${Math.round(progress * 100)}%`);
-          },
-        });
+        let exportBlob = sourceBlob;
+        if (operatorSlowMo) {
+          setPublishState("Baking slow-mo export…");
+          exportBlob = await ensureBakedClip({
+            clip: clipToPublish,
+            source: bakeSourceForClip(clipToPublish, sourceBlob),
+            onProgress: (progress) => {
+              if (!cancelled) setPublishState(`Baking slow-mo… ${Math.round(progress * 100)}%`);
+            },
+          });
+        }
         if (cancelled) return;
         setPublishState(destination === "drive" ? "Uploading to Google Drive…" : "Uploading to guest cloud…");
         const existing = await fetchCloudShare(clipToPublish.id);
@@ -124,21 +132,25 @@ export function GuestShareScreen({
             ? await publishClipToDrive({
                 event: eventToPublish,
                 clip: clipToPublish,
-                localBlob: baked,
+                localBlob: exportBlob,
                 folderName: settings.driveFolderName || "360show",
+                baked: operatorSlowMo,
+                slowMoEnabled: operatorSlowMo,
                 existing,
               })
             : await publishClipToCloud({
                 event: eventToPublish,
                 clip: clipToPublish,
-                localBlob: baked,
+                localBlob: exportBlob,
+                baked: operatorSlowMo,
+                slowMoEnabled: operatorSlowMo,
                 existing,
               });
         if (cancelled) return;
         setCloud(published);
         await patchClip(clipToPublish.id, {
-          hasBakedBlob: true,
-          bakedAt: Date.now(),
+          hasBakedBlob: operatorSlowMo,
+          bakedAt: operatorSlowMo ? Date.now() : null,
           remoteVideoUrl: published.videoUrl,
           cloudShareAt: Date.now(),
         });
@@ -165,6 +177,7 @@ export function GuestShareScreen({
     settings.forceOffline,
     settings.driveFolderName,
     destination,
+    operatorSlowMo,
     clipId,
     getBlob,
     patchClip,
@@ -194,7 +207,7 @@ export function GuestShareScreen({
   async function download() {
     if (downloading.current) return;
     downloading.current = true;
-    setStatus("Preparing slow-mo file…");
+    setStatus(operatorSlowMo || publicMode ? "Preparing slow-mo file…" : "Preparing file…");
     try {
       const clipRecord = clip;
       const eventRecord = event;
@@ -202,6 +215,13 @@ export function GuestShareScreen({
         setStatus("Nothing to download");
         return;
       }
+
+      const shouldBakeNow = publicMode
+        ? Boolean(resolvedCloud && resolvedCloud.slowMoEnabled !== false && !resolvedCloud.baked)
+        : operatorSlowMo;
+      const savedAsSlowMo = publicMode
+        ? Boolean(resolvedCloud?.baked) || shouldBakeNow
+        : operatorSlowMo;
 
       let file: Blob | null = null;
       if (publicMode && resolvedCloud?.destination === "drive" && resolvedCloud.driveFileId) {
@@ -219,16 +239,22 @@ export function GuestShareScreen({
             : remoteUrl && !resolvedCloud?.baked
               ? remoteUrl
               : bakeSourceForClip(clipRecord, sourceBlob);
-        file = await ensureBakedClip({
-          clip: clipRecord,
-          source,
-          onProgress: (progress) => setStatus(`Baking slow-mo… ${Math.round(progress * 100)}%`),
-        });
-        if (localClip) {
-          await patchClip(localClip.id, {
-            hasBakedBlob: true,
-            bakedAt: Date.now(),
+        if (shouldBakeNow) {
+          file = await ensureBakedClip({
+            clip: clipRecord,
+            source,
+            onProgress: (progress) => setStatus(`Baking slow-mo… ${Math.round(progress * 100)}%`),
           });
+          if (localClip) {
+            await patchClip(localClip.id, {
+              hasBakedBlob: true,
+              bakedAt: Date.now(),
+            });
+          }
+        } else if (typeof source !== "string") {
+          file = source;
+        } else {
+          file = await fetch(source).then((res) => res.blob());
         }
       }
 
@@ -238,8 +264,9 @@ export function GuestShareScreen({
       }
       const ext = extensionForBlob(file);
       const base = eventRecord.clientNames.replace(/\s+/g, "-") || "360-spin";
-      triggerBlobDownload(file, `${base}-360-spin-slowmo.${ext}`);
-      setStatus("Saved baked slow-mo");
+      const suffix = savedAsSlowMo ? "-360-spin-slowmo" : "-360-spin";
+      triggerBlobDownload(file, `${base}${suffix}.${ext}`);
+      setStatus(savedAsSlowMo ? "Saved baked slow-mo" : "Saved original-speed clip");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Download failed");
     } finally {
@@ -311,7 +338,9 @@ export function GuestShareScreen({
                       ? rampProfile === "time-ramp-gentle"
                         ? "Slow-mo"
                         : "Playing"
-                      : "Baked slow-mo"
+                      : resolvedCloud?.baked || (operatorSlowMo && !publicMode)
+                        ? "Baked slow-mo"
+                        : "Normal speed"
                     : "Freeze"}
                 </span>
               </span>
@@ -342,6 +371,15 @@ export function GuestShareScreen({
           url={shareUrl}
           onDownload={() => void download()}
           canDownload={Boolean(clip.hasBlob || clip.demoAssetPath || remoteUrl || resolvedCloud?.driveFileId)}
+          downloadSubtitle={
+            publicMode
+              ? resolvedCloud?.baked
+                ? "Baked slow-mo for this device"
+                : "Download to this device"
+              : operatorSlowMo
+                ? "Baked slow-mo for this device"
+                : "Normal-speed file for this device"
+          }
         />
       </div>
 
@@ -386,7 +424,8 @@ function cloudFromQuery(clipId: string): CloudShare | null {
     videoContentType: "video/mp4",
     thumbnailDataUrl: null,
     demoAssetPath: null,
-    baked: q.get("b") !== "0",
+    baked: q.get("b") !== "0" && q.get("sm") !== "0",
+    slowMoEnabled: q.get("sm") !== "0",
     destination: "drive",
     driveFileId,
     webViewLink: driveViewUrl(driveFileId),
@@ -410,6 +449,7 @@ function guestShareLink(
     const accent = event?.accentColor || cloud.accentColor;
     if (accent) q.set("c", accent.replace("#", ""));
     if (cloud.baked) q.set("b", "1");
+    if (cloud.slowMoEnabled === false) q.set("sm", "0");
     return `${base}?${q.toString()}`;
   }
   return base;
