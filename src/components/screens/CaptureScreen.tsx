@@ -11,7 +11,7 @@ import { BootScreen } from "@/components/BootScreen";
 import { OperatorShell } from "@/components/OperatorShell";
 import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/capture/record";
 import { bakeSourceForClip, ensureBakedClip, needsExportBake } from "@/lib/capture/ensureBaked";
-import { hasMusicBed, musicBedSrc } from "@/lib/music/beds";
+import { hasMusicBed, musicBedSrc, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
 import { createStubMotor, probeCamera, type CameraStatus } from "@/lib/hardware";
 import { cn } from "@/lib/cn";
@@ -283,7 +283,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
                 {hasMusicBed(event.musicBedLabel)
                   ? settings.boothMusicMuted
                     ? " · booth music muted"
-                    : ` · ${event.musicBedLabel}`
+                    : ` · ${normalizeMusicBedLabel(event.musicBedLabel)}`
                   : ""}
               </p>
               <button type="button" className="rounded-full bg-blue-500 px-4 py-2 text-sm font-medium text-white" onClick={() => setPreviewOpen(false)}>

@@ -2,6 +2,7 @@ import { bakedBlobKeysForClip } from "./capture/bake";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { AppSettings, BoothEvent, Clip } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
+import { normalizeMusicBedLabel } from "./music/beds";
 
 interface Snap360Schema extends DBSchema {
   events: {
@@ -21,6 +22,10 @@ interface Snap360Schema extends DBSchema {
     key: string;
     value: unknown;
   };
+}
+
+function hydrateEvent(event: BoothEvent): BoothEvent {
+  return { ...event, musicBedLabel: normalizeMusicBedLabel(event.musicBedLabel) };
 }
 
 const DB_NAME = "snap360-booth";
@@ -57,17 +62,18 @@ function getDb() {
 export async function listEvents(): Promise<BoothEvent[]> {
   const db = await getDb();
   const events = await db.getAll("events");
-  return events.sort((a, b) => b.updatedAt - a.updatedAt);
+  return events.map(hydrateEvent).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getEvent(id: string) {
   const db = await getDb();
-  return db.get("events", id);
+  const event = await db.get("events", id);
+  return event ? hydrateEvent(event) : event;
 }
 
 export async function putEvent(event: BoothEvent) {
   const db = await getDb();
-  await db.put("events", event);
+  await db.put("events", hydrateEvent(event));
 }
 
 export async function deleteEvent(id: string) {

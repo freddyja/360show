@@ -1,4 +1,5 @@
 import { FRAME_STYLE_IDS, type BoothEvent, type Clip, type FrameStyleId, type RampProfileId } from "@/lib/types";
+import { normalizeMusicBedLabel } from "@/lib/music/beds";
 
 export interface CloudShare {
   clipId: string;
@@ -70,7 +71,7 @@ export function eventFromCloud(share: CloudShare): BoothEvent {
     clientNames: share.clientNames,
     accentColor: share.accentColor,
     logoDataUrl: share.logoDataUrl,
-    musicBedLabel: share.musicBedLabel || "None",
+    musicBedLabel: normalizeMusicBedLabel(share.musicBedLabel),
     frameStyle: share.frameStyle,
     createdAt: share.createdAt,
     updatedAt: share.createdAt,
