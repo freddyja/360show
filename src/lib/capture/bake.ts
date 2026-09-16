@@ -33,6 +33,7 @@ export function bakedBlobKey(clipId: string) {
 export async function bakeTimeRamp(options: {
   source: Blob | string;
   profile: RampProfileId;
+  expectedDurationSec?: number;
   onProgress?: (progress: number) => void;
 }): Promise<Blob> {
   if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
@@ -71,8 +72,13 @@ export async function bakeTimeRamp(options: {
       };
     });
 
-    const duration = video.duration;
-    if (!duration || !Number.isFinite(duration)) {
+    const duration =
+      Number.isFinite(video.duration) && video.duration > 0
+        ? video.duration
+        : options.expectedDurationSec && options.expectedDurationSec > 0
+          ? options.expectedDurationSec
+          : 0;
+    if (!duration) {
       throw new Error("Clip has no duration to bake");
     }
 

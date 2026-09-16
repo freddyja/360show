@@ -217,13 +217,14 @@ export function GuestShareScreen({
     }
   }
 
-  const readyLabel = publishState
-    ? publishState
-    : status === "Ready"
-      ? settings.forceOffline
-        ? "Ready · saved on this tablet"
-        : "Ready"
-      : status;
+  const readyLabel =
+    status !== "Ready"
+      ? status
+      : publishState
+        ? publishState
+        : settings.forceOffline
+          ? "Ready · saved on this tablet"
+          : "Ready";
 
   return (
     <Shell>

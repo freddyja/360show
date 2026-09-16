@@ -35,6 +35,7 @@ export async function ensureBakedClip(options: {
   const work = bakeTimeRamp({
     source,
     profile: clip.rampProfile ?? "time-ramp-v1",
+    expectedDurationSec: clip.durationMs / 1000,
     onProgress,
   }).then(async (baked) => {
     await putBakedBlob(clip.id, baked);
