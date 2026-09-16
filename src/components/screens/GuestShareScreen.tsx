@@ -13,19 +13,15 @@ import { rampProfileForFrame } from "@/lib/frames";
 import { useClipSrc } from "@/lib/useClipSrc";
 import { cn } from "@/lib/cn";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  clipFromCloud,
-  eventFromCloud,
-  type CloudShare,
-  type ShareConfig,
-} from "@/lib/share/types";
-import { fetchCloudShare, fetchShareConfig, publishClipToCloud } from "@/lib/share/publish";
+import { fetchCloudShare, fetchShareConfig, publishClipToCloud, publishClipToDrive } from "@/lib/share/publish";
 import {
   bakeSourceForClip,
   ensureBakedClip,
   extensionForBlob,
   triggerBlobDownload,
 } from "@/lib/capture/ensureBaked";
+import { driveDownloadUrl, drivePreviewUrl, driveViewUrl, isDrivePlaybackUrl } from "@/lib/drive/urls";
+import { clipFromCloud, eventFromCloud, isFrameStyleId, type CloudShare, type ShareConfig } from "@/lib/share/types";
 
 export function GuestShareScreen({
   eventId,
@@ -40,6 +36,7 @@ export function GuestShareScreen({
   const localClip = clips.find((item) => item.id === clipId);
   const resolvedEventId = eventId ?? localClip?.eventId;
   const { event: localEvent } = useEvent(resolvedEventId);
+  const [queryCloud, setQueryCloud] = useState<CloudShare | null>(null);
   const [cloud, setCloud] = useState<CloudShare | null>(null);
   const [cloudReady, setCloudReady] = useState(false);
   const [config, setConfig] = useState<ShareConfig | null>(null);
@@ -48,19 +45,25 @@ export function GuestShareScreen({
   const [status, setStatus] = useState("Ready");
   const publishOnce = useRef<string | null>(null);
 
-  const clip = localClip ?? (cloud ? clipFromCloud(cloud) : undefined);
-  const event = localEvent ?? (cloud ? eventFromCloud(cloud) : undefined);
-  const remoteUrl = localClip?.remoteVideoUrl || cloud?.videoUrl || null;
+  const resolvedCloud = cloud ?? queryCloud;
+  const clip = localClip ?? (resolvedCloud ? clipFromCloud(resolvedCloud) : undefined);
+  const event = localEvent ?? (resolvedCloud ? eventFromCloud(resolvedCloud) : undefined);
+  const remoteUrl = localClip?.remoteVideoUrl || resolvedCloud?.videoUrl || null;
   const src = useClipSrc(clip?.id, clip?.demoAssetPath, remoteUrl);
+  const destination = settings.cloudDestination || "blob";
   const shareUrl = useMemo(
-    () => clipShareUrl(clipId, config?.origin),
-    [clipId, config?.origin],
+    () => guestShareLink(clipId, config, resolvedCloud, event),
+    [clipId, config, resolvedCloud, event],
   );
   const year = event?.date?.slice(0, 4) ?? "2026";
   const hudTop = event?.frameStyle === "christian-fellowship";
   const rampProfile = event ? rampProfileForFrame(event.frameStyle) : "time-ramp-v1";
-  const liveRamp = Boolean(localClip) || !cloud?.baked;
+  const liveRamp = Boolean(localClip) || (!resolvedCloud?.baked && !isDrivePlaybackUrl(src));
   const downloading = useRef(false);
+
+  useEffect(() => {
+    setQueryCloud(cloudFromQuery(clipId));
+  }, [clipId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,12 +87,21 @@ export function GuestShareScreen({
       setPublishState("Offline — clip stays on this tablet");
       return;
     }
-    if (!config.blobConfigured) {
+    if (destination === "blob" && !config.blobConfigured) {
       setPublishState("Local-only share — add BLOB_READ_WRITE_TOKEN to upload for guest phones");
       return;
     }
-    if (publishOnce.current === clipId) return;
-    publishOnce.current = clipId;
+    if (destination === "drive" && !config.driveConfigured) {
+      setPublishState("Google Drive is not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET");
+      return;
+    }
+    if (destination === "drive" && !config.driveConnected) {
+      setPublishState("Connect Google Drive in Settings, then open Share again");
+      return;
+    }
+    const publishKey = `${clipId}:${destination}`;
+    if (publishOnce.current === publishKey) return;
+    publishOnce.current = publishKey;
     let cancelled = false;
     const clipToPublish = localClip;
     const eventToPublish = localEvent;
@@ -105,14 +117,23 @@ export function GuestShareScreen({
           },
         });
         if (cancelled) return;
-        setPublishState("Uploading to guest cloud…");
+        setPublishState(destination === "drive" ? "Uploading to Google Drive…" : "Uploading to guest cloud…");
         const existing = await fetchCloudShare(clipToPublish.id);
-        const published = await publishClipToCloud({
-          event: eventToPublish,
-          clip: clipToPublish,
-          localBlob: baked,
-          existing,
-        });
+        const published =
+          destination === "drive"
+            ? await publishClipToDrive({
+                event: eventToPublish,
+                clip: clipToPublish,
+                localBlob: baked,
+                folderName: settings.driveFolderName || "360show",
+                existing,
+              })
+            : await publishClipToCloud({
+                event: eventToPublish,
+                clip: clipToPublish,
+                localBlob: baked,
+                existing,
+              });
         if (cancelled) return;
         setCloud(published);
         await patchClip(clipToPublish.id, {
@@ -121,7 +142,7 @@ export function GuestShareScreen({
           remoteVideoUrl: published.videoUrl,
           cloudShareAt: Date.now(),
         });
-        setPublishState("Live for guest phones");
+        setPublishState(destination === "drive" ? "Live on Google Drive" : "Live for guest phones");
       } catch (error) {
         publishOnce.current = null;
         if (!cancelled) {
@@ -142,6 +163,8 @@ export function GuestShareScreen({
     localEvent?.id,
     config,
     settings.forceOffline,
+    settings.driveFolderName,
+    destination,
     clipId,
     getBlob,
     patchClip,
@@ -157,9 +180,11 @@ export function GuestShareScreen({
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
           <p className="text-2xl font-semibold text-white">Clip not available</p>
           <p className="max-w-lg text-slate-400">
-            {config && !config.blobConfigured
-              ? "This clip lives on the booth tablet. Deploy with Vercel Blob (BLOB_READ_WRITE_TOKEN) so guest phones can load it."
-              : "This share link has no cloud clip yet. Open Share on the booth after setting BLOB_READ_WRITE_TOKEN, or scan again after upload."}
+            {destination === "drive"
+              ? "This clip is not in cloud storage yet. On the booth, connect Google Drive in Settings, then open Share."
+              : config && !config.blobConfigured
+                ? "This clip lives on the booth tablet. Deploy with Vercel Blob (BLOB_READ_WRITE_TOKEN) or connect Google Drive in Settings so guest phones can load it."
+                : "This share link has no cloud clip yet. Open Share on the booth after connecting storage, or scan again after upload."}
           </p>
         </div>
       </Shell>
@@ -179,14 +204,19 @@ export function GuestShareScreen({
       }
 
       let file: Blob | null = null;
-      if (publicMode && cloud?.baked && remoteUrl) {
+      if (publicMode && resolvedCloud?.destination === "drive" && resolvedCloud.driveFileId) {
+        window.open(driveDownloadUrl(resolvedCloud.driveFileId), "_blank", "noopener,noreferrer");
+        setStatus("Opened Google Drive download");
+        return;
+      }
+      if (publicMode && resolvedCloud?.baked && remoteUrl && !isDrivePlaybackUrl(remoteUrl)) {
         file = await fetch(remoteUrl).then((res) => res.blob());
       } else {
         const sourceBlob = await getBlob(clipRecord.id).catch(() => null);
         const source =
           sourceBlob && sourceBlob.size > 500
             ? sourceBlob
-            : remoteUrl && !cloud?.baked
+            : remoteUrl && !resolvedCloud?.baked
               ? remoteUrl
               : bakeSourceForClip(clipRecord, sourceBlob);
         file = await ensureBakedClip({
@@ -311,7 +341,7 @@ export function GuestShareScreen({
         <ShareActions
           url={shareUrl}
           onDownload={() => void download()}
-          canDownload={Boolean(clip.hasBlob || clip.demoAssetPath || remoteUrl)}
+          canDownload={Boolean(clip.hasBlob || clip.demoAssetPath || remoteUrl || resolvedCloud?.driveFileId)}
         />
       </div>
 
@@ -322,13 +352,67 @@ export function GuestShareScreen({
       </footer>
       {publicMode && (
         <p className="mt-3 text-center text-xs text-slate-500">
-          Guest phones load this clip from cloud storage when the booth has uploaded it. Use the
-          deployed HTTPS URL in the QR, not a LAN IP. Downloads are ramp-baked; the frame stays as
-          a web overlay.
+          Guest phones load this clip from Vercel Blob or Google Drive when the booth has uploaded
+          it. Use the deployed HTTPS URL in the QR, not a LAN IP. Downloads are ramp-baked; the frame
+          stays as a web overlay.
         </p>
       )}
     </Shell>
   );
+}
+
+function cloudFromQuery(clipId: string): CloudShare | null {
+  if (typeof window === "undefined") return null;
+  const q = new URLSearchParams(window.location.search);
+  const driveFileId = q.get("d");
+  if (!driveFileId) return null;
+  const names = q.get("n") || "360 spin";
+  const frame = q.get("f");
+  const accent = q.get("c");
+  return {
+    clipId,
+    eventId: "drive-share",
+    eventName: names,
+    clientNames: names,
+    date: "",
+    accentColor: accent ? `#${accent.replace("#", "")}` : "#3B82F6",
+    logoDataUrl: null,
+    frameStyle: frame && isFrameStyleId(frame) ? frame : "gold-oval",
+    createdAt: Date.now(),
+    durationMs: 10_000,
+    source: "demo",
+    rampProfile: "time-ramp-v1",
+    videoUrl: drivePreviewUrl(driveFileId),
+    videoContentType: "video/mp4",
+    thumbnailDataUrl: null,
+    demoAssetPath: null,
+    baked: q.get("b") !== "0",
+    destination: "drive",
+    driveFileId,
+    webViewLink: driveViewUrl(driveFileId),
+  };
+}
+
+function guestShareLink(
+  clipId: string,
+  config: ShareConfig | null,
+  cloud: CloudShare | null,
+  event: { clientNames: string; frameStyle: string; accentColor: string } | undefined,
+) {
+  const base = clipShareUrl(clipId, config?.origin);
+  if (cloud?.destination === "drive" && cloud.driveFileId && !config?.blobConfigured) {
+    const q = new URLSearchParams();
+    q.set("d", cloud.driveFileId);
+    const names = event?.clientNames || cloud.clientNames;
+    if (names) q.set("n", names);
+    const frame = event?.frameStyle || cloud.frameStyle;
+    if (frame) q.set("f", frame);
+    const accent = event?.accentColor || cloud.accentColor;
+    if (accent) q.set("c", accent.replace("#", ""));
+    if (cloud.baked) q.set("b", "1");
+    return `${base}?${q.toString()}`;
+  }
+  return base;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

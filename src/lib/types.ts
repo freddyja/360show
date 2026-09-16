@@ -44,10 +44,16 @@ export interface Clip {
   bakedAt?: number | null;
 }
 
+export type CloudDestination = "blob" | "drive";
+
+export const CLOUD_DESTINATIONS = ["blob", "drive"] as const;
+
 export interface AppSettings {
   deviceName: string;
   mockBatteryPct: number;
   forceOffline: boolean;
+  cloudDestination: CloudDestination;
+  driveFolderName: string;
 }
 
 export interface KvState {
@@ -68,6 +74,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   deviceName: "Booth Tablet 1",
   mockBatteryPct: 87,
   forceOffline: false,
+  cloudDestination: "blob",
+  driveFolderName: "360show",
 };
 
 export const CAPTURE_DURATION_MS = 10_000;

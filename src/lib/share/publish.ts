@@ -1,15 +1,29 @@
 "use client";
 
 import { upload } from "@vercel/blob/client";
+import { uploadClipToDrive } from "@/lib/drive/uploadClient";
 import { DEMO_ASSET_PATH, type BoothEvent, type Clip } from "@/lib/types";
 import { cloudShareFrom, shareVideoPath, type CloudShare, type ShareConfig } from "@/lib/share/types";
 
 export async function fetchShareConfig(): Promise<ShareConfig> {
   const res = await fetch("/api/share/config", { cache: "no-store" });
   if (!res.ok) {
-    return { origin: window.location.origin, blobConfigured: false };
+    return {
+      origin: window.location.origin,
+      blobConfigured: false,
+      driveConfigured: false,
+      driveConnected: false,
+      driveEmail: null,
+    };
   }
-  return (await res.json()) as ShareConfig;
+  const data = (await res.json()) as Partial<ShareConfig>;
+  return {
+    origin: data.origin || window.location.origin,
+    blobConfigured: Boolean(data.blobConfigured),
+    driveConfigured: Boolean(data.driveConfigured),
+    driveConnected: Boolean(data.driveConnected),
+    driveEmail: data.driveEmail ?? null,
+  };
 }
 
 export async function fetchCloudShare(clipId: string): Promise<CloudShare | null> {
@@ -19,7 +33,7 @@ export async function fetchCloudShare(clipId: string): Promise<CloudShare | null
   return (await res.json()) as CloudShare;
 }
 
-async function fileForUpload(clip: Clip, localBlob: Blob | null): Promise<{ file: File; contentType: string } | null> {
+export async function fileForUpload(clip: Clip, localBlob: Blob | null): Promise<{ file: File; contentType: string } | null> {
   const normalize = (type: string) => (type.includes("mp4") ? "video/mp4" : "video/webm");
   if (localBlob && localBlob.size > 500) {
     const contentType = normalize(localBlob.type || "video/webm");
@@ -44,14 +58,29 @@ async function fileForUpload(clip: Clip, localBlob: Blob | null): Promise<{ file
   }
 }
 
+async function persistShareMeta(payload: CloudShare) {
+  const res = await fetch(`/api/share/${encodeURIComponent(payload.clipId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(err?.error || "Could not save share metadata");
+  }
+  return payload;
+}
+
 export async function publishClipToCloud(options: {
   event: BoothEvent;
   clip: Clip;
   localBlob: Blob | null;
-  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked"> | CloudShare | null;
+  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, existing } = options;
-  const reusable = Boolean(existing?.baked && (existing.videoUrl || clip.remoteVideoUrl));
+  const reusable = Boolean(
+    existing?.baked && existing.destination !== "drive" && (existing.videoUrl || clip.remoteVideoUrl),
+  );
   let videoUrl = reusable ? existing?.videoUrl || clip.remoteVideoUrl || "" : "";
   let videoContentType = reusable ? existing?.videoContentType || "video/webm" : "video/webm";
 
@@ -70,15 +99,55 @@ export async function publishClipToCloud(options: {
     videoContentType = prepared.contentType;
   }
 
-  const payload = cloudShareFrom(event, clip, videoUrl, videoContentType, true);
-  const res = await fetch(`/api/share/${encodeURIComponent(clip.id)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const err = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(err?.error || "Could not save share metadata");
+  return persistShareMeta(cloudShareFrom(event, clip, videoUrl, videoContentType, true, { destination: "blob" }));
+}
+
+export async function publishClipToDrive(options: {
+  event: BoothEvent;
+  clip: Clip;
+  localBlob: Blob | null;
+  folderName: string;
+  existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink"> | CloudShare | null;
+}): Promise<CloudShare> {
+  const { event, clip, localBlob, folderName, existing } = options;
+  const reusable = Boolean(
+    existing?.baked && existing.destination === "drive" && existing.driveFileId && existing.videoUrl,
+  );
+
+  if (reusable && existing?.videoUrl) {
+    return persistShareMeta(
+      cloudShareFrom(event, clip, existing.videoUrl, existing.videoContentType || "video/webm", true, {
+        destination: "drive",
+        driveFileId: existing.driveFileId,
+        webViewLink: existing.webViewLink,
+      }),
+    );
   }
-  return payload;
+
+  const prepared = await fileForUpload(clip, localBlob);
+  if (!prepared) {
+    throw new Error("Nothing to upload — capture a spin first.");
+  }
+
+  const tokenRes = await fetch("/api/drive/token", { cache: "no-store" });
+  const tokenBody = (await tokenRes.json().catch(() => null)) as { accessToken?: string; error?: string } | null;
+  if (!tokenRes.ok || !tokenBody?.accessToken) {
+    throw new Error(tokenBody?.error || "Connect Google Drive in Settings before sharing.");
+  }
+
+  const uploaded = await uploadClipToDrive({
+    accessToken: tokenBody.accessToken,
+    file: prepared.file,
+    folderName,
+    eventName: event.name,
+    clipId: clip.id,
+  });
+
+  return persistShareMeta(
+    cloudShareFrom(event, clip, uploaded.previewUrl, prepared.contentType, true, {
+      destination: "drive",
+      driveFileId: uploaded.fileId,
+      webViewLink: uploaded.webViewLink,
+    }),
+  );
 }

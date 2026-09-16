@@ -19,11 +19,17 @@ export interface CloudShare {
   demoAssetPath: string | null;
   /** True when videoUrl is a ramp-baked export (slow-mo is in the file). */
   baked?: boolean;
+  destination?: "blob" | "drive";
+  driveFileId?: string | null;
+  webViewLink?: string | null;
 }
 
 export interface ShareConfig {
   origin: string;
   blobConfigured: boolean;
+  driveConfigured: boolean;
+  driveConnected: boolean;
+  driveEmail: string | null;
 }
 
 export function isClipId(value: string) {
@@ -81,6 +87,7 @@ export function cloudShareFrom(
   videoUrl: string,
   videoContentType: string,
   baked = true,
+  extra?: Pick<CloudShare, "destination" | "driveFileId" | "webViewLink">,
 ): CloudShare {
   return {
     clipId: clip.id,
@@ -100,5 +107,8 @@ export function cloudShareFrom(
     thumbnailDataUrl: clip.thumbnailDataUrl,
     demoAssetPath: clip.demoAssetPath,
     baked,
+    destination: extra?.destination,
+    driveFileId: extra?.driveFileId,
+    webViewLink: extra?.webViewLink,
   };
 }

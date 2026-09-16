@@ -124,7 +124,12 @@ export async function putBakedBlob(clipId: string, blob: Blob) {
 export async function getSettings(): Promise<AppSettings> {
   const db = await getDb();
   const stored = (await db.get("kv", "settings")) as AppSettings | undefined;
-  return { ...DEFAULT_SETTINGS, ...stored };
+  return {
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    cloudDestination: stored?.cloudDestination === "drive" ? "drive" : "blob",
+    driveFolderName: stored?.driveFolderName?.trim() || DEFAULT_SETTINGS.driveFolderName,
+  };
 }
 
 export async function putSettings(settings: AppSettings) {

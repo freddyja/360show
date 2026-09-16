@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { playbackRateAt, rampKeyframes } from "@/lib/capture/ramp";
+import { isDrivePlaybackUrl } from "@/lib/drive/urls";
 import { DEMO_ASSET_PATH, type RampProfileId } from "@/lib/types";
 
 export function RampPlayer({
@@ -21,10 +22,11 @@ export function RampPlayer({
   onPlayingChange?: (playing: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const driveSrc = isDrivePlaybackUrl(src);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !liveRamp) return;
+    if (!video || !liveRamp || driveSrc) return;
     const keyframes = rampKeyframes(rampProfile);
 
     let raf = 0;
@@ -50,7 +52,20 @@ export function RampPlayer({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [src, rampProfile, liveRamp, onPlayingChange]);
+  }, [src, rampProfile, liveRamp, driveSrc, onPlayingChange]);
+
+  if (driveSrc && src) {
+    return (
+      <iframe
+        src={src}
+        className={className}
+        style={{ border: 0 }}
+        title="360 spin"
+        allow="autoplay; fullscreen"
+        allowFullScreen
+      />
+    );
+  }
 
   return (
     <video
