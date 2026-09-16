@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { playbackRateAt } from "@/lib/capture/ramp";
-import { DEMO_ASSET_PATH } from "@/lib/types";
+import { playbackRateAt, rampKeyframes } from "@/lib/capture/ramp";
+import { DEMO_ASSET_PATH, type RampProfileId } from "@/lib/types";
 
 export function RampPlayer({
   src,
   poster,
   className,
+  rampProfile = "time-ramp-v1",
   onPlayingChange,
 }: {
   src: string | null;
   poster?: string | null;
   className?: string;
+  rampProfile?: RampProfileId;
   onPlayingChange?: (playing: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -20,13 +22,14 @@ export function RampPlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    const keyframes = rampKeyframes(rampProfile);
 
     let raf = 0;
     let freezeUntil = 0;
     const tick = () => {
       const duration = video.duration || 1;
       const progress = video.currentTime / duration;
-      const rate = playbackRateAt(progress);
+      const rate = playbackRateAt(progress, keyframes);
       if (rate <= 0.02) {
         if (!video.paused) {
           video.pause();
@@ -44,7 +47,7 @@ export function RampPlayer({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [src, onPlayingChange]);
+  }, [src, rampProfile, onPlayingChange]);
 
   return (
     <video

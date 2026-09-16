@@ -10,6 +10,7 @@ import { ShareActions } from "@/components/ShareActions";
 import { BootScreen } from "@/components/BootScreen";
 import { useBooth, useEvent } from "@/lib/store";
 import { clipShareUrl } from "@/lib/shareUrl";
+import { rampProfileForFrame } from "@/lib/frames";
 import { useClipSrc } from "@/lib/useClipSrc";
 import { cn } from "@/lib/cn";
 import { useMemo, useState } from "react";
@@ -32,6 +33,8 @@ export function GuestShareScreen({
   const [status, setStatus] = useState("Ready");
   const shareUrl = useMemo(() => clipShareUrl(clipId), [clipId]);
   const year = event?.date?.slice(0, 4) ?? "2026";
+  const hudTop = event?.frameStyle === "christian-fellowship";
+  const rampProfile = event ? rampProfileForFrame(event.frameStyle) : "time-ramp-v1";
 
   if (!ready) return <BootScreen message="Loading spin…" />;
 
@@ -104,21 +107,32 @@ export function GuestShareScreen({
               src={src}
               poster={clip.thumbnailDataUrl}
               className={cn("h-full w-full object-cover", frameMediaClass(event.frameStyle))}
+              rampProfile={rampProfile}
               onPlayingChange={setPlaying}
             />
             <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />
-            <div className="absolute bottom-4 left-4 flex items-center gap-3 rounded-full bg-black/55 px-3 py-2 backdrop-blur-sm">
+            <div
+              className={cn(
+                "absolute flex items-center gap-3 rounded-full bg-black/55 px-3 py-2 backdrop-blur-sm",
+                hudTop ? "top-6 left-6" : "bottom-4 left-4",
+              )}
+            >
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500">
                 <Play className="h-4 w-4 fill-white text-white" />
               </span>
               <span>
                 <span className="block text-sm font-medium text-white">360° Spin</span>
-                <span className="block text-xs text-slate-300">{playing ? "Playing" : "Freeze"}</span>
+                <span className="block text-xs text-slate-300">
+                  {playing ? (rampProfile === "time-ramp-gentle" ? "Slow-mo" : "Playing") : "Freeze"}
+                </span>
               </span>
             </div>
             <button
               type="button"
-              className="absolute right-4 bottom-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/40 text-white"
+              className={cn(
+                "absolute flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/40 text-white",
+                hudTop ? "top-6 right-6" : "right-4 bottom-4",
+              )}
               aria-label="Fullscreen"
               onClick={() => {
                 const node = document.documentElement;

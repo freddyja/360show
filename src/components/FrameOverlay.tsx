@@ -1,6 +1,7 @@
 "use client";
 
 import type { FrameStyleId } from "@/lib/types";
+import { getFrameStyle } from "@/lib/frames";
 import { cn } from "@/lib/cn";
 
 export function frameMediaClass(style: FrameStyleId) {
@@ -19,6 +20,18 @@ export function FrameOverlay({
   names: string;
   accentColor: string;
 }) {
+  if (style === "christian-fellowship") {
+    const pack = getFrameStyle("christian-fellowship");
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={pack.assetSrc ?? "/frames/christian-fellowship.png"}
+        alt={pack.caption ?? pack.name}
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+      />
+    );
+  }
+
   if (style === "gold-oval") {
     return (
       <div className="pointer-events-none absolute inset-0">

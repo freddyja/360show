@@ -43,7 +43,8 @@ Add to Home Screen from the tablet browser for a PWA-like standalone shell (`dis
 - Guest QR (current origin + `/s/[clipId]`) via `qrcode.react`
 - Copy link, `sms:` “Text me”, download when a blob or demo file exists
 - **Live time-ramp playback**: `playbackRate` keyframes (normal → slow-mo → freeze) in `RampPlayer`
-- Event frames overlaid on preview (gold oval, neon ring, midnight arch, classic plaque, minimal)
+- Event frames overlaid on preview (gold oval, neon ring, midnight arch, classic plaque, minimal, **Christian Fellowship** PNG pack)
+- **Christian Fellowship** look-pack: navy/gold plaque overlay (`/frames/christian-fellowship.png`), default accent `#C9A227`, gentle slow-mo ramp (no freeze-flash)
 - Force-offline chip, mock battery, Camera OK / demo status
 
 **Simulated / stubbed (extension points)**

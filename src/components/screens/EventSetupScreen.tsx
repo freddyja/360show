@@ -8,7 +8,7 @@ import { FRAME_STYLES } from "@/lib/frames";
 import { createId } from "@/lib/ids";
 import { capturePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
-import { MUSIC_BEDS, type BoothEvent, type FrameStyleId } from "@/lib/types";
+import { MUSIC_BEDS, type BoothEvent } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
 export function EventSetupScreen({ eventId }: { eventId?: string }) {
@@ -151,12 +151,15 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
       </div>
 
       <Field label="Frame style" className="mt-5">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           {FRAME_STYLES.map((style) => (
             <button
               key={style.id}
               type="button"
-              onClick={() => update("frameStyle", style.id as FrameStyleId)}
+              onClick={() => {
+                update("frameStyle", style.id);
+                if (style.defaultAccent) update("accentColor", style.defaultAccent);
+              }}
               className={cn(
                 "rounded-2xl border px-3 py-4 text-left transition",
                 form.frameStyle === style.id
@@ -164,6 +167,14 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
                   : "border-white/10 bg-[#0c1424]",
               )}
             >
+              {style.assetSrc && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={style.assetSrc}
+                  alt=""
+                  className="mb-3 h-16 w-full rounded-lg object-cover"
+                />
+              )}
               <span className="block font-medium text-white">{style.name}</span>
               <span className="mt-1 block text-xs text-slate-400">{style.description}</span>
             </button>

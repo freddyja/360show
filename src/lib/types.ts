@@ -4,9 +4,12 @@ export const FRAME_STYLE_IDS = [
   "midnight-arch",
   "classic-plaque",
   "minimal",
+  "christian-fellowship",
 ] as const;
 
 export type FrameStyleId = (typeof FRAME_STYLE_IDS)[number];
+
+export type RampProfileId = "time-ramp-v1" | "time-ramp-gentle";
 
 export type CaptureSource = "camera" | "demo";
 
@@ -34,7 +37,7 @@ export interface Clip {
   /** When no blob was recorded, play this bundled asset instead. */
   demoAssetPath: string | null;
   thumbnailDataUrl: string | null;
-  rampProfile: "time-ramp-v1";
+  rampProfile: RampProfileId;
 }
 
 export interface AppSettings {

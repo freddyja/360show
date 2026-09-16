@@ -1,3 +1,5 @@
+import type { RampProfileId } from "../types";
+
 /**
  * Time-ramp playback profile.
  *
@@ -25,6 +27,15 @@ export const TIME_RAMP_V1: RampKeyframe[] = [
   { at: 0.96, rate: 0 },
 ];
 
+/** Gentle slow-mo only — no freeze-flash. Used by the Christian Fellowship pack. */
+export const TIME_RAMP_GENTLE: RampKeyframe[] = [
+  { at: 0, rate: 1 },
+  { at: 0.18, rate: 1 },
+  { at: 0.4, rate: 0.48 },
+  { at: 0.72, rate: 0.3 },
+  { at: 1, rate: 0.24 },
+];
+
 export function playbackRateAt(progress: number, profile = TIME_RAMP_V1) {
   if (progress <= 0) return profile[0].rate;
   if (progress >= 1) return profile[profile.length - 1].rate;
@@ -38,4 +49,8 @@ export function playbackRateAt(progress: number, profile = TIME_RAMP_V1) {
     }
   }
   return profile[profile.length - 1].rate;
+}
+
+export function rampKeyframes(id: RampProfileId = "time-ramp-v1") {
+  return id === "time-ramp-gentle" ? TIME_RAMP_GENTLE : TIME_RAMP_V1;
 }

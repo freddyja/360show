@@ -13,6 +13,7 @@ import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/captu
 import { createStubMotor, probeCamera, type CameraStatus } from "@/lib/hardware";
 import { cn } from "@/lib/cn";
 import { createId } from "@/lib/ids";
+import { rampProfileForFrame } from "@/lib/frames";
 import { operatorSharePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
 import { CAPTURE_DURATION_MS, COUNTDOWN_SECONDS, DEMO_ASSET_PATH } from "@/lib/types";
@@ -107,7 +108,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       hasBlob: Boolean(blob),
       demoAssetPath: blob ? null : DEMO_ASSET_PATH,
       thumbnailDataUrl: thumbnail,
-      rampProfile: "time-ramp-v1",
+      rampProfile: rampProfileForFrame(event.frameStyle),
     };
     await saveClip(clip, blob);
     await wait(600);
@@ -213,6 +214,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
                 src={lastSrc}
                 poster={latestClip.thumbnailDataUrl}
                 className={cn("h-full w-full object-cover", frameMediaClass(event.frameStyle))}
+                rampProfile={rampProfileForFrame(event.frameStyle)}
               />
               <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />
             </div>

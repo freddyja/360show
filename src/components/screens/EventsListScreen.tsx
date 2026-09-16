@@ -46,7 +46,7 @@ export function EventsListScreen() {
                     )}
                   </div>
                   <p className="text-slate-400">
-                    {event.name} · {event.date} · {event.frameStyle.replace("-", " ")}
+                    {event.name} · {event.date} · {event.frameStyle.replaceAll("-", " ")}
                   </p>
                 </div>
               </div>
