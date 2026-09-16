@@ -144,7 +144,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
             <span>
               <span className="block text-white">Vercel Blob</span>
               <span className="mt-1 block text-sm text-slate-400">
-                Default. Public CDN. Needs BLOB_READ_WRITE_TOKEN.
+                Default. Public or private Blob store. Needs BLOB_READ_WRITE_TOKEN.
               </span>
             </span>
           </button>
@@ -171,7 +171,9 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
         {destination === "blob" && (
           <p className="mt-4 text-sm text-slate-400">
             {config?.blobConfigured
-              ? "Blob token is set. Share will upload clips to Vercel Blob."
+              ? config.blobAccess
+                ? `Blob token is set (${config.blobAccess} store). Share uploads clips to Vercel Blob.`
+                : "Blob token is set. Share will upload clips to Vercel Blob."
               : "Blob is not configured on this deploy. Local preview still works; guest phones need a token or Drive."}
           </p>
         )}

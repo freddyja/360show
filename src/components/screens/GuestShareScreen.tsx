@@ -144,6 +144,7 @@ export function GuestShareScreen({
                 localBlob: exportBlob,
                 baked: operatorSlowMo,
                 slowMoEnabled: operatorSlowMo,
+                blobAccess: config.blobAccess,
                 existing,
               });
         if (cancelled) return;
@@ -154,7 +155,15 @@ export function GuestShareScreen({
           remoteVideoUrl: published.videoUrl,
           cloudShareAt: Date.now(),
         });
-        setPublishState(destination === "drive" ? "Live on Google Drive" : "Live for guest phones");
+        if (destination === "drive") {
+          setPublishState(
+            published.warning
+              ? "Live on Google Drive · guest link uses Drive (cloud metadata not saved)"
+              : "Live on Google Drive",
+          );
+        } else {
+          setPublishState("Live for guest phones");
+        }
       } catch (error) {
         publishOnce.current = null;
         if (!cancelled) {
@@ -439,7 +448,8 @@ function guestShareLink(
   event: { clientNames: string; frameStyle: string; accentColor: string } | undefined,
 ) {
   const base = clipShareUrl(clipId, config?.origin);
-  if (cloud?.destination === "drive" && cloud.driveFileId && !config?.blobConfigured) {
+  // Drive guest links always carry ?d= so phones work even if Blob meta.json was not written.
+  if (cloud?.destination === "drive" && cloud.driveFileId) {
     const q = new URLSearchParams();
     q.set("d", cloud.driveFileId);
     const names = event?.clientNames || cloud.clientNames;

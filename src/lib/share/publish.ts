@@ -3,7 +3,24 @@
 import { upload } from "@vercel/blob/client";
 import { uploadClipToDrive } from "@/lib/drive/uploadClient";
 import { DEMO_ASSET_PATH, type BoothEvent, type Clip } from "@/lib/types";
+import {
+  blobFileProxyPath,
+  formatBlobWriteError,
+  isBlobAccessMismatch,
+  isPrivateBlobUrl,
+  type BlobAccess,
+} from "@/lib/share/access";
 import { cloudShareFrom, shareVideoPath, type CloudShare, type ShareConfig } from "@/lib/share/types";
+
+type PersistMetaResponse = { ok?: boolean; stored?: string; warning?: string; error?: string };
+
+function playbackVideoUrl(clipId: string, videoUrl: string) {
+  return isPrivateBlobUrl(videoUrl) ? blobFileProxyPath(clipId) : videoUrl;
+}
+
+function driveShareComplete(payload: CloudShare) {
+  return payload.destination === "drive" && Boolean(payload.driveFileId || payload.webViewLink);
+}
 
 export async function fetchShareConfig(): Promise<ShareConfig> {
   const res = await fetch("/api/share/config", { cache: "no-store" });
@@ -11,6 +28,8 @@ export async function fetchShareConfig(): Promise<ShareConfig> {
     return {
       origin: window.location.origin,
       blobConfigured: false,
+      blobAccess: null,
+      blobAccessError: null,
       driveConfigured: false,
       driveConnected: false,
       driveEmail: null,
@@ -20,6 +39,8 @@ export async function fetchShareConfig(): Promise<ShareConfig> {
   return {
     origin: data.origin || window.location.origin,
     blobConfigured: Boolean(data.blobConfigured),
+    blobAccess: data.blobAccess === "private" || data.blobAccess === "public" ? data.blobAccess : null,
+    blobAccessError: data.blobAccessError ?? null,
     driveConfigured: Boolean(data.driveConfigured),
     driveConnected: Boolean(data.driveConnected),
     driveEmail: data.driveEmail ?? null,
@@ -58,17 +79,50 @@ export async function fileForUpload(clip: Clip, localBlob: Blob | null): Promise
   }
 }
 
-async function persistShareMeta(payload: CloudShare) {
+async function persistShareMeta(payload: CloudShare, options?: { allowDriveFallback?: boolean }): Promise<CloudShare> {
   const res = await fetch(`/api/share/${encodeURIComponent(payload.clipId)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const err = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(err?.error || "Could not save share metadata");
+  const body = (await res.json().catch(() => null)) as PersistMetaResponse | null;
+  if (res.ok) {
+    return {
+      ...payload,
+      metaStored: body?.stored === "blob",
+      warning: body?.warning,
+    };
   }
-  return payload;
+  const message = body?.error || "Could not save share metadata";
+  if (options?.allowDriveFallback && driveShareComplete(payload)) {
+    return {
+      ...payload,
+      metaStored: false,
+      warning: message,
+    };
+  }
+  throw new Error(message);
+}
+
+async function uploadVideoToBlob(pathname: string, file: File, preferred: BlobAccess | null) {
+  const order: BlobAccess[] =
+    preferred === "private" ? ["private", "public"] : ["public", "private"];
+  let lastError: unknown;
+  for (const access of order) {
+    try {
+      return await upload(pathname, file, {
+        access,
+        handleUploadUrl: "/api/share/upload",
+        multipart: true,
+      });
+    } catch (error) {
+      lastError = error;
+      if (!isBlobAccessMismatch(error)) {
+        throw new Error(formatBlobWriteError(error));
+      }
+    }
+  }
+  throw new Error(formatBlobWriteError(lastError));
 }
 
 export async function publishClipToCloud(options: {
@@ -77,6 +131,7 @@ export async function publishClipToCloud(options: {
   localBlob: Blob | null;
   baked?: boolean;
   slowMoEnabled?: boolean;
+  blobAccess?: BlobAccess | null;
   existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, existing } = options;
@@ -97,13 +152,12 @@ export async function publishClipToCloud(options: {
       throw new Error("Nothing to upload — capture a spin first.");
     }
     const pathname = shareVideoPath(clip.id, prepared.contentType);
-    const uploaded = await upload(pathname, prepared.file, {
-      access: "public",
-      handleUploadUrl: "/api/share/upload",
-      multipart: true,
-    });
-    videoUrl = uploaded.url;
+    const preferred = options.blobAccess ?? (await fetchShareConfig()).blobAccess ?? null;
+    const uploaded = await uploadVideoToBlob(pathname, prepared.file, preferred);
+    videoUrl = playbackVideoUrl(clip.id, uploaded.url);
     videoContentType = prepared.contentType;
+  } else {
+    videoUrl = playbackVideoUrl(clip.id, videoUrl);
   }
 
   return persistShareMeta(
@@ -142,6 +196,7 @@ export async function publishClipToDrive(options: {
         webViewLink: existing.webViewLink,
         slowMoEnabled,
       }),
+      { allowDriveFallback: true },
     );
   }
 
@@ -171,5 +226,6 @@ export async function publishClipToDrive(options: {
       webViewLink: uploaded.webViewLink,
       slowMoEnabled,
     }),
+    { allowDriveFallback: true },
   );
 }

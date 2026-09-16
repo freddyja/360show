@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { blobConfigured, readCloudShare, writeCloudShare } from "@/lib/share/server";
+import { formatBlobWriteError } from "@/lib/share/access";
 import { isClipId, isFrameStyleId, type CloudShare } from "@/lib/share/types";
 
 export const dynamic = "force-dynamic";
+
+function drivePayloadComplete(body: CloudShare) {
+  return body.destination === "drive" && Boolean(body.driveFileId || body.webViewLink);
+}
 
 export async function GET(_request: Request, { params }: { params: Promise<{ clipId: string }> }) {
   const { clipId } = await params;
@@ -10,8 +15,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cli
     return NextResponse.json({ error: "Invalid clip id" }, { status: 400 });
   }
   if (blobConfigured()) {
-    const share = await readCloudShare(clipId);
-    if (share) return NextResponse.json(share);
+    try {
+      const share = await readCloudShare(clipId);
+      if (share) return NextResponse.json(share);
+    } catch (error) {
+      const message = formatBlobWriteError(error);
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
   }
   return NextResponse.json({ error: "Share not found" }, { status: 404 });
 }
@@ -34,11 +44,24 @@ export async function PUT(request: Request, { params }: { params: Promise<{ clip
   }
 
   if (blobConfigured()) {
-    await writeCloudShare(body);
-    return NextResponse.json({ ok: true, clipId, stored: "blob" });
+    try {
+      await writeCloudShare(body);
+      return NextResponse.json({ ok: true, clipId, stored: "blob" });
+    } catch (error) {
+      const message = formatBlobWriteError(error);
+      if (drivePayloadComplete(body)) {
+        return NextResponse.json({
+          ok: true,
+          clipId,
+          stored: "drive",
+          warning: message,
+        });
+      }
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
   }
 
-  if (body.destination === "drive") {
+  if (drivePayloadComplete(body)) {
     return NextResponse.json({ ok: true, clipId, stored: "drive" });
   }
 

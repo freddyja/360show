@@ -1,5 +1,6 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
+import { formatBlobWriteError } from "@/lib/share/access";
 import { blobConfigured } from "@/lib/share/server";
 import { isClipId } from "@/lib/share/types";
 
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json(jsonResponse);
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Upload failed" },
+      { error: formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed") },
       { status: 400 },
     );
   }

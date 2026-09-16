@@ -24,11 +24,18 @@ export interface CloudShare {
   destination?: "blob" | "drive";
   driveFileId?: string | null;
   webViewLink?: string | null;
+  /** Client-only: Blob meta.json was written. False when Drive succeeded without Blob. */
+  metaStored?: boolean;
+  /** Client-only: non-fatal Blob warning after a successful Drive upload. */
+  warning?: string;
 }
 
 export interface ShareConfig {
   origin: string;
   blobConfigured: boolean;
+  /** Detected or configured Blob store access. Null when Blob is unset or detection failed. */
+  blobAccess?: "public" | "private" | null;
+  blobAccessError?: string | null;
   driveConfigured: boolean;
   driveConnected: boolean;
   driveEmail: string | null;

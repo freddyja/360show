@@ -32,7 +32,8 @@ Copy `.env.example` to `.env.local` (never commit tokens):
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `BLOB_READ_WRITE_TOKEN` | For Blob sharing | Vercel Blob read-write token. Create a Blob store in the Vercel project **Storage** tab (public access). Include the **Development** environment if you want local uploads. |
+| `BLOB_READ_WRITE_TOKEN` | For Blob sharing | Vercel Blob read-write token. Create a Blob store in the Vercel project **Storage** tab. Include the **Development** environment if you want local uploads. |
+| `BLOB_ACCESS` | Optional | `public` or `private`. Must match the store. New Vercel Blob stores are often **private**; `put(..., { access: "public" })` against a private store fails. If unset, the app detects the mode. |
 | `NEXT_PUBLIC_APP_URL` | Recommended in production | Public site origin used in QR, copy-link, and SMS, e.g. `https://your-app.vercel.app` (no trailing slash). |
 | `GOOGLE_CLIENT_ID` | For Drive sharing | OAuth 2.0 Web client ID from Google Cloud Console. |
 | `GOOGLE_CLIENT_SECRET` | For Drive sharing | OAuth 2.0 Web client secret. |
@@ -47,7 +48,7 @@ On Vercel, if `NEXT_PUBLIC_APP_URL` is unset, share links fall back to `https://
 1. Push `main` (or this branch `cursor/snap360-operator-mvp-8fb6`) to GitHub.
 2. In [Vercel](https://vercel.com) → **Add New Project** → import `freddyja/360show`.
 3. Framework preset: Next.js. Build command `npm run build`, output as default.
-4. **Storage** → Create Blob store → connect it to this project (Production + Preview; Development optional). This injects `BLOB_READ_WRITE_TOKEN`.
+4. **Storage** → Create Blob store → connect it to this project (Production + Preview; Development optional). This injects `BLOB_READ_WRITE_TOKEN`. If the store is **private** (the current Vercel default), set `BLOB_ACCESS=private` or leave it unset so the app can detect it. Public stores work with `BLOB_ACCESS=public` (or detection).
 5. Set `NEXT_PUBLIC_APP_URL` to the production domain (Project → Settings → Environment Variables).
 6. Deploy. Open the booth on the tablet **at that HTTPS URL**, capture a spin, tap **Share** — wait until the status reads “Live for guest phones” (Blob) or “Live on Google Drive”, then guests scan the QR.
 
@@ -57,11 +58,18 @@ Without storage credentials, Share shows **Local-only share** (Blob) or asks you
 
 Opening operator Share **bakes the time-ramp**, then uploads with `@vercel/blob` **client upload** (files can exceed the 4.5 MB Function body limit) to `shares/{clipId}/export.*`, then writes `shares/{clipId}/meta.json`. `/s/[clipId]` loads IndexedDB when present, otherwise `GET /api/share/[clipId]`.
 
+Writes use the store’s access mode (`public` or `private`):
+
+- Optional env `BLOB_ACCESS=public|private`. If unset, the server infers from existing blobs, then probes public then private.
+- A **private** store rejects `access: "public"`. That used to surface as **Could not save share metadata** on Share.
+- Private objects are not guest-fetchable by CDN URL. The app rewrites playback to `/api/share/[clipId]/file`, which streams with the server token.
+- If a Blob write still fails, the API returns the underlying Blob error string in JSON so the operator UI can show it.
+
 The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch the cloud clip get the baked file.
 
 ### Google Drive
 
-Drive is an alternative destination, not a replacement for Blob. Keep Blob enabled if you want branded `/s/[clipId]` metadata in addition to Drive-hosted video.
+Drive is an alternative destination, not a replacement for Blob. Keep Blob enabled if you want branded `/s/[clipId]` metadata in addition to Drive-hosted video. **Drive Share does not require Blob metadata.** If Drive upload succeeds, Share is treated as success even when `meta.json` cannot be written; the QR falls back to `/s/[clipId]?d={fileId}&…`.
 
 #### 1. Create Google Cloud OAuth credentials
 
@@ -87,9 +95,9 @@ If the production domain is not `*.vercel.app`, set `GOOGLE_REDIRECT_URI` to `ht
 2. **Settings → Cloud destination → Google Drive**.
 3. Optional: set the Drive folder name (default `360show`). Uploads use `360show / {event name} /`.
 4. Tap **Connect Google Drive**, sign in, allow access. The refresh token is stored in an **httpOnly cookie on this tablet** (not in IndexedDB).
-5. Capture a spin → **Share**. Status should read **Live on Google Drive**.
+5. Capture a spin → **Share**. Status should read **Live on Google Drive**. That creates `360show / {event name} /` in the connected Google account (Drive → My Drive). Files this app creates are visible there; `drive.file` scope cannot list your other folders.
 
-If auth fails, Share shows a clear error. Local preview and Download still work.
+If auth fails, Share shows a clear error. Local preview and Download still work. If Blob metadata cannot be saved, Share still succeeds after a Drive upload and warns that the guest link uses Drive query params.
 
 #### 3. Guest links
 
@@ -97,8 +105,8 @@ Each upload is shared as **anyone with the link can view**.
 
 | Setup | QR / copy / SMS | Guest player |
 | --- | --- | --- |
-| Drive + Blob token | `/s/[clipId]` on your domain | Branded page; video iframe from Drive |
-| Drive only (no Blob) | `/s/[clipId]?d={fileId}&…` on your domain | Branded page using query params + Drive iframe |
+| Drive + Blob token | `/s/[clipId]?d={fileId}&…` (and `/s/[clipId]` when meta.json exists) | Branded page; video iframe from Drive |
+| Drive only (no Blob), or Blob meta write failed | `/s/[clipId]?d={fileId}&…` on your domain | Branded page using query params + Drive iframe |
 | Blob destination | `/s/[clipId]` | Branded page; video from Blob CDN |
 
 Guests can also open the Drive `webViewLink` directly. Download on a guest phone opens Drive’s download URL.
@@ -110,7 +118,7 @@ Guests can also open the Drive `webViewLink` directly. Download on a guest phone
 | Where the file lives | Vercel Blob CDN | Operator’s Google Drive |
 | Operator connect step | Token in Vercel env | OAuth Connect in Settings |
 | Guest playback | `<video>` from CDN | Drive preview iframe (`anyone with link`) |
-| Metadata for `/s/[clipId]` | `shares/{id}/meta.json` | Blob meta if Blob is also configured; otherwise query params on the QR |
+| Metadata for `/s/[clipId]` | `shares/{id}/meta.json` (private stores served via `/api/share/{id}/file`) | Blob meta if Blob write succeeds; otherwise query params on the QR |
 | Offline booth | Local-only | Local-only |
 
 The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch the cloud clip get the baked file, so slow-mo plays in Photos / Files without this app’s `playbackRate` logic.
