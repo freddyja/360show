@@ -105,7 +105,7 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
           <input
             value={form.clientNames}
             onChange={(e) => update("clientNames", e.target.value)}
-            placeholder="Maya & Jordan"
+            placeholder="e.g. Maya & Jordan"
             className={inputClass}
           />
         </Field>

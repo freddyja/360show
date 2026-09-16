@@ -82,13 +82,6 @@ export function createDemoScene() {
       ctx.arc(x, y, p.size, 0, Math.PI * 2);
       ctx.fill();
     }
-
-    ctx.fillStyle = "rgba(8, 14, 28, 0.72)";
-    roundRect(ctx, 36, H - 78, 280, 42, 16);
-    ctx.fill();
-    ctx.fillStyle = "rgba(186, 214, 255, 0.95)";
-    ctx.font = "600 18px ui-sans-serif, system-ui, sans-serif";
-    ctx.fillText("360°  DEMO SPIN", 58, H - 51);
   };
 
   const loop = (now: number) => {
@@ -138,21 +131,4 @@ function drawFigure(
   ctx.lineTo(x - 50 * scale, y + 88 * scale);
   ctx.closePath();
   ctx.fill();
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }

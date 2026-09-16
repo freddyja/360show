@@ -14,8 +14,8 @@ export function EventsListScreen() {
   if (!ready) return <BootScreen />;
 
   return (
-    <div className="min-h-dvh bg-[#05080f] p-3 sm:p-5">
-      <div className="mx-auto max-w-5xl rounded-[28px] border border-white/10 bg-[#0a101c] p-6 sm:p-10">
+    <div className="min-h-dvh bg-[#05080f] p-3 sm:p-4 md:p-5">
+      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-[1400px] flex-col rounded-[28px] border border-white/10 bg-[#0a101c] p-6 sm:p-10 md:min-h-[calc(100dvh-2.5rem)]">
         <p className="text-sm tracking-[0.28em] text-slate-400 uppercase">360show</p>
         <h1 className="mt-2 text-4xl font-semibold text-white">Tonight’s events</h1>
         <p className="mt-2 max-w-2xl text-slate-400">

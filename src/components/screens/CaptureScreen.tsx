@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Eye, RefreshCw, Share2 } from "lucide-react";
+import { Camera, Eye, Share2 } from "lucide-react";
+import { SpinIcon } from "@/components/SpinIcon";
 import { StatusBar } from "@/components/StatusBar";
-import { FrameOverlay } from "@/components/FrameOverlay";
+import { FrameOverlay, frameMediaClass } from "@/components/FrameOverlay";
 import { RampPlayer } from "@/components/RampPlayer";
 import { BootScreen } from "@/components/BootScreen";
 import { OperatorShell } from "@/components/OperatorShell";
@@ -120,6 +121,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
 
   return (
     <OperatorShell eventId={eventId}>
+      <div className="flex min-h-0 flex-1 flex-col">
       <StatusBar camera={camera} settings={settings} offline={offline} />
 
       <div className="mt-6">
@@ -129,7 +131,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         <div className="mt-3 h-1 w-24 rounded-full" style={{ backgroundColor: event.accentColor }} />
       </div>
 
-      <div className="relative mt-6 min-h-[220px] flex-1">
+      <div className="relative mt-6 flex min-h-[240px] flex-1 flex-col">
         <video
           ref={videoRef}
           className={cn(
@@ -145,16 +147,15 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           onClick={() => void runSpin()}
           disabled={busy}
           className={cn(
-            "group relative flex h-full min-h-[220px] w-full items-center justify-center overflow-hidden rounded-[28px] border border-white/10 px-6 text-left disabled:cursor-wait",
+            "group relative flex min-h-[240px] w-full flex-1 items-center justify-center overflow-hidden rounded-[28px] border border-white/10 px-6 text-left disabled:cursor-wait",
             livePreview ? "bg-black/45" : "bg-[#0c1528]",
           )}
         >
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_90%_50%,rgba(59,130,246,0.35),transparent_55%)]" />
           <div className="relative flex w-full max-w-3xl items-center gap-6 sm:gap-10">
             <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-blue-400/40 bg-blue-500/10 sm:h-24 sm:w-24">
-              <RefreshCw
+              <SpinIcon
                 className={cn("h-10 w-10 text-blue-400 sm:h-12 sm:w-12", busy && "animate-spin")}
-                strokeWidth={2}
               />
             </span>
             <span>
@@ -211,7 +212,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
               <RampPlayer
                 src={lastSrc}
                 poster={latestClip.thumbnailDataUrl}
-                className="h-full w-full object-cover"
+                className={cn("h-full w-full object-cover", frameMediaClass(event.frameStyle))}
               />
               <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />
             </div>
@@ -224,6 +225,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           </div>
         </div>
       )}
+      </div>
     </OperatorShell>
   );
 }
@@ -246,12 +248,12 @@ function ActionCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-[92px] items-center gap-4 rounded-2xl border border-white/10 bg-[#0c1424] px-5 text-left transition hover:border-blue-400/30 disabled:opacity-40"
+      className="flex min-h-[96px] items-center gap-4 rounded-2xl border border-white/10 bg-[#0c1424] px-5 text-left transition hover:border-blue-400/30 disabled:opacity-40"
     >
-      <Icon className="h-8 w-8 text-blue-400" strokeWidth={1.7} />
+      <Icon className="h-9 w-9 text-blue-400" strokeWidth={1.7} />
       <span>
         <span className="block text-xl font-medium text-white">{title}</span>
-        <span className="block text-sm text-slate-400">{subtitle}</span>
+        <span className="block text-[15px] text-slate-400">{subtitle}</span>
       </span>
     </button>
   );

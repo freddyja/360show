@@ -1,6 +1,14 @@
 "use client";
 
 import type { FrameStyleId } from "@/lib/types";
+import { cn } from "@/lib/cn";
+
+export function frameMediaClass(style: FrameStyleId) {
+  if (style === "gold-oval") {
+    return "[clip-path:ellipse(44%_38%_at_50%_50%)]";
+  }
+  return "";
+}
 
 export function FrameOverlay({
   style,
@@ -13,47 +21,44 @@ export function FrameOverlay({
 }) {
   if (style === "gold-oval") {
     return (
-      <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 620" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#f6e27a" />
-            <stop offset="50%" stopColor="#d4af37" />
-            <stop offset="100%" stopColor="#f3d67a" />
-          </linearGradient>
-        </defs>
-        <ellipse cx="500" cy="310" rx="430" ry="250" fill="none" stroke="url(#gold)" strokeWidth="18" />
-        <ellipse cx="500" cy="310" rx="410" ry="232" fill="none" stroke="#1a1408" strokeWidth="6" />
-        <path d="M70 90 C 110 40, 170 55, 180 95" fill="none" stroke="url(#gold)" strokeWidth="8" />
-        <path d="M930 90 C 890 40, 830 55, 820 95" fill="none" stroke="url(#gold)" strokeWidth="8" />
-        <path d="M70 530 C 110 580, 170 565, 180 525" fill="none" stroke="url(#gold)" strokeWidth="8" />
-        <path d="M930 530 C 890 580, 830 565, 820 525" fill="none" stroke="url(#gold)" strokeWidth="8" />
-      </svg>
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/2 top-1/2 h-[76%] w-[88%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-[10px] border-[#d4af37] shadow-[0_0_0_4px_#1a1408,inset_0_0_0_2px_rgba(248,231,160,0.7)]" />
+        <span className="absolute left-[6%] top-[12%] h-10 w-10 rounded-tl-[18px] border-l-[6px] border-t-[6px] border-[#f0d47a]" />
+        <span className="absolute right-[6%] top-[12%] h-10 w-10 rounded-tr-[18px] border-r-[6px] border-t-[6px] border-[#f0d47a]" />
+        <span className="absolute bottom-[12%] left-[6%] h-10 w-10 rounded-bl-[18px] border-b-[6px] border-l-[6px] border-[#f0d47a]" />
+        <span className="absolute right-[6%] bottom-[12%] h-10 w-10 rounded-br-[18px] border-b-[6px] border-r-[6px] border-[#f0d47a]" />
+      </div>
     );
   }
 
   if (style === "neon-ring") {
     return (
-      <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 620" preserveAspectRatio="none">
-        <ellipse cx="500" cy="430" rx="320" ry="90" fill="none" stroke={accentColor} strokeWidth="8" opacity="0.9" />
-        <ellipse cx="500" cy="430" rx="300" ry="76" fill="none" stroke={accentColor} strokeWidth="3" opacity="0.4" />
-        <circle cx="500" cy="310" r="4" fill={accentColor} />
+      <svg
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        viewBox="0 0 1600 900"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <ellipse cx="800" cy="640" rx="520" ry="140" fill="none" stroke={accentColor} strokeWidth="10" />
+        <ellipse cx="800" cy="640" rx="490" ry="118" fill="none" stroke={accentColor} strokeWidth="3" opacity="0.45" />
       </svg>
     );
   }
 
   if (style === "midnight-arch") {
     return (
-      <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 620" preserveAspectRatio="none">
+      <svg
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        viewBox="0 0 1600 900"
+        preserveAspectRatio="xMidYMid meet"
+      >
         <path
-          d="M80 560 V 240 Q 500 20 920 240 V 560"
+          d="M140 820 V 360 Q 800 40 1460 360 V 820"
           fill="none"
           stroke="rgba(255,255,255,0.55)"
-          strokeWidth="10"
+          strokeWidth="12"
         />
-        <circle cx="90" cy="90" r="4" fill={accentColor} />
-        <circle cx="910" cy="90" r="4" fill={accentColor} />
-        <circle cx="140" cy="60" r="2" fill="white" />
-        <circle cx="860" cy="70" r="2" fill="white" />
+        <circle cx="180" cy="120" r="5" fill={accentColor} />
+        <circle cx="1420" cy="120" r="5" fill={accentColor} />
       </svg>
     );
   }
@@ -68,5 +73,5 @@ export function FrameOverlay({
     );
   }
 
-  return <div className="pointer-events-none absolute inset-3 rounded-2xl border border-white/40" />;
+  return <div className={cn("pointer-events-none absolute inset-3 rounded-2xl border border-white/40")} />;
 }

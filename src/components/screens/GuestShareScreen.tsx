@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, Heart, Maximize2, Play, RefreshCw, Sparkles } from "lucide-react";
 import { capturePath } from "@/lib/shareUrl";
-import { FrameOverlay } from "@/components/FrameOverlay";
+import { FrameOverlay, frameMediaClass } from "@/components/FrameOverlay";
 import { QRCard } from "@/components/QRCard";
 import { RampPlayer } from "@/components/RampPlayer";
 import { ShareActions } from "@/components/ShareActions";
@@ -11,6 +11,7 @@ import { BootScreen } from "@/components/BootScreen";
 import { useBooth, useEvent } from "@/lib/store";
 import { clipShareUrl } from "@/lib/shareUrl";
 import { useClipSrc } from "@/lib/useClipSrc";
+import { cn } from "@/lib/cn";
 import { useMemo, useState } from "react";
 
 export function GuestShareScreen({
@@ -98,11 +99,11 @@ export function GuestShareScreen({
 
       <div className="mt-5 grid flex-1 gap-4 lg:grid-cols-[1.35fr_0.9fr]">
         <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[#0c1424]">
-          <div className="relative aspect-video h-full min-h-[240px]">
+          <div className="relative aspect-video">
             <RampPlayer
               src={src}
               poster={clip.thumbnailDataUrl}
-              className="h-full w-full object-cover"
+              className={cn("h-full w-full object-cover", frameMediaClass(event.frameStyle))}
               onPlayingChange={setPlaying}
             />
             <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />

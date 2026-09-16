@@ -1,6 +1,6 @@
 "use client";
 
-import { Battery, CheckCircle2, Plane } from "lucide-react";
+import { Battery, CheckCircle2, Plane, VideoOff } from "lucide-react";
 import type { CameraStatus } from "@/lib/hardware";
 import type { AppSettings } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -24,7 +24,7 @@ export function StatusBar({
             cameraOk ? "text-emerald-400" : "text-amber-300",
           )}
         >
-          <CheckCircle2 className="h-4 w-4" />
+          {cameraOk ? <CheckCircle2 className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
           {cameraOk ? "Camera OK" : camera === "denied" ? "Camera blocked" : "Demo camera"}
         </span>
         <span className="inline-flex items-center gap-1.5 text-slate-300">

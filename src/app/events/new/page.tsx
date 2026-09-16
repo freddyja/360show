@@ -3,5 +3,5 @@
 import { EventSetupScreen } from "@/components/screens/EventSetupScreen";
 
 export default function NewEventPage() {
-  return <EventSetupScreen />;
+  return <EventSetupScreen key="new" />;
 }
