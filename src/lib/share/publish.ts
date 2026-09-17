@@ -6,6 +6,7 @@ import { DEMO_ASSET_PATH, type BoothEvent, type Clip } from "@/lib/types";
 import {
   BLOB_CLOUD_UNAVAILABLE_MESSAGE,
   BLOB_STORE_UNAVAILABLE_MESSAGE,
+  REMOTE_UNAVAILABLE_MESSAGE,
   blobFileProxyPath,
   formatBlobWriteError,
   isBlobAccessMismatch,
@@ -63,7 +64,7 @@ function emptyShareConfig(): ShareConfig {
     blobAccessError: null,
     remoteAvailable: false,
     remoteStore: "none",
-    remoteUnavailableReason: null,
+    remoteUnavailableReason: REMOTE_UNAVAILABLE_MESSAGE,
     remoteMusicAvailable: false,
     driveConfigured: false,
     driveConnected: false,

@@ -27,6 +27,8 @@ import {
   type RemoteEventSnapshot,
   type RemotePublicView,
 } from "@/lib/remote/types";
+import { fetchShareConfig } from "@/lib/share/publish";
+import { REMOTE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import { CAPTURE_DURATION_SECS } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
@@ -43,6 +45,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   const [musicUploading, setMusicUploading] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [namesDraft, setNamesDraft] = useState("");
+  const [remotePaused, setRemotePaused] = useState<string | null>(null);
   const musicAbort = useRef<AbortController | null>(null);
   const musicUploadingRef = useRef(false);
 
@@ -54,28 +57,46 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   }, [eventId, urlToken]);
 
   useEffect(() => {
-    if (!token) return;
+    let cancelled = false;
+    void fetchShareConfig().then((config) => {
+      if (cancelled) return;
+      if (config.remoteAvailable === false) {
+        setRemotePaused(config.remoteUnavailableReason || REMOTE_UNAVAILABLE_MESSAGE);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (remotePaused || !token) return;
+    const pairToken = token;
     let cancelled = false;
     async function poll() {
       try {
-        const data = await remoteStatus(eventId, token);
+        const data = await remoteStatus(eventId, pairToken);
         if (cancelled) return;
         setView(data.view);
         setPairCode(data.view.pairCode);
         if (!musicUploadingRef.current) setError(null);
         writeStoredPair(eventId, {
-          token,
+          token: pairToken,
           pairCode: data.view.pairCode,
-          remoteUrl: `${window.location.origin}/e/${eventId}/remote?k=${encodeURIComponent(token)}`,
+          remoteUrl: `${window.location.origin}/e/${eventId}/remote?k=${encodeURIComponent(pairToken)}`,
         });
         if (!urlToken && typeof window !== "undefined") {
-          const next = `${window.location.pathname}?k=${encodeURIComponent(token)}`;
+          const next = `${window.location.pathname}?k=${encodeURIComponent(pairToken)}`;
           window.history.replaceState(null, "", next);
         }
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not reach the booth.");
+        const message = err instanceof Error ? err.message : "Could not reach the booth.";
+        setError(message);
         setView(null);
+        if (message === REMOTE_UNAVAILABLE_MESSAGE) {
+          setRemotePaused(message);
+        }
       }
     }
     void poll();
@@ -84,7 +105,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [eventId, token, urlToken]);
+  }, [eventId, token, urlToken, remotePaused]);
 
   useEffect(() => {
     return () => {
@@ -108,7 +129,9 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       setPairCode(data.pairCode);
       setView(data.view);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not pair.");
+      const message = err instanceof Error ? err.message : "Could not pair.";
+      setError(message);
+      if (message === REMOTE_UNAVAILABLE_MESSAGE) setRemotePaused(message);
     }
   }
 
@@ -215,6 +238,22 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     }
     return view.boothStatus || boothStatusForPhase(view.boothPhase);
   }, [view, token]);
+
+  if (remotePaused && !view) {
+    return (
+      <div className="booth-page min-h-dvh p-4 sm:p-8">
+        <div className="booth-frame mx-auto max-w-xl rounded-[28px] p-6 sm:p-10">
+          <p className="text-xs uppercase tracking-[0.25em] text-cyan-200">Remote operator</p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">Laptop remote is paused</h1>
+          <p className="mt-3 text-slate-300">{remotePaused}</p>
+          <p className="mt-3 text-sm text-slate-400">
+            Capture, look, frames, and custom songs stay on the booth phone. Guest cloud share via
+            Blob is paused too. This page will work again when Vercel Blob is back.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!token) {
     return (

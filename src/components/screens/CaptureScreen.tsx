@@ -29,6 +29,7 @@ import { COUNTDOWN_SECONDS, DEMO_ASSET_PATH, captureDurationMs, resolveCaptureDu
 import type { Clip } from "@/lib/types";
 import { useClipSrc } from "@/lib/useClipSrc";
 import { fetchShareConfig } from "@/lib/share/publish";
+import { REMOTE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import {
   clearStoredPair,
   disableRemote,
@@ -77,7 +78,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const [remotePair, setRemotePair] = useState<StoredRemotePair | null>(null);
   const [remoteView, setRemoteView] = useState<RemotePublicView | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
-  const [remoteAvailable, setRemoteAvailable] = useState(true);
+  const [remoteAvailable, setRemoteAvailable] = useState(false);
   const [remoteUnavailableReason, setRemoteUnavailableReason] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const motor = useMemo(() => createStubMotor(), []);
@@ -139,10 +140,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
 
   useEffect(() => {
     const stored = readStoredPair(eventId);
-    if (stored?.token) {
-      setRemotePair(stored);
-      setRemoteEnabled(true);
-    }
+    if (stored?.token) setRemotePair(stored);
   }, [eventId]);
 
   const bakeExportInBackground = useCallback(
@@ -281,12 +279,21 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         driveConfigured: Boolean(config.driveConfigured),
         driveConnected,
       };
-      const available = config.remoteAvailable !== false;
+      const available = config.remoteAvailable === true;
+      const reason = available ? null : config.remoteUnavailableReason || REMOTE_UNAVAILABLE_MESSAGE;
       setRemoteAvailable(available);
-      setRemoteUnavailableReason(config.remoteUnavailableReason ?? null);
-      return { available, reason: config.remoteUnavailableReason ?? null };
+      setRemoteUnavailableReason(reason);
+      if (!available) {
+        setRemoteEnabled(false);
+        setRemoteView(null);
+      }
+      return { available, reason };
     } catch {
-      return { available: true, reason: null as string | null };
+      setRemoteAvailable(false);
+      setRemoteUnavailableReason(REMOTE_UNAVAILABLE_MESSAGE);
+      setRemoteEnabled(false);
+      setRemoteView(null);
+      return { available: false, reason: REMOTE_UNAVAILABLE_MESSAGE };
     }
   }, []);
 
@@ -594,16 +601,18 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     };
   }, [applyRemoteCommand, boothSnapshot, event, eventId, remoteEnabled, remotePair]);
 
+  useEffect(() => {
+    if (!remoteAvailable) return;
+    if (remotePair?.token) setRemoteEnabled(true);
+  }, [remoteAvailable, remotePair]);
+
   async function onEnableRemote() {
     if (!event) return;
     setRemoteError(null);
     try {
       const next = await refreshCloudFlags();
       if (!next.available) {
-        setRemoteError(
-          next.reason ||
-            "Laptop remote is paused while cloud storage is unavailable. Use this phone for capture, look, and songs.",
-        );
+        setRemoteError(next.reason || REMOTE_UNAVAILABLE_MESSAGE);
         setRemoteEnabled(false);
         return;
       }

@@ -1,10 +1,13 @@
 export type BlobAccess = "public" | "private";
 
 export const BLOB_CLOUD_UNAVAILABLE_MESSAGE =
-  "Cloud share via Vercel Blob is temporarily unavailable. Download still works on this tablet.";
+  "Cloud share via Vercel Blob is paused until the store is available again. Download still works on this tablet.";
 
 export const BLOB_STORE_UNAVAILABLE_MESSAGE =
   "Vercel Blob is temporarily unavailable (store suspended or over Hobby limits).";
+
+export const REMOTE_UNAVAILABLE_MESSAGE =
+  "Laptop remote is paused while Vercel Blob is unavailable. Use this phone for capture, look, and songs.";
 
 export function isPrivateBlobUrl(url: string | null | undefined) {
   return Boolean(url && url.includes(".private.blob.vercel-storage.com"));

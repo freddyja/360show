@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
-export function QRCard({ url, accentColor }: { url: string; accentColor: string }) {
+export function QRCard({
+  url,
+  accentColor,
+  note,
+}: {
+  url: string;
+  accentColor: string;
+  note?: string | null;
+}) {
   const [value, setValue] = useState(url);
 
   useEffect(() => {
@@ -19,6 +27,7 @@ export function QRCard({ url, accentColor }: { url: string; accentColor: string 
       </div>
       <div className="mt-5 h-1.5 w-1.5 rounded-full bg-blue-500" />
       <p className="mt-4 text-sm text-slate-400">Or choose a quick option below</p>
+      {note ? <p className="mt-3 max-w-sm text-sm text-amber-200/90">{note}</p> : null}
     </div>
   );
 }

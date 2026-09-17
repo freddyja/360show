@@ -1,3 +1,4 @@
+import { BLOB_CLOUD_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import type { CloudShare } from "@/lib/share/types";
 import { isClipId, isFrameStyleId, shareMetaPath, shareVideoPath } from "@/lib/share/types";
 import {
@@ -40,7 +41,7 @@ export async function readCloudShare(clipId: string): Promise<CloudShare | null>
 
 export async function writeCloudShare(share: CloudShare) {
   if (!blobConfigured()) {
-    throw new Error("Blob storage is not configured.");
+    throw new Error(BLOB_CLOUD_UNAVAILABLE_MESSAGE);
   }
   const payload: CloudShare = isPrivateBlobUrl(share.videoUrl)
     ? { ...share, videoUrl: blobFileProxyPath(share.clipId) }

@@ -2,7 +2,8 @@ import { timingSafeEqual } from "crypto";
 import { del } from "@vercel/blob";
 import { getWithStoreAccess, putWithStoreAccess } from "@/lib/share/blobAccess";
 import { blobConfigured } from "@/lib/share/server";
-import { blobUsable, noteBlobFailure } from "@/lib/share/blobStatus";
+import { blobCircuitOpen, blobUsable, noteBlobFailure } from "@/lib/share/blobStatus";
+import { REMOTE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import { createId } from "@/lib/ids";
 import {
   cacheCommandKey,
@@ -59,11 +60,21 @@ const gMode = globalThis as unknown as { __360showRemoteMode?: { at: number; mod
 
 export async function resolveRemoteStoreMode(): Promise<RemoteStoreMode> {
   const cached = gMode.__360showRemoteMode;
-  if (cached && Date.now() - cached.at < MODE_TTL_MS) return cached.mode;
+  if (cached && Date.now() - cached.at < MODE_TTL_MS) {
+    if ((cached.mode === "blob" || cached.mode === "cache") && blobCircuitOpen()) {
+      // Store just proved unusable — do not keep serving a pairing channel.
+    } else {
+      return cached.mode;
+    }
+  }
   let mode: RemoteStoreMode = "none";
-  if (await runtimeCacheReady()) mode = "cache";
-  else if (await blobUsable()) mode = "blob";
-  else if (process.env.NODE_ENV !== "production") mode = "memory";
+  // Production remote stays off unless Blob is actually usable. Runtime Cache is
+  // only the JSON backend *after* that (avoids Blob list/put heartbeats).
+  if (await blobUsable()) {
+    mode = (await runtimeCacheReady()) ? "cache" : "blob";
+  } else if (process.env.NODE_ENV !== "production") {
+    mode = "memory";
+  }
   gMode.__360showRemoteMode = { at: Date.now(), mode };
   return mode;
 }
@@ -85,7 +96,7 @@ export async function remoteMusicAvailable() {
 }
 
 export function storeUnavailableMessage() {
-  return "Laptop remote is paused while no pairing channel is available. Use the booth phone for capture, look, and songs.";
+  return REMOTE_UNAVAILABLE_MESSAGE;
 }
 
 export function musicUnavailableMessage() {

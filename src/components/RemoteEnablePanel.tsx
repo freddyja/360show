@@ -13,7 +13,7 @@ export function RemoteEnablePanel({
   view,
   error,
   busy,
-  available = true,
+  available = false,
   unavailableReason = null,
   onEnable,
   onDisable,
@@ -69,7 +69,7 @@ export function RemoteEnablePanel({
       {!available && !enabled && (
         <p className="mt-3 text-sm text-amber-200">
           {unavailableReason ||
-            "Laptop remote is paused while cloud storage is unavailable. Use this phone for capture, look, and songs."}
+            "Laptop remote is paused while Vercel Blob is unavailable. Use this phone for capture, look, and songs."}
         </p>
       )}
       {error && <p className="mt-3 text-sm text-red-300">{error}</p>}

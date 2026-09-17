@@ -173,11 +173,7 @@ export function GuestShareScreen({
           return;
         }
         if (destination === "blob" && !config.blobConfigured) {
-          setPublishState(
-            config.blobTokenPresent || config.blobUnavailableReason
-              ? BLOB_CLOUD_UNAVAILABLE_MESSAGE
-              : "Local-only share — add BLOB_READ_WRITE_TOKEN to upload for guest phones",
-          );
+          setPublishState(BLOB_CLOUD_UNAVAILABLE_MESSAGE);
           return;
         }
         if (destination === "drive" && !config.driveConfigured) {
@@ -303,9 +299,7 @@ export function GuestShareScreen({
             {destination === "drive"
               ? "This clip is not in cloud storage yet. On the booth, connect Google Drive in Settings, then open Share."
               : config && !config.blobConfigured
-                ? config.blobTokenPresent || config.blobUnavailableReason
-                  ? "Vercel Blob is temporarily unavailable, so this guest link has no cloud clip yet. Download still works on the booth tablet."
-                  : "This clip lives on the booth tablet. Deploy with Vercel Blob (BLOB_READ_WRITE_TOKEN) or connect Google Drive in Settings so guest phones can load it."
+                ? "Vercel Blob is paused, so this guest link has no cloud clip yet. Download still works on the booth tablet."
                 : "This share link has no cloud clip yet. Open Share on the booth after connecting storage, or scan again after upload."}
           </p>
         </div>
@@ -526,7 +520,15 @@ export function GuestShareScreen({
               </p>
             )}
         </div>
-        <QRCard url={shareUrl} accentColor={event.accentColor} />
+        <QRCard
+          url={shareUrl}
+          accentColor={event.accentColor}
+          note={
+            !publicMode && destination === "blob" && config && !config.blobConfigured
+              ? "Guest phones cannot open this QR until cloud share is back. Download on this tablet still works."
+              : null
+          }
+        />
       </div>
 
       <div className="mt-4">
