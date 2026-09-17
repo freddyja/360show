@@ -53,6 +53,10 @@ export interface RemoteEventSnapshot {
   driveConnected: boolean;
   driveConfigured: boolean;
   blobConfigured: boolean;
+  r2Configured?: boolean;
+  r2Usable?: boolean;
+  cloudStore?: "blob" | "r2" | "none";
+  cloudShareReady?: boolean;
   remoteMusicAvailable?: boolean;
 }
 

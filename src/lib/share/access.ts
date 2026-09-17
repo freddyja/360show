@@ -1,10 +1,16 @@
+import { CLOUD_SHARE_UNAVAILABLE_MESSAGE } from "@/lib/r2/env";
+
 export type BlobAccess = "public" | "private";
 
-export const BLOB_CLOUD_UNAVAILABLE_MESSAGE =
-  "Cloud share via Vercel Blob is temporarily unavailable. Download still works on this tablet.";
+export { CLOUD_SHARE_UNAVAILABLE_MESSAGE };
+
+export const BLOB_CLOUD_UNAVAILABLE_MESSAGE = CLOUD_SHARE_UNAVAILABLE_MESSAGE;
 
 export const BLOB_STORE_UNAVAILABLE_MESSAGE =
   "Vercel Blob is temporarily unavailable (store suspended or over Hobby limits).";
+
+export const R2_SETUP_HINT =
+  "Add Cloudflare R2 on Vercel (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME) for Production and Preview. You do not need another Vercel Blob store.";
 
 export function isPrivateBlobUrl(url: string | null | undefined) {
   return Boolean(url && url.includes(".private.blob.vercel-storage.com"));

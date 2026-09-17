@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isFrameStyleId } from "@/lib/share/types";
 import {
   enqueueCommand,
+  musicUnavailableMessage,
   newCommandId,
   publicViewNow,
   readCommands,
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
   if (command.type === "setCustomMusic") {
     if (!(await remoteMusicAvailable())) {
       return NextResponse.json(
-        { error: "Laptop song upload needs Vercel Blob, which is temporarily unavailable. Pick a song on the booth phone in Event setup." },
+        { error: musicUnavailableMessage() },
         { status: 503 },
       );
     }

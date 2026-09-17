@@ -6,6 +6,8 @@ import { DEMO_ASSET_PATH, type BoothEvent, type Clip } from "@/lib/types";
 import {
   BLOB_CLOUD_UNAVAILABLE_MESSAGE,
   BLOB_STORE_UNAVAILABLE_MESSAGE,
+  CLOUD_SHARE_UNAVAILABLE_MESSAGE,
+  R2_SETUP_HINT,
   blobFileProxyPath,
   formatBlobWriteError,
   isBlobAccessMismatch,
@@ -40,6 +42,12 @@ export async function fetchShareConfig(): Promise<ShareConfig> {
       blobUnavailableReason: data.blobUnavailableReason ?? null,
       blobAccess: data.blobAccess === "private" || data.blobAccess === "public" ? data.blobAccess : null,
       blobAccessError: data.blobAccessError ?? null,
+      r2Configured: Boolean(data.r2Configured),
+      r2Usable: Boolean(data.r2Usable),
+      r2UnavailableReason: data.r2UnavailableReason ?? null,
+      cloudStore: data.cloudStore === "blob" || data.cloudStore === "r2" || data.cloudStore === "none" ? data.cloudStore : "none",
+      cloudShareReady: Boolean(data.cloudShareReady ?? data.blobConfigured ?? data.r2Usable),
+      cloudShareUnavailableReason: data.cloudShareUnavailableReason ?? null,
       remoteAvailable: data.remoteAvailable,
       remoteStore: data.remoteStore,
       remoteUnavailableReason: data.remoteUnavailableReason ?? null,
@@ -61,6 +69,12 @@ function emptyShareConfig(): ShareConfig {
     blobUnavailableReason: BLOB_STORE_UNAVAILABLE_MESSAGE,
     blobAccess: null,
     blobAccessError: null,
+    r2Configured: false,
+    r2Usable: false,
+    r2UnavailableReason: null,
+    cloudStore: "none",
+    cloudShareReady: false,
+    cloudShareUnavailableReason: CLOUD_SHARE_UNAVAILABLE_MESSAGE,
     remoteAvailable: false,
     remoteStore: "none",
     remoteUnavailableReason: null,
@@ -119,7 +133,7 @@ async function persistShareMeta(payload: CloudShare, options?: { allowDriveFallb
   if (res.ok) {
     return {
       ...payload,
-      metaStored: body?.stored === "blob",
+      metaStored: body?.stored === "blob" || body?.stored === "r2",
       warning: body?.warning,
     };
   }
@@ -132,6 +146,35 @@ async function persistShareMeta(payload: CloudShare, options?: { allowDriveFallb
     };
   }
   throw new Error(message);
+}
+
+async function uploadVideoToR2(pathname: string, file: File, clipId: string) {
+  const res = await fetch("/api/share/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ store: "r2", pathname, contentType: file.type || "application/octet-stream" }),
+  });
+  const body = (await res.json().catch(() => null)) as {
+    error?: string;
+    uploadUrl?: string;
+    publicUrl?: string | null;
+    pathname?: string;
+  } | null;
+  if (!res.ok || !body?.uploadUrl) {
+    throw new Error(body?.error || CLOUD_SHARE_UNAVAILABLE_MESSAGE);
+  }
+  const put = await fetch(body.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!put.ok) {
+    throw new Error(`Cloudflare R2 upload failed (${put.status}). Check bucket CORS for PUT.`);
+  }
+  return {
+    url: body.publicUrl || blobFileProxyPath(clipId),
+    pathname: body.pathname || pathname,
+  };
 }
 
 async function uploadVideoToBlob(pathname: string, file: File, preferred: BlobAccess | null) {
@@ -148,7 +191,7 @@ async function uploadVideoToBlob(pathname: string, file: File, preferred: BlobAc
     } catch (error) {
       lastError = error;
       if (isBlobUnusableError(error)) {
-        throw new Error(BLOB_CLOUD_UNAVAILABLE_MESSAGE);
+        throw error;
       }
       if (!isBlobAccessMismatch(error)) {
         throw new Error(formatBlobWriteError(error));
@@ -156,6 +199,31 @@ async function uploadVideoToBlob(pathname: string, file: File, preferred: BlobAc
     }
   }
   throw new Error(formatBlobWriteError(lastError));
+}
+
+async function uploadShareVideo(pathname: string, file: File, clipId: string, preferred: BlobAccess | null) {
+  const config = await fetchShareConfig();
+  if (config.blobConfigured) {
+    try {
+      const uploaded = await uploadVideoToBlob(pathname, file, preferred ?? config.blobAccess);
+      return { url: playbackVideoUrl(clipId, uploaded.url) };
+    } catch (error) {
+      if (!isBlobUnusableError(error) && !(error instanceof Error && error.message === BLOB_CLOUD_UNAVAILABLE_MESSAGE)) {
+        throw error instanceof Error ? error : new Error(formatBlobWriteError(error));
+      }
+      if (!config.r2Usable && !config.r2Configured) {
+        throw new Error(BLOB_CLOUD_UNAVAILABLE_MESSAGE);
+      }
+    }
+  }
+  if (config.r2Usable || config.cloudStore === "r2" || config.r2Configured) {
+    const uploaded = await uploadVideoToR2(pathname, file, clipId);
+    return { url: uploaded.url };
+  }
+  throw new Error(
+    config.cloudShareUnavailableReason ||
+      `${CLOUD_SHARE_UNAVAILABLE_MESSAGE} ${R2_SETUP_HINT}`,
+  );
 }
 
 export async function publishClipToCloud(options: {
@@ -192,8 +260,8 @@ export async function publishClipToCloud(options: {
     }
     const pathname = shareVideoPath(clip.id, prepared.contentType);
     const preferred = options.blobAccess ?? (await fetchShareConfig()).blobAccess ?? null;
-    const uploaded = await uploadVideoToBlob(pathname, prepared.file, preferred);
-    videoUrl = playbackVideoUrl(clip.id, uploaded.url);
+    const uploaded = await uploadShareVideo(pathname, prepared.file, clip.id, preferred);
+    videoUrl = uploaded.url;
     videoContentType = prepared.contentType;
   } else {
     videoUrl = playbackVideoUrl(clip.id, videoUrl);

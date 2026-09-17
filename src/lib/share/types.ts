@@ -45,8 +45,14 @@ export interface ShareConfig {
   /** Detected or configured Blob store access. Null when Blob is unset or detection failed. */
   blobAccess?: "public" | "private" | null;
   blobAccessError?: string | null;
+  r2Configured?: boolean;
+  r2Usable?: boolean;
+  r2UnavailableReason?: string | null;
+  cloudStore?: "blob" | "r2" | "none";
+  cloudShareReady?: boolean;
+  cloudShareUnavailableReason?: string | null;
   remoteAvailable?: boolean;
-  remoteStore?: "blob" | "cache" | "memory" | "none";
+  remoteStore?: "blob" | "r2" | "cache" | "memory" | "none";
   remoteUnavailableReason?: string | null;
   remoteMusicAvailable?: boolean;
   driveConfigured: boolean;

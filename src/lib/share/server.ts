@@ -1,6 +1,10 @@
 import { get, list } from "@vercel/blob";
+import { r2Configured } from "@/lib/r2/env";
+import { r2GetBytes, r2GetJson, r2PutJson } from "@/lib/r2/objects";
+import { noteR2Failure, r2Usable } from "@/lib/r2/status";
+import { resolveCloudObjectStore } from "@/lib/storage/cloudStore";
 import type { CloudShare } from "@/lib/share/types";
-import { isClipId, isFrameStyleId, shareMetaPath } from "@/lib/share/types";
+import { isClipId, isFrameStyleId, shareMetaPath, shareVideoPath } from "@/lib/share/types";
 import {
   blobFileProxyPath,
   isPrivateBlobUrl,
@@ -9,7 +13,7 @@ import {
   type BlobAccess,
 } from "@/lib/share/blobAccess";
 import { isBlobUnusableError } from "@/lib/share/access";
-import { blobCircuitOpen, blobConfigured, noteBlobFailure } from "@/lib/share/blobStatus";
+import { blobCircuitOpen, blobConfigured, blobUsable, noteBlobFailure } from "@/lib/share/blobStatus";
 
 export { blobConfigured, blobTokenPresent, blobUsable, getBlobAvailability } from "@/lib/share/blobStatus";
 
@@ -28,7 +32,7 @@ async function parseShareStream(stream: ReadableStream<Uint8Array> | null): Prom
   return hydrateShare(data);
 }
 
-export async function readCloudShare(clipId: string): Promise<CloudShare | null> {
+async function readCloudShareFromBlob(clipId: string): Promise<CloudShare | null> {
   if (!blobConfigured() || !isClipId(clipId)) return null;
   const pathname = shareMetaPath(clipId);
 
@@ -68,24 +72,60 @@ export async function readCloudShare(clipId: string): Promise<CloudShare | null>
   }
 }
 
-export async function writeCloudShare(share: CloudShare) {
-  if (!blobConfigured()) {
-    throw new Error("Blob storage is not configured.");
-  }
-  const payload: CloudShare = isPrivateBlobUrl(share.videoUrl)
-    ? { ...share, videoUrl: blobFileProxyPath(share.clipId) }
-    : share;
+async function readCloudShareFromR2(clipId: string): Promise<CloudShare | null> {
+  if (!r2Configured() || !isClipId(clipId)) return null;
   try {
-    return await putWithStoreAccess(shareMetaPath(share.clipId), JSON.stringify(payload), {
-      contentType: "application/json",
-    });
+    const data = await r2GetJson<CloudShare>(shareMetaPath(clipId));
+    return data ? hydrateShare(data) : null;
   } catch (error) {
-    noteBlobFailure(error);
-    throw error;
+    noteR2Failure(error);
+    return null;
   }
 }
 
-export async function readShareVideo(clipId: string) {
+export async function readCloudShare(clipId: string): Promise<CloudShare | null> {
+  if (!isClipId(clipId)) return null;
+  const store = await resolveCloudObjectStore();
+  if (store === "blob") {
+    return (await readCloudShareFromBlob(clipId)) ?? (await readCloudShareFromR2(clipId));
+  }
+  if (store === "r2") {
+    return (await readCloudShareFromR2(clipId)) ?? (await readCloudShareFromBlob(clipId));
+  }
+  if (r2Configured()) {
+    const fromR2 = await readCloudShareFromR2(clipId);
+    if (fromR2) return fromR2;
+  }
+  return readCloudShareFromBlob(clipId);
+}
+
+export async function writeCloudShare(share: CloudShare) {
+  const payload: CloudShare = isPrivateBlobUrl(share.videoUrl)
+    ? { ...share, videoUrl: blobFileProxyPath(share.clipId) }
+    : share;
+  const store = await resolveCloudObjectStore();
+  if (store === "blob") {
+    try {
+      return await putWithStoreAccess(shareMetaPath(share.clipId), JSON.stringify(payload), {
+        contentType: "application/json",
+      });
+    } catch (error) {
+      noteBlobFailure(error);
+      throw error;
+    }
+  }
+  if (store === "r2") {
+    try {
+      return await r2PutJson(shareMetaPath(share.clipId), payload);
+    } catch (error) {
+      noteR2Failure(error);
+      throw error;
+    }
+  }
+  throw new Error("Cloud storage is not configured.");
+}
+
+async function readShareVideoFromBlob(clipId: string) {
   if (!blobConfigured() || !isClipId(clipId)) return null;
   try {
     const { blobs } = await list({ prefix: `shares/${clipId}/`, limit: 20, abortSignal: AbortSignal.timeout(5_000) });
@@ -104,4 +144,47 @@ export async function readShareVideo(clipId: string) {
     noteBlobFailure(error);
     return null;
   }
+}
+
+const VIDEO_CANDIDATES = ["video/mp4", "video/webm", "video/quicktime"] as const;
+
+async function readShareVideoFromR2(clipId: string) {
+  if (!r2Configured() || !isClipId(clipId)) return null;
+  try {
+    const meta = await r2GetJson<CloudShare>(shareMetaPath(clipId));
+    const paths = [
+      meta?.videoContentType ? shareVideoPath(clipId, meta.videoContentType) : null,
+      ...VIDEO_CANDIDATES.map((type) => shareVideoPath(clipId, type)),
+      `shares/${clipId}/video.webm`,
+    ].filter((path, index, list): path is string => Boolean(path) && list.indexOf(path) === index);
+
+    for (const pathname of paths) {
+      const file = await r2GetBytes(pathname);
+      if (!file) continue;
+      return {
+        stream: new Blob([file.bytes], { type: file.contentType }).stream(),
+        contentType: file.contentType || meta?.videoContentType || "video/webm",
+        size: file.bytes.length,
+        contentDisposition: file.contentDisposition || "inline",
+      };
+    }
+    return null;
+  } catch (error) {
+    noteR2Failure(error);
+    return null;
+  }
+}
+
+export async function readShareVideo(clipId: string) {
+  if (!isClipId(clipId)) return null;
+  const store = await resolveCloudObjectStore();
+  if (store === "blob") {
+    return (await readShareVideoFromBlob(clipId)) ?? (await readShareVideoFromR2(clipId));
+  }
+  if (store === "r2") {
+    return (await readShareVideoFromR2(clipId)) ?? (await readShareVideoFromBlob(clipId));
+  }
+  if (await r2Usable()) return readShareVideoFromR2(clipId);
+  if (await blobUsable()) return readShareVideoFromBlob(clipId);
+  return null;
 }

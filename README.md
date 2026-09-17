@@ -16,16 +16,16 @@ Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample
 1. **Open booth** on the sample event (or create your own).
 2. Tap **START SPIN**. Capture length is **10, 15, or 20 seconds** (Event setup → Spin length, default 10s). Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
 3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files. If the event has a music bed (not None), it loops under spin / preview / share and is mixed into the export when the browser can record audio. The selected **look-pack frame** is composited into that same baked file.
-4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), booth music mute, force-offline chip, and mock battery %. **Open crowd / TV screen** (Capture or Event) opens a full-bleed room display you can cast.
+4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (guest cloud or Google Drive), booth music mute, force-offline chip, and mock battery %. **Open crowd / TV screen** (Capture or Event) opens a full-bleed room display you can cast.
 5. **Remote operator:** on the booth phone keep Capture open → **Enable remote control** → scan the QR (or open `/e/[eventId]/remote`) on a laptop. The laptop START SPINs and changes look / booth settings over HTTPS. See [Remote operator](#remote-operator).
 
-Local demo works **without** Blob or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
+Local demo works **without** R2, Blob, or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
 
 Add to Home Screen from the tablet browser for a PWA-like standalone shell (`display: standalone` in the web manifest).
 
 ## Guest QR / cloud storage (production)
 
-Clips are captured into IndexedDB on the operator tablet. Guest phones on the venue Wi‑Fi still need a **public HTTPS origin** plus **cloud storage**. In **Settings → Cloud destination** pick **Vercel Blob** (default) or **Google Drive**. A LAN IP or a static deploy without storage is not enough.
+Clips are captured into IndexedDB on the operator tablet. Guest phones on the venue Wi‑Fi still need a **public HTTPS origin** plus **cloud storage**. In **Settings → Cloud destination** pick **Guest cloud** (Vercel Blob when healthy, otherwise **Cloudflare R2**) or **Google Drive**. A LAN IP or a static deploy without storage is not enough.
 
 ### Environment
 
@@ -33,9 +33,13 @@ Copy `.env.example` to `.env.local` (never commit tokens):
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `BLOB_READ_WRITE_TOKEN` | Optional | For **guest QR cloud share** via Blob and laptop **song upload** over remote. Token presence is not enough: if the store is suspended (Hobby Advanced Ops limit), the app treats Blob as unavailable and keeps the booth working locally. Remote operator pairing no longer requires Blob. |
-
-| `BLOB_ACCESS` | Optional | `public` or `private`. Must match the store. New Vercel Blob stores are often **private**; `put(..., { access: "public" })` against a private store fails. If unset, the app detects the mode. |
+| `R2_ACCOUNT_ID` | For R2 | Cloudflare account ID. Used as the S3 endpoint `https://{accountId}.r2.cloudflarestorage.com`. |
+| `R2_ACCESS_KEY_ID` | For R2 | R2 API token access key. |
+| `R2_SECRET_ACCESS_KEY` | For R2 | R2 API token secret. |
+| `R2_BUCKET_NAME` | For R2 | Bucket for share videos, remote JSON, and laptop songs. |
+| `R2_PUBLIC_BASE_URL` | Optional | Public bucket / custom domain URL (no trailing slash) for guest video links. If unset, guests stream through `/api/share/[clipId]/file`. |
+| `BLOB_READ_WRITE_TOKEN` | Optional | Used **only when the Blob store is healthy**. If the store is suspended (Hobby Advanced Ops), the app ignores it and uses R2 when `R2_*` is set. Do **not** create another Blob store. |
+| `BLOB_ACCESS` | Optional | `public` or `private`. Must match the store. New Vercel Blob stores are often **private**. If unset, the app detects the mode. |
 | `NEXT_PUBLIC_APP_URL` | Recommended in production | Public site origin used in QR, copy-link, and SMS, e.g. `https://your-app.vercel.app` (no trailing slash). |
 | `GOOGLE_CLIENT_ID` | For Drive sharing | OAuth 2.0 Web client ID from Google Cloud Console. |
 | `GOOGLE_CLIENT_SECRET` | For Drive sharing | OAuth 2.0 Web client secret. |
@@ -43,35 +47,83 @@ Copy `.env.example` to `.env.local` (never commit tokens):
 
 On Vercel, if `NEXT_PUBLIC_APP_URL` is unset, share links fall back to `https://$VERCEL_URL`. In local `npm run dev` they fall back to `window.location.origin`.
 
-**Use the deployed URL in the QR, not a `192.168.*` / LAN IP.** Phones must reach Vercel (and Blob CDN or Google Drive), not the booth tablet.
+**Use the deployed URL in the QR, not a `192.168.*` / LAN IP.** Phones must reach Vercel (and R2 / Blob CDN or Google Drive), not the booth tablet.
 
 ### Deploy from this GitHub repo
 
-1. Push `main` (or this branch `cursor/snap360-operator-mvp-8fb6`) to GitHub.
+1. Push `main` to GitHub.
 2. In [Vercel](https://vercel.com) → **Add New Project** → import `freddyja/360show`.
 3. Framework preset: Next.js. Build command `npm run build`, output as default.
-4. **Storage** → Create Blob store → connect it to this project (Production + Preview; Development optional). This injects `BLOB_READ_WRITE_TOKEN`. If the store is **private** (the current Vercel default), set `BLOB_ACCESS=private` or leave it unset so the app can detect it. Public stores work with `BLOB_ACCESS=public` (or detection).
+4. Add the **Cloudflare R2** env vars below on Vercel for **Production and Preview** (Development optional). You do **not** need a new Vercel Blob store.
 5. Set `NEXT_PUBLIC_APP_URL` to the production domain (Project → Settings → Environment Variables).
-6. Deploy. Open the booth on the tablet **at that HTTPS URL**, capture a spin, tap **Share** — wait until the status reads “Live for guest phones” (Blob) or “Live on Google Drive”, then guests scan the QR.
+6. Deploy. Open the booth on the tablet **at that HTTPS URL**, capture a spin, tap **Share** — wait until the status reads “Live for guest phones” (guest cloud) or “Live on Google Drive”, then guests scan the QR.
 
-Without storage credentials **or while Blob is suspended**, Share shows **Local-only share** (Blob destination) or asks you to connect Drive. Download / Save to gallery still work on the booth. `/s/[clipId]` on another device returns “clip not available” until an upload succeeds (Drive still works if connected).
+Without R2 (and while Blob is suspended), Share shows **Local-only share** (guest-cloud destination) or asks you to connect Drive. Download / Save to gallery still work on the booth. `/s/[clipId]` on another device returns “clip not available” until an upload succeeds (Drive still works if connected).
 
-### Vercel Blob (default)
+### Cloudflare R2 (recommended replacement for suspended Blob)
 
-Opening operator Share **bakes the time-ramp**, then uploads with `@vercel/blob` **client upload** (files can exceed the 4.5 MB Function body limit) to `shares/{clipId}/export.*`, then writes `shares/{clipId}/meta.json`. `/s/[clipId]` loads IndexedDB when present, otherwise `GET /api/share/[clipId]`.
+Guest share videos, remote operator session/commands, and laptop songs use **Cloudflare R2** (S3-compatible) when Vercel Blob is missing or unusable.
+
+#### 1. Create the bucket and API token
+
+1. Open [Cloudflare Dashboard](https://dash.cloudflare.com/) → **R2 Object Storage**.
+2. **Create bucket** (e.g. `360show`). Leave default location unless you have a preference.
+3. **Manage R2 API Tokens** → **Create API token**.
+   - Permission: **Object Read & Write** on that bucket (or Account-level Object Read & Write).
+   - Copy **Access Key ID** and **Secret Access Key** once.
+4. Note your **Account ID** (right sidebar of the R2 overview, or Workers overview).
+
+#### 2. CORS (required for browser uploads)
+
+In the bucket → **Settings → CORS policy**, allow PUT from the booth origin so guest-cloud video and large laptop songs can use presigned uploads:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://YOUR-APP.vercel.app", "http://localhost:3000"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag", "Content-Type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Replace `YOUR-APP` with the Vercel project domain (and add a custom domain if you use one).
+
+#### 3. Add env vars on Vercel (Production + Preview)
+
+Project → **Settings → Environment Variables**. Add each for **Production** and **Preview** (check Development if you `vercel env pull` locally):
+
+| Name | Value |
+| --- | --- |
+| `R2_ACCOUNT_ID` | Cloudflare account ID |
+| `R2_ACCESS_KEY_ID` | R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | R2 API token secret |
+| `R2_BUCKET_NAME` | Bucket name, e.g. `360show` |
+| `R2_PUBLIC_BASE_URL` | Optional. Public development URL or custom domain for the bucket, no trailing slash. |
+
+Redeploy after saving. The app reads these names at runtime (no extra Blob store). Until they are set, booth capture still works and Share degrades to local download.
+
+#### Optional public access
+
+If `R2_PUBLIC_BASE_URL` is set (R2 public development URL or a custom domain bound to the bucket), guest `<video>` tags can load that URL directly. If it is unset, playback goes through `/api/share/[clipId]/file`.
+
+### Vercel Blob (optional, only when healthy)
+
+Opening operator Share **bakes the time-ramp**, then uploads with `@vercel/blob` **client upload** when the store is **configured and healthy**. If Blob is suspended or missing, the same Share path uses **R2 presigned PUT** instead.
 
 Writes use the store’s access mode (`public` or `private`):
 
 - Optional env `BLOB_ACCESS=public|private`. If unset, the server infers from existing blobs, then probes public then private.
 - A **private** store rejects `access: "public"`. That used to surface as **Could not save share metadata** on Share.
 - Private objects are not guest-fetchable by CDN URL. The app rewrites playback to `/api/share/[clipId]/file`, which streams with the server token.
-- If a Blob write still fails, the API returns the underlying Blob error string in JSON so the operator UI can show it.
 
-If the Blob store is **suspended** (Hobby Advanced Ops / limits), Share does not retry uploads in a loop. Status becomes a single line: cloud share is temporarily unavailable; **Download still works on this tablet**.
+If the Blob store is **suspended** (Hobby Advanced Ops / limits), the app does **not** ask you to create another Blob store. It uses R2 when `R2_*` is present. If neither store works, Share shows a single line: cloud share is temporarily unavailable; **Download still works on this tablet**.
 
 ### Google Drive
 
-Drive is an alternative destination, not a replacement for Blob. Keep Blob enabled if you want branded `/s/[clipId]` metadata in addition to Drive-hosted video. **Drive Share does not require Blob metadata.** If Drive upload succeeds, Share is treated as success even when `meta.json` cannot be written; the QR falls back to `/s/[clipId]?d={fileId}&…`.
+Drive is an alternative destination, not a replacement for guest cloud. Keep R2 (or healthy Blob) enabled if you want branded `/s/[clipId]` metadata in addition to Drive-hosted video. **Drive Share does not require Blob or R2 metadata.** If Drive upload succeeds, Share is treated as success even when `meta.json` cannot be written; the QR falls back to `/s/[clipId]?d={fileId}&…`.
 
 #### 1. Create Google Cloud OAuth credentials
 
@@ -109,20 +161,20 @@ Each upload is shared as **anyone with the link can view**.
 | --- | --- | --- |
 | Drive + Blob token | `/s/[clipId]?d={fileId}&…` (and `/s/[clipId]` when meta.json exists) | Branded page; video iframe from Drive |
 | Drive only (no Blob), or Blob meta write failed | `/s/[clipId]?d={fileId}&…` on your domain | Branded page using query params + Drive iframe |
-| Blob destination | `/s/[clipId]` | Branded page; video from Blob CDN |
+| Guest cloud (R2 / Blob) | `/s/[clipId]` | Branded page; video from R2, Blob CDN, or `/api/share/{id}/file` |
 
 Guests can also open the Drive `webViewLink` directly. Download on a guest phone opens Drive’s download URL.
 
-Drive’s in-browser player often never finishes **“This video file is still being processed”** for **WebM**. Bake/export prefers **MP4 / H.264 (+ AAC when mixing audio)** when `MediaRecorder` supports it. If this phone only records WebM, Share shows a hint: download the file or use the Vercel Blob guest QR. Blob `<video>` playback of WebM is unchanged.
+Drive’s in-browser player often never finishes **“This video file is still being processed”** for **WebM**. Bake/export prefers **MP4 / H.264 (+ AAC when mixing audio)** when `MediaRecorder` supports it. If this phone only records WebM, Share shows a hint: download the file or use the guest-cloud QR. Blob/R2 `<video>` playback of WebM is unchanged.
 
-#### Blob vs Drive
+#### Blob vs Drive vs R2
 
-| | Vercel Blob | Google Drive |
+| | Guest cloud (Blob if healthy, else R2) | Google Drive |
 | --- | --- | --- |
-| Where the file lives | Vercel Blob CDN | Operator’s Google Drive |
-| Operator connect step | Token in Vercel env | OAuth Connect in Settings |
-| Guest playback | `<video>` from CDN | Drive preview iframe (`anyone with link`) |
-| Metadata for `/s/[clipId]` | `shares/{id}/meta.json` (private stores served via `/api/share/{id}/file`) | Blob meta if Blob write succeeds; otherwise query params on the QR |
+| Where the file lives | Vercel Blob CDN or Cloudflare R2 | Operator’s Google Drive |
+| Operator connect step | Env vars on Vercel | OAuth Connect in Settings |
+| Guest playback | `<video>` from CDN or `/api/share/{id}/file` | Drive preview iframe (`anyone with link`) |
+| Metadata for `/s/[clipId]` | `shares/{id}/meta.json` | Cloud meta if a write succeeds; otherwise query params on the QR |
 | Offline booth | Local-only | Local-only |
 
 The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch the cloud clip get the baked file, so slow-mo plays in Photos / Files without this app’s `playbackRate` logic.
@@ -139,7 +191,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 | `/e/[eventId]/remote` | Laptop remote operator (pair via QR/`?k=` or 6-character code). START SPIN + look + booth settings |
 | `/e/[eventId]/crowd` | Full-bleed TV / room display (idle branding + latest spin) |
 | `/e/[eventId]/gallery` | Tonight’s clips |
-| `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, **mute booth music**, force offline, **Blob vs Drive destination**, Google Drive connect |
+| `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, **mute booth music**, force offline, **guest cloud vs Drive destination**, Google Drive connect |
 | `/e/[eventId]/share/[clipId]` | Operator guest-share screen (mockup 2) |
 | `/s/[clipId]` | Share page encoded in the QR |
 
@@ -151,7 +203,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - Fallback to a live canvas demo scene, then a bundled `/demo/spin.mp4` if recording fails
 - IndexedDB persistence for events, clip metadata, and video blobs (`idb`)
 - Guest QR (public origin + `/s/[clipId]`) via `qrcode.react`
-- **Vercel Blob** cloud clips so guest phones can open `/s/[clipId]` without IndexedDB
+- **Vercel Blob** or **Cloudflare R2** cloud clips so guest phones can open `/s/[clipId]` without IndexedDB
 - **Google Drive** destination: OAuth connect in Settings, baked upload to `360show/{event}/`, anyone-with-link guest playback
 - Copy link, `sms:` “Text me”, download when a blob, demo file, or cloud URL exists
 - **Live time-ramp preview**: `playbackRate` keyframes when **Slow-mo / time ramp** is on (Settings)
@@ -175,8 +227,8 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 ## Stack
 
 - Next.js 15 App Router, React 19, TypeScript, Tailwind CSS v4
-- Client-heavy UI, local-first (`IndexedDB`) with optional Vercel Blob or Google Drive for guest sharing
-- `lucide-react` icons, `qrcode.react` QR codes, `@vercel/blob`
+- Client-heavy UI, local-first (`IndexedDB`) with optional Cloudflare R2, Vercel Blob, or Google Drive for guest sharing
+- `lucide-react` icons, `qrcode.react` QR codes, `@vercel/blob`, `@aws-sdk/client-s3` (R2)
 
 ## Capture pipeline
 
@@ -191,7 +243,7 @@ Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during recor
 | Operator **Preview** / booth share player | Live `playbackRate` on the original capture | Web overlay (matches the baked look) |
 | Guest `/s/[clipId]` after cloud upload | File is already baked; player runs at 1× | In the file (web overlay skipped so it is not doubled) |
 | **Download / Save to gallery** | Baked into the file (slow-mo without this app). Music mixed in when the browser allowed it. | Burned into the file |
-| Vercel Blob `export.*` | Baked once on the booth before upload | Burned into the file |
+| Guest cloud `export.*` (Blob or R2) | Baked once on the booth before upload | Burned into the file |
 | Google Drive (anyone-with-link) | Baked file uploaded from the booth | Burned into the file |
 | **Crowd / TV** `/e/[eventId]/crowd` | Live ramp on this device’s original, or 1× if playing a cloud baked URL | Web overlay on the original; skipped when playing a baked cloud file |
 
@@ -216,14 +268,14 @@ A laptop (or second browser) controls the **booth phone** over the public HTTPS 
 1. On the **booth phone**, open the production site (e.g. `https://360show.vercel.app`) → tonight’s event → **Capture**.
 2. Tap **Enable remote control**. The phone shows a QR, HTTPS link, 6-character pair code, and pair status (waiting / paired).
 3. On the **laptop**, scan the QR or open `/e/[eventId]/remote` and type the code (or use the `?k=` token in the link). No separate account.
-4. Laptop **START SPIN** runs countdown + record **on the phone**. Spin length, frame, bundled music bed, **song from this laptop**, names, accent, slow-mo, quality, mute, and Blob vs Drive apply on the booth for the next spin (and on Capture chrome immediately).
+4. Laptop **START SPIN** runs countdown + record **on the phone**. Spin length, frame, bundled music bed, **song from this laptop**, names, accent, slow-mo, quality, mute, and guest cloud vs Drive apply on the booth for the next spin (and on Capture chrome immediately).
 5. Keep Capture open while remote is armed. Navigating away or **Disable remote** takes the laptop offline. Sessions expire after about 4 hours; Enable remote again to rotate the token.
 
-Production remote pairing uses **Vercel Runtime Cache** (small JSON session + commands, shared across serverless instances in a region). That avoids Blob `list`/`put` on every heartbeat — those Advanced Ops are what suspend Hobby Blob stores.
+Production remote pairing prefers **Cloudflare R2** when `R2_*` is set (JSON session + commands + songs). That avoids Blob `list`/`put` on every heartbeat — those Advanced Ops are what suspend Hobby Blob stores. If R2 is not configured yet, pairing falls back to **Vercel Runtime Cache** for small JSON (not songs). Healthy Blob remains an optional fallback.
 
-Laptop **song upload** still needs a working Blob store (files are larger than the Runtime Cache 2 MB item limit). While Blob is unavailable, the laptop hides that control and tells you to pick a song on the booth phone (IndexedDB). If Runtime Cache is not available **and** Blob is unusable, **Enable remote control** is disabled with a clear reason — it will not offer a half-broken in-memory channel on production.
+Laptop **song upload** uses R2 (or healthy Blob). Files are larger than the Runtime Cache 2 MB item limit. Until R2 is configured and while Blob is unusable, the laptop hides that control and tells you to pick a song on the booth phone (IndexedDB). If R2, Runtime Cache, and Blob are all unavailable, **Enable remote control** is disabled with a clear reason — it will not offer a half-broken in-memory channel on production.
 
-Local `npm run dev` without Blob uses Runtime Cache when it works, otherwise an in-memory channel in that Node process (two browsers on localhost work; a second machine will not).
+Local `npm run dev` without R2 uses Runtime Cache when it works, otherwise an in-memory channel in that Node process (two browsers on localhost work; a second machine will not).
 
 ### What the laptop can change
 
@@ -233,10 +285,10 @@ Local `npm run dev` without Blob uses Runtime Cache when it works, otherwise an 
 | Spin length 10 / 15 / 20s | Event `captureDurationSec` |
 | Frame style (all look-packs) | Event `frameStyle` (+ pack default accent when set) |
 | Music bed / None | Event `musicBedLabel`. `preferBundledBed` makes the bed win over a stored custom file |
-| Song from this laptop | Uploads over the pair channel into booth IndexedDB custom music. **Paused while Vercel Blob is unavailable** — pick the song on the phone instead. |
+| Song from this laptop | Uploads over the pair channel into booth IndexedDB custom music. **Paused until Cloudflare R2 (or healthy Blob) is available** — pick the song on the phone instead. |
 | Event name, couple names, accent | Event record |
 | Slow-mo, video quality, mute booth music | App settings on the phone |
-| Cloud destination Blob vs Drive (+ Drive folder name) | App settings. **Connect Google Drive** still runs on the phone (OAuth cookies) |
+| Cloud destination guest cloud vs Drive (+ Drive folder name) | App settings. **Connect Google Drive** still runs on the phone (OAuth cookies) |
 | Open / copy crowd TV link | Same `/e/[eventId]/crowd` URL; no extra pairing |
 
 Phone-only (shown disabled on the laptop with a reason): Drive OAuth connect, event logo file, camera hardware. The phone’s own music library still cannot be browsed from the laptop — pick a file on the laptop instead.
@@ -257,7 +309,7 @@ Event setup picks a bed. **None** is silence. Everything else is an original 16-
 
 **Live playback:** an `HTMLAudioElement` loops under operator spin, Preview, and the guest share player. Volume defaults to ~0.28. Browsers block autoplay without a gesture — **START SPIN**, Preview, changing the bed in setup, picking a song, or tapping the share player counts. **Settings → Mute booth music** silences the operator tablet only; guest phones still overlay a bundled bed, and mixed files keep their audio.
 
-**Song from this phone:** Event setup also has **Use song from this phone** (`accept="audio/*"`, mp3/m4a/wav/aac/ogg as the browser allows, max 18 MB). The file stays in IndexedDB on this device (`customMusicBlobId` + display name) and wins over the bed until **Clear custom song**. It is not uploaded to Vercel Blob or Google Drive as a standalone file — only mixed into the exported video when the bake path succeeds. **You are responsible for having the rights to play and share any song you pick.**
+**Song from this phone:** Event setup also has **Use song from this phone** (`accept="audio/*"`, mp3/m4a/wav/aac/ogg as the browser allows, max 18 MB). The file stays in IndexedDB on this device (`customMusicBlobId` + display name) and wins over the bed until **Clear custom song**. It is not uploaded to R2, Vercel Blob, or Google Drive as a standalone file — only mixed into the exported video when the bake path succeeds. **You are responsible for having the rights to play and share any song you pick.**
 
 **Export mix (best-effort):** Download / Share decode the WAV or the stored custom file with Web Audio, loop it onto a `MediaStreamDestination`, and record it with the canvas video. The recorder **prefers MP4 / H.264 + AAC**, then WebM + Opus. Chrome/Android usually produce a file Photos can play; Drive preview needs MP4. Some browsers (notably iOS Safari, or mp4-only recorders) drop the audio track — then the downloaded file is video-only and the **web player still plays the looping bed or custom song on the booth**. Guest phones only hear a custom song if the mix landed in the file. Drive guest links pass `?m=` so bundled-bed overlay works even without Blob metadata; `?a=1` means the uploaded file already has audio (skip a second overlay on the Drive iframe).
 

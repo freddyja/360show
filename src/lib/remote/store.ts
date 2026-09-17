@@ -1,8 +1,10 @@
 import { timingSafeEqual } from "crypto";
 import { del, get, list } from "@vercel/blob";
-import { blobConfigured } from "@/lib/share/server";
+import { r2Configured } from "@/lib/r2/env";
+import { r2Delete, r2GetBytes, r2GetJson, r2PutBytes, r2PutJson } from "@/lib/r2/objects";
+import { noteR2Failure, r2Usable } from "@/lib/r2/status";
 import { putWithStoreAccess, resolveBlobAccess } from "@/lib/share/blobAccess";
-import { noteBlobFailure } from "@/lib/share/blobStatus";
+import { blobUsable, noteBlobFailure } from "@/lib/share/blobStatus";
 import { createId } from "@/lib/ids";
 import {
   cacheCommandKey,
@@ -52,7 +54,7 @@ function memoryMap() {
   return memory.__360showRemote;
 }
 
-export type RemoteStoreMode = "blob" | "cache" | "memory" | "none";
+export type RemoteStoreMode = "blob" | "r2" | "cache" | "memory" | "none";
 
 const MODE_TTL_MS = 30_000;
 const gMode = globalThis as unknown as { __360showRemoteMode?: { at: number; mode: RemoteStoreMode } };
@@ -61,8 +63,10 @@ export async function resolveRemoteStoreMode(): Promise<RemoteStoreMode> {
   const cached = gMode.__360showRemoteMode;
   if (cached && Date.now() - cached.at < MODE_TTL_MS) return cached.mode;
   let mode: RemoteStoreMode = "none";
-  if (await runtimeCacheReady()) mode = "cache";
-  else if (blobConfigured()) mode = "blob";
+  // R2 is the Blob replacement for remote JSON + songs (avoids Hobby Advanced Ops).
+  if (r2Configured() && (await r2Usable())) mode = "r2";
+  else if (await runtimeCacheReady()) mode = "cache";
+  else if (await blobUsable()) mode = "blob";
   else if (process.env.NODE_ENV !== "production") mode = "memory";
   gMode.__360showRemoteMode = { at: Date.now(), mode };
   return mode;
@@ -80,12 +84,18 @@ export async function remoteStoreMode() {
 export async function remoteMusicAvailable() {
   const mode = await resolveRemoteStoreMode();
   if (mode === "none") return false;
-  if (mode === "memory") return true;
-  return blobConfigured();
+  if (mode === "memory" || mode === "r2" || mode === "blob") return true;
+  // Runtime Cache cannot hold song files (2 MB item cap).
+  if (mode === "cache") return (r2Configured() && (await r2Usable())) || (await blobUsable());
+  return false;
 }
 
 export function storeUnavailableMessage() {
-  return "Laptop remote is paused while cloud storage is unavailable. Use the booth phone for capture, look, and songs until Vercel Blob is back.";
+  return "Laptop remote is paused until Cloudflare R2 is configured, or another remote channel is available. Use the booth phone for capture, look, and songs.";
+}
+
+export function musicUnavailableMessage() {
+  return "Laptop song upload needs Cloudflare R2 (or a healthy Vercel Blob store). Pick a song on the booth phone in Event setup.";
 }
 
 function randomPairCode() {
@@ -109,8 +119,34 @@ export function safeEqual(a: string, b: string) {
   return timingSafeEqual(left, right);
 }
 
+async function readJsonR2<T>(pathname: string): Promise<T | null> {
+  try {
+    return await r2GetJson<T>(pathname);
+  } catch (error) {
+    noteR2Failure(error);
+    return null;
+  }
+}
+
+async function writeJsonR2(pathname: string, data: unknown) {
+  try {
+    await r2PutJson(pathname, data);
+  } catch (error) {
+    noteR2Failure(error);
+    throw error;
+  }
+}
+
+async function deleteJsonR2(pathname: string) {
+  try {
+    await r2Delete(pathname);
+  } catch (error) {
+    noteR2Failure(error);
+  }
+}
+
 async function readJsonBlob<T>(pathname: string): Promise<T | null> {
-  if (!blobConfigured()) return null;
+  if (!(await blobUsable())) return null;
   try {
     const prefix = pathname.slice(0, pathname.lastIndexOf("/") + 1);
     const { blobs } = await list({ prefix, limit: 12, abortSignal: AbortSignal.timeout(5_000) });
@@ -167,6 +203,9 @@ function liveSession(data: RemoteSession | null | undefined, eventId: string): R
 export async function readSession(eventId: string): Promise<RemoteSession | null> {
   if (!isEventId(eventId)) return null;
   const mode = await resolveRemoteStoreMode();
+  if (mode === "r2") {
+    return liveSession(await readJsonR2<RemoteSession>(remoteSessionPath(eventId)), eventId);
+  }
   if (mode === "blob") {
     return liveSession(await readJsonBlob<RemoteSession>(remoteSessionPath(eventId)), eventId);
   }
@@ -179,6 +218,10 @@ export async function readSession(eventId: string): Promise<RemoteSession | null
 
 export async function writeSession(session: RemoteSession) {
   const mode = await resolveRemoteStoreMode();
+  if (mode === "r2") {
+    await writeJsonR2(remoteSessionPath(session.eventId), session);
+    return;
+  }
   if (mode === "blob") {
     await writeJsonBlob(remoteSessionPath(session.eventId), session);
     return;
@@ -204,6 +247,9 @@ function commandsFromFile(data: CommandFile | null | undefined, now = Date.now()
 export async function readCommands(eventId: string): Promise<RemoteCommand[]> {
   if (!isEventId(eventId)) return [];
   const mode = await resolveRemoteStoreMode();
+  if (mode === "r2") {
+    return commandsFromFile(await readJsonR2<CommandFile>(remoteCommandPath(eventId)));
+  }
   if (mode === "blob") {
     return commandsFromFile(await readJsonBlob<CommandFile>(remoteCommandPath(eventId)));
   }
@@ -221,6 +267,14 @@ export async function readCommand(eventId: string): Promise<RemoteCommand | null
 
 async function persistCommands(eventId: string, commands: RemoteCommand[]) {
   const mode = await resolveRemoteStoreMode();
+  if (mode === "r2") {
+    if (!commands.length) {
+      await deleteJsonR2(remoteCommandPath(eventId));
+      return;
+    }
+    await writeJsonR2(remoteCommandPath(eventId), { commands });
+    return;
+  }
   if (mode === "blob") {
     if (!commands.length) {
       await deleteJsonBlob(remoteCommandPath(eventId));
@@ -267,6 +321,10 @@ export async function removeCommands(eventId: string, ids: string[]) {
 export async function touchOperatorPing(eventId: string, now = Date.now()) {
   if (!isEventId(eventId)) return now;
   const mode = await resolveRemoteStoreMode();
+  if (mode === "r2") {
+    await writeJsonR2(remoteOperatorPath(eventId), { at: now });
+    return now;
+  }
   if (mode === "blob") {
     await writeJsonBlob(remoteOperatorPath(eventId), { at: now });
     return now;
@@ -284,6 +342,10 @@ export async function touchOperatorPing(eventId: string, now = Date.now()) {
 export async function readOperatorPing(eventId: string): Promise<number> {
   if (!isEventId(eventId)) return 0;
   const mode = await resolveRemoteStoreMode();
+  if (mode === "r2") {
+    const data = await readJsonR2<{ at?: number }>(remoteOperatorPath(eventId));
+    return typeof data?.at === "number" ? data.at : 0;
+  }
   if (mode === "blob") {
     const data = await readJsonBlob<{ at?: number }>(remoteOperatorPath(eventId));
     return typeof data?.at === "number" ? data.at : 0;
@@ -295,18 +357,21 @@ export async function readOperatorPing(eventId: string): Promise<number> {
   return memoryMap().get(eventId)?.operatorAt ?? 0;
 }
 
-const MUSIC_UNAVAILABLE =
-  "Laptop song upload needs Vercel Blob, which is temporarily unavailable. Pick a song on the booth phone in Event setup.";
-
 export async function writeRemoteMusicMeta(
   eventId: string,
   meta: { fileName: string; contentType: string; size?: number },
 ) {
-  if (blobConfigured()) {
-    await writeJsonBlob(remoteMusicMetaPath(eventId), { ...meta, uploadedAt: Date.now() });
+  const mode = await resolveRemoteStoreMode();
+  const payload = { ...meta, uploadedAt: Date.now() };
+  if (mode === "r2") {
+    await writeJsonR2(remoteMusicMetaPath(eventId), payload);
     return;
   }
-  if ((await resolveRemoteStoreMode()) === "memory") {
+  if (mode === "blob" || (mode === "cache" && (await blobUsable()))) {
+    await writeJsonBlob(remoteMusicMetaPath(eventId), payload);
+    return;
+  }
+  if (mode === "memory") {
     const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
     if (bucket.music) {
       bucket.music = { ...bucket.music, fileName: meta.fileName, contentType: meta.contentType };
@@ -320,20 +385,32 @@ export async function writeRemoteMusic(
   bytes: Buffer,
   meta: { fileName: string; contentType: string },
 ) {
-  if (blobConfigured()) {
-    await putWithStoreAccess(remoteMusicPath(eventId, meta.fileName), bytes, {
+  const mode = await resolveRemoteStoreMode();
+  const pathname = remoteMusicPath(eventId, meta.fileName);
+  if (mode === "r2") {
+    try {
+      await r2PutBytes(pathname, bytes, meta.contentType || "application/octet-stream");
+    } catch (error) {
+      noteR2Failure(error);
+      throw error;
+    }
+    await writeRemoteMusicMeta(eventId, { ...meta, size: bytes.length });
+    return;
+  }
+  if (mode === "blob" || (mode === "cache" && (await blobUsable()))) {
+    await putWithStoreAccess(pathname, bytes, {
       contentType: meta.contentType || "application/octet-stream",
     });
     await writeRemoteMusicMeta(eventId, { ...meta, size: bytes.length });
     return;
   }
-  if ((await resolveRemoteStoreMode()) === "memory") {
+  if (mode === "memory") {
     const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
     bucket.music = { bytes, fileName: meta.fileName, contentType: meta.contentType };
     memoryMap().set(eventId, bucket);
     return;
   }
-  throw new Error(MUSIC_UNAVAILABLE);
+  throw new Error(musicUnavailableMessage());
 }
 
 async function streamToBuffer(stream: ReadableStream<Uint8Array> | null) {
@@ -349,12 +426,34 @@ async function fetchBuffer(url: string) {
   return buf.length ? buf : null;
 }
 
-export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile | null> {
-  if (!isEventId(eventId)) return null;
-  if (!blobConfigured()) {
-    return memoryMap().get(eventId)?.music ?? null;
-  }
+const MUSIC_EXTS = ["mp3", "m4a", "aac", "wav", "ogg", "flac", "opus", "bin"] as const;
 
+async function readRemoteMusicR2(eventId: string): Promise<RemoteMusicFile | null> {
+  try {
+    const meta = await r2GetJson<{ fileName?: string; contentType?: string }>(remoteMusicMetaPath(eventId));
+    const paths = [
+      meta?.fileName ? remoteMusicPath(eventId, meta.fileName) : null,
+      ...MUSIC_EXTS.map((ext) => remoteMusicPath(eventId, ext)),
+    ].filter((path, index, list): path is string => Boolean(path) && list.indexOf(path) === index);
+
+    for (const pathname of paths) {
+      const file = await r2GetBytes(pathname);
+      if (!file) continue;
+      return {
+        bytes: file.bytes,
+        fileName: meta?.fileName || pathname.split("/").pop() || "song",
+        contentType: meta?.contentType || file.contentType || "application/octet-stream",
+      };
+    }
+    return null;
+  } catch (error) {
+    noteR2Failure(error);
+    return null;
+  }
+}
+
+async function readRemoteMusicBlob(eventId: string): Promise<RemoteMusicFile | null> {
+  if (!(await blobUsable())) return null;
   const meta = await readJsonBlob<{ fileName?: string; contentType?: string }>(remoteMusicMetaPath(eventId));
   const namedPath = meta?.fileName ? remoteMusicPath(eventId, meta.fileName) : null;
 
@@ -405,6 +504,16 @@ export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile 
       return null;
     }
   }
+}
+
+export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile | null> {
+  if (!isEventId(eventId)) return null;
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "r2") return readRemoteMusicR2(eventId);
+  if (mode === "memory") return memoryMap().get(eventId)?.music ?? null;
+  const fromBlob = await readRemoteMusicBlob(eventId);
+  if (fromBlob) return fromBlob;
+  return memoryMap().get(eventId)?.music ?? null;
 }
 
 export async function createPairSession(eventId: string, snapshot: RemoteEventSnapshot): Promise<RemoteSession> {

@@ -25,6 +25,10 @@ export interface StoredRemotePair {
 
 export interface RemoteCloudFlags {
   blobConfigured: boolean;
+  r2Configured?: boolean;
+  r2Usable?: boolean;
+  cloudStore?: "blob" | "r2" | "none";
+  cloudShareReady?: boolean;
   remoteMusicAvailable: boolean;
   driveConfigured: boolean;
   driveConnected: boolean;
@@ -202,7 +206,7 @@ async function uploadRemoteMusicViaBlobClient(
       if (signal?.aborted) throw abortSending();
       if (isBlobUnusableError(error)) {
         throw new Error(
-          "Laptop song upload needs Vercel Blob, which is temporarily unavailable. Pick a song on the booth phone in Event setup.",
+          "Laptop song upload needs Cloudflare R2 (or a healthy Vercel Blob store). Pick a song on the booth phone in Event setup.",
         );
       }
       if (!isBlobAccessMismatch(error)) {
@@ -215,15 +219,53 @@ async function uploadRemoteMusicViaBlobClient(
   throw new Error(formatBlobWriteError(lastError) || "Could not upload the song.");
 }
 
+async function uploadRemoteMusicViaR2(
+  eventId: string,
+  token: string,
+  file: File,
+  signal?: AbortSignal,
+) {
+  const pathname = remoteMusicPath(eventId, file.name);
+  const res = await fetch("/api/remote/music/upload", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      store: "r2",
+      pathname,
+      contentType: file.type || "application/octet-stream",
+      eventId,
+      token,
+    }),
+    signal,
+  });
+  const body = (await res.json().catch(() => null)) as { error?: string; uploadUrl?: string } | null;
+  if (!res.ok || !body?.uploadUrl) {
+    throw new Error(body?.error || "Could not prepare Cloudflare R2 song upload.");
+  }
+  const put = await fetch(body.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+    signal,
+  });
+  if (!put.ok) {
+    throw new Error(`Cloudflare R2 song upload failed (${put.status}). Check bucket CORS for PUT.`);
+  }
+}
+
 export async function uploadRemoteMusic(
   eventId: string,
   token: string,
   file: File,
-  blobConfigured: boolean,
+  cloud: boolean | { blobConfigured?: boolean; r2Usable?: boolean; remoteMusicAvailable?: boolean } = false,
   options?: { signal?: AbortSignal },
 ) {
   const invalid = validateCustomMusicFile(file);
   if (invalid) throw new Error(invalid);
+
+  const flags = typeof cloud === "boolean" ? { blobConfigured: cloud, r2Usable: false } : cloud;
+  const blobConfigured = Boolean(flags.blobConfigured);
+  const r2Usable = Boolean(flags.r2Usable || flags.remoteMusicAvailable);
 
   const local = await materializeCustomMusicFile(file, { signal: options?.signal });
   if (options?.signal?.aborted) throw abortSending();
@@ -236,8 +278,14 @@ export async function uploadRemoteMusic(
     if (options?.signal?.aborted) throw abortSending();
     const message = error instanceof Error ? error.message : "";
     const tooLarge = /413|too large|payload/i.test(message);
-    if (!blobConfigured || !tooLarge) throw error;
-    await uploadRemoteMusicViaBlobClient(eventId, token, local, options?.signal);
+    if (!tooLarge) throw error;
+    if (blobConfigured) {
+      await uploadRemoteMusicViaBlobClient(eventId, token, local, options?.signal);
+    } else if (r2Usable) {
+      await uploadRemoteMusicViaR2(eventId, token, local, options?.signal);
+    } else {
+      throw error;
+    }
   }
 
   return sendRemoteCommand(eventId, token, "setCustomMusic", {
@@ -334,6 +382,10 @@ export function snapshotFromBooth(
     driveConnected: cloud.driveConnected,
     driveConfigured: cloud.driveConfigured,
     blobConfigured: cloud.blobConfigured,
+    r2Configured: Boolean(cloud.r2Configured),
+    r2Usable: Boolean(cloud.r2Usable),
+    cloudStore: cloud.cloudStore,
+    cloudShareReady: Boolean(cloud.cloudShareReady ?? cloud.blobConfigured ?? cloud.r2Usable),
     remoteMusicAvailable: Boolean(cloud.remoteMusicAvailable),
   };
 }
