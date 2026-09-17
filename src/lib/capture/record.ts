@@ -1,7 +1,7 @@
 import { DEMO_ASSET_PATH } from "../types";
 import { getCameraStream, stopStream } from "../hardware/camera";
 import { createDemoScene } from "./demoScene";
-import { createVideoRecorder, resolveVideoQuality, videoQualityProfile, type VideoQuality } from "./quality";
+import { createVideoRecorder, resolveVideoQuality, typedVideoBlob, videoQualityProfile, type VideoQuality } from "./quality";
 
 export type RecordResult = {
   blob: Blob | null;
@@ -29,7 +29,7 @@ async function recordStream(
         resolve(null);
         return;
       }
-      resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
+      void typedVideoBlob(chunks, recorder.mimeType).then(resolve, () => resolve(null));
     };
   });
 

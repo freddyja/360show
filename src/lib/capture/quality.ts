@@ -32,6 +32,7 @@ export const VIDEO_QUALITY_PROFILES: Record<VideoQuality, VideoQualityProfile> =
 
 const RECORDER_MIME_CANDIDATES = [
   "video/mp4;codecs=avc1.42E01E",
+  "video/mp4;codecs=avc1.4D401E",
   "video/mp4;codecs=avc1",
   "video/mp4;codecs=h264",
   "video/mp4",
@@ -40,11 +41,21 @@ const RECORDER_MIME_CANDIDATES = [
   "video/webm",
 ];
 
-/** Prefer containers that can actually keep an audio track when mixing a bed. */
+/**
+ * MP4 / H.264 + AAC first when mixing a music bed. Do not list video-only
+ * avc1/h264 before WebM — that would encode without audio and drop the mix.
+ * Drive’s web player often never finishes “processing” WebM; Photos/Drive
+ * both want H.264 + AAC. WebM + Opus stays the fallback.
+ */
 const AV_RECORDER_MIME_CANDIDATES = [
+  "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+  "video/mp4;codecs=avc1.4D401E,mp4a.40.2",
+  "video/mp4;codecs=avc1.64001E,mp4a.40.2",
+  "video/mp4;codecs=avc1,mp4a.40.2",
+  "video/mp4;codecs=h264,aac",
+  "video/mp4",
   "video/webm;codecs=vp9,opus",
   "video/webm;codecs=vp8,opus",
-  "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
   "video/webm",
 ];
 
@@ -66,25 +77,83 @@ export function pickRecorderMimeType(withAudio = false) {
   return list.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
 }
 
+export function recorderMimeCandidates(withAudio = false) {
+  const list = withAudio ? AV_RECORDER_MIME_CANDIDATES : RECORDER_MIME_CANDIDATES;
+  if (typeof MediaRecorder === "undefined") return [];
+  return list.filter((type) => MediaRecorder.isTypeSupported(type));
+}
+
+export function isWebmContainer(type?: string | null, name?: string | null) {
+  const blob = `${type || ""} ${name || ""}`.toLowerCase();
+  return blob.includes("webm");
+}
+
+function headerLooksLikeMp4(bytes: Uint8Array) {
+  return (
+    bytes.length >= 8 &&
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70
+  );
+}
+
+function headerLooksLikeWebm(bytes: Uint8Array) {
+  return bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3;
+}
+
+function fallbackVideoContentType(reported?: string | null) {
+  const value = (reported || "").toLowerCase();
+  if (value.includes("mp4") || value.includes("quicktime") || value.includes("m4v")) return "video/mp4";
+  return "video/webm";
+}
+
+/** Prefer ISO BMFF vs EBML over a lying MediaRecorder mimeType. */
+export function sniffVideoContentType(header: ArrayBuffer | Uint8Array, reported?: string | null) {
+  const bytes = header instanceof Uint8Array ? header : new Uint8Array(header);
+  if (headerLooksLikeMp4(bytes)) return "video/mp4";
+  if (headerLooksLikeWebm(bytes)) return "video/webm";
+  return fallbackVideoContentType(reported);
+}
+
+export async function typedVideoBlob(parts: BlobPart[], recordedType?: string | null) {
+  const first = parts[0];
+  let header: Uint8Array;
+  if (first instanceof Blob) {
+    header = new Uint8Array(await first.slice(0, 16).arrayBuffer());
+  } else if (first instanceof ArrayBuffer) {
+    header = new Uint8Array(first.slice(0, 16));
+  } else if (ArrayBuffer.isView(first)) {
+    header = new Uint8Array(first.buffer, first.byteOffset, Math.min(16, first.byteLength));
+  } else {
+    header = new Uint8Array(await new Blob(parts).slice(0, 16).arrayBuffer());
+  }
+  return new Blob(parts, { type: sniffVideoContentType(header, recordedType) });
+}
+
+export async function contentTypeForVideoBlob(blob: Blob, reported?: string | null) {
+  const header = await blob.slice(0, 16).arrayBuffer();
+  return sniffVideoContentType(header, reported || blob.type);
+}
+
 export function createVideoRecorder(stream: MediaStream, bitrate: number) {
   const withAudio = stream.getAudioTracks().length > 0;
-  const mimeType = pickRecorderMimeType(withAudio);
-  const withMime = mimeType
-    ? {
-        mimeType,
-        videoBitsPerSecond: bitrate,
-        ...(withAudio ? { audioBitsPerSecond: 128_000 } : {}),
-      }
-    : { videoBitsPerSecond: bitrate };
-  try {
-    return new MediaRecorder(stream, withMime);
-  } catch {
+  const attempts: MediaRecorderOptions[] = recorderMimeCandidates(withAudio).map((mimeType) => ({
+    mimeType,
+    videoBitsPerSecond: bitrate,
+    ...(withAudio ? { audioBitsPerSecond: 128_000 } : {}),
+  }));
+  attempts.push({ videoBitsPerSecond: bitrate });
+  attempts.push({});
+
+  for (const options of attempts) {
     try {
-      return new MediaRecorder(stream, { videoBitsPerSecond: bitrate });
+      return new MediaRecorder(stream, options);
     } catch {
-      return new MediaRecorder(stream);
+      // try the next container / codec
     }
   }
+  return new MediaRecorder(stream);
 }
 
 /** Scale source pixels to fit inside the quality cap without upscaling. */

@@ -111,6 +111,8 @@ Each upload is shared as **anyone with the link can view**.
 
 Guests can also open the Drive `webViewLink` directly. Download on a guest phone opens Drive’s download URL.
 
+Drive’s in-browser player often never finishes **“This video file is still being processed”** for **WebM**. Bake/export prefers **MP4 / H.264 (+ AAC when mixing audio)** when `MediaRecorder` supports it. If this phone only records WebM, Share shows a hint: download the file or use the Vercel Blob guest QR. Blob `<video>` playback of WebM is unchanged.
+
 #### Blob vs Drive
 
 | | Vercel Blob | Google Drive |
@@ -141,7 +143,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 **Real in this MVP**
 
-- `getUserMedia` capture when the browser allows it. **Spin length** on Event setup is 10s (default), 15s, or 20s. **High** quality (default) requests 1920×1080 at ~8 Mbps; **Standard** is 1280×720 at ~4 Mbps. MediaRecorder prefers mp4/h264, else vp9/vp8 webm.
+- `getUserMedia` capture when the browser allows it. **Spin length** on Event setup is 10s (default), 15s, or 20s. **High** quality (default) requests 1920×1080 at ~8 Mbps; **Standard** is 1280×720 at ~4 Mbps. MediaRecorder prefers **mp4/H.264** (and AAC when mixing audio), else VP9/VP8 WebM.
 - Fallback to a live canvas demo scene, then a bundled `/demo/spin.mp4` if recording fails
 - IndexedDB persistence for events, clip metadata, and video blobs (`idb`)
 - Guest QR (public origin + `/s/[clipId]`) via `qrcode.react`
@@ -204,7 +206,7 @@ Event setup picks a bed. **None** is silence. Everything else is an original 16-
 
 **Song from this phone:** Event setup also has **Use song from this phone** (`accept="audio/*"`, mp3/m4a/wav/aac/ogg as the browser allows, max 18 MB). The file stays in IndexedDB on this device (`customMusicBlobId` + display name) and wins over the bed until **Clear custom song**. It is not uploaded to Vercel Blob or Google Drive as a standalone file — only mixed into the exported video when the bake path succeeds. **You are responsible for having the rights to play and share any song you pick.**
 
-**Export mix (best-effort):** Download / Share decode the WAV or the stored custom file with Web Audio, loop it onto a `MediaStreamDestination`, and record it with the canvas video (`webm` + Opus when `MediaRecorder` supports it). Chrome/Android usually produce a file you can hear in Photos. Some browsers (notably iOS Safari, or mp4-only recorders) drop the audio track — then the downloaded file is video-only and the **web player still plays the looping bed or custom song on the booth**. Guest phones only hear a custom song if the mix landed in the file. Drive guest links pass `?m=` so bundled-bed overlay works even without Blob metadata; `?a=1` means the uploaded file already has audio (skip a second overlay on the Drive iframe).
+**Export mix (best-effort):** Download / Share decode the WAV or the stored custom file with Web Audio, loop it onto a `MediaStreamDestination`, and record it with the canvas video. The recorder **prefers MP4 / H.264 + AAC**, then WebM + Opus. Chrome/Android usually produce a file Photos can play; Drive preview needs MP4. Some browsers (notably iOS Safari, or mp4-only recorders) drop the audio track — then the downloaded file is video-only and the **web player still plays the looping bed or custom song on the booth**. Guest phones only hear a custom song if the mix landed in the file. Drive guest links pass `?m=` so bundled-bed overlay works even without Blob metadata; `?a=1` means the uploaded file already has audio (skip a second overlay on the Drive iframe).
 
 Regenerate assets with `npm run music:generate`.
 
@@ -219,7 +221,7 @@ Regenerate assets with `npm run music:generate`.
 
 The app asks the browser for 1080p (`facingMode: environment`) and falls back to 720p, then any camera. If `getCapabilities()` reports more than 1080p, capture still **caps at 1080p** — browser `getUserMedia` cannot use the full Fold sensor, and 4K would balloon bake time and cloud size.
 
-Prefer `video/mp4` + H.264 when `MediaRecorder.isTypeSupported`; otherwise VP9/VP8 WebM.
+Prefer `video/mp4` + H.264 (and AAC when a music bed is mixed) when `MediaRecorder.isTypeSupported`; otherwise VP9/VP8 WebM. That order applies to capture **and** bake so Google Drive preview is not stuck on WebM.
 
 **Files vs Vercel Hobby Blob (1 GB):** a baked high-quality slow-mo clip is often tens of MB. A busy night can fill a 1 GB store; use Google Drive for lots of 1080p clips, or Standard quality, or a paid Blob quota.
 

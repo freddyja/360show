@@ -11,6 +11,7 @@ import {
   type BlobAccess,
 } from "@/lib/share/access";
 import { cloudShareFrom, shareVideoPath, type CloudShare, type ShareConfig } from "@/lib/share/types";
+import { contentTypeForVideoBlob } from "@/lib/capture/quality";
 
 type PersistMetaResponse = { ok?: boolean; stored?: string; warning?: string; error?: string };
 
@@ -55,9 +56,8 @@ export async function fetchCloudShare(clipId: string): Promise<CloudShare | null
 }
 
 export async function fileForUpload(clip: Clip, localBlob: Blob | null): Promise<{ file: File; contentType: string } | null> {
-  const normalize = (type: string) => (type.includes("mp4") ? "video/mp4" : "video/webm");
   if (localBlob && localBlob.size > 500) {
-    const contentType = normalize(localBlob.type || "video/webm");
+    const contentType = await contentTypeForVideoBlob(localBlob, localBlob.type);
     const ext = contentType.includes("mp4") ? "mp4" : "webm";
     return {
       file: new File([localBlob], `${clip.id}.${ext}`, { type: contentType }),

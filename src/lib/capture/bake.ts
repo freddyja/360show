@@ -2,7 +2,7 @@ import type { RampProfileId } from "../types";
 import { MUSIC_BED_CATALOG, musicBedSrc } from "../music/beds";
 import { mixMusicIntoStream } from "../music/mix";
 import { playbackRateAt, rampKeyframes } from "./ramp";
-import { createVideoRecorder, fitWithinQuality, resolveVideoQuality, type VideoQuality } from "./quality";
+import { createVideoRecorder, fitWithinQuality, resolveVideoQuality, typedVideoBlob, type VideoQuality } from "./quality";
 
 const FREEZE_HOLD_MS = 1200;
 const MAX_BAKE_MS = 120_000;
@@ -13,8 +13,9 @@ function wait(ms: number) {
 }
 
 export function bakedBlobKey(clipId: string, musicId = "none", applyRamp = true) {
+  // `__c2` invalidates music-mix caches that were WebM-first (Drive cannot preview those).
   if (applyRamp && musicId === "none") return `${clipId}__baked`;
-  return `${clipId}__baked__${applyRamp ? "sm" : "1x"}__${musicId}`;
+  return `${clipId}__baked__${applyRamp ? "sm" : "1x"}__${musicId}__c2`;
 }
 
 export function bakedBlobKeysForClip(clipId: string) {
@@ -140,7 +141,7 @@ export async function bakeTimeRamp(options: {
           reject(new Error("Bake produced an empty file"));
           return;
         }
-        resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
+        void typedVideoBlob(chunks, recorder.mimeType).then(resolve, reject);
       };
     });
 

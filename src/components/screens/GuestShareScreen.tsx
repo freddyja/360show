@@ -15,6 +15,7 @@ import { cn } from "@/lib/cn";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudShare, fetchShareConfig, publishClipToCloud, publishClipToDrive } from "@/lib/share/publish";
 import { bakeSourceForClip, ensureBakedClip, needsExportBake, extensionForBlob, triggerBlobDownload } from "@/lib/capture/ensureBaked";
+import { isWebmContainer } from "@/lib/capture/quality";
 import { hasMusicBed, musicBedById, musicBedId, musicBedSrc, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { hasCustomMusic } from "@/lib/music/custom";
 import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
@@ -192,11 +193,20 @@ export function GuestShareScreen({
           cloudShareAt: Date.now(),
         });
         if (destination === "drive") {
-          setPublishState(
-            published.warning
-              ? "Live on Google Drive · guest link uses Drive (cloud metadata not saved)"
-              : "Live on Google Drive",
-          );
+          const webm = isWebmContainer(exportBlob?.type) || isWebmContainer(published.videoContentType);
+          if (published.warning) {
+            setPublishState(
+              webm
+                ? "Live on Google Drive · guest link uses Drive (cloud metadata not saved). WebM may not preview in Drive — download or use Blob for the guest QR."
+                : "Live on Google Drive · guest link uses Drive (cloud metadata not saved)",
+            );
+          } else if (webm) {
+            setPublishState(
+              "Live on Google Drive · WebM may not preview in Drive — download or use Blob for the guest QR",
+            );
+          } else {
+            setPublishState("Live on Google Drive");
+          }
         } else {
           setPublishState("Live for guest phones");
         }
@@ -448,6 +458,14 @@ export function GuestShareScreen({
             </button>
           </div>
           <p className="py-3 text-center text-sm text-blue-300">{readyLabel}</p>
+          {!publicMode &&
+            destination === "drive" &&
+            isWebmContainer(resolvedCloud?.videoContentType) && (
+              <p className="px-4 pb-3 text-center text-xs text-amber-200/90">
+                Drive often cannot preview WebM (“still being processed”). Download the file, or use
+                Vercel Blob for the guest QR. New bakes prefer MP4 when this browser supports it.
+              </p>
+            )}
         </div>
         <QRCard url={shareUrl} accentColor={event.accentColor} />
       </div>
