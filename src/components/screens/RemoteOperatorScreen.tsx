@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Copy, Tv } from "lucide-react";
 import { FrameOverlay } from "@/components/FrameOverlay";
 import { FRAME_STYLES, getFrameStyle } from "@/lib/frames";
 import { MUSIC_BEDS, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { formatMusicBytes, validateCustomMusicFile } from "@/lib/music/custom";
+import { formatCustomMusicError } from "@/lib/music/ingest";
 import { crowdUrl } from "@/lib/crowd/channel";
 import {
   clearStoredPair,
@@ -15,6 +16,7 @@ import {
   remoteStatus,
   sendRemoteCommand,
   uploadRemoteMusic,
+  waitForRemoteMusicAck,
   writeStoredPair,
 } from "@/lib/remote/client";
 import {
@@ -41,6 +43,8 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   const [musicUploading, setMusicUploading] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [namesDraft, setNamesDraft] = useState("");
+  const musicAbort = useRef<AbortController | null>(null);
+  const musicUploadingRef = useRef(false);
 
   useEffect(() => {
     const stored = readStoredPair(eventId);
@@ -58,7 +62,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
         if (cancelled) return;
         setView(data.view);
         setPairCode(data.view.pairCode);
-        setError(null);
+        if (!musicUploadingRef.current) setError(null);
         writeStoredPair(eventId, {
           token,
           pairCode: data.view.pairCode,
@@ -81,6 +85,12 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       window.clearInterval(id);
     };
   }, [eventId, token, urlToken]);
+
+  useEffect(() => {
+    return () => {
+      musicAbort.current?.abort();
+    };
+  }, []);
 
   const snapshot = view?.snapshot;
   useEffect(() => {
@@ -134,14 +144,28 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       setError(invalid);
       return;
     }
+    musicAbort.current?.abort();
+    const ac = new AbortController();
+    musicAbort.current = ac;
+    const startedAt = Date.now();
+    const timer = window.setTimeout(() => ac.abort(), 120_000);
+    musicUploadingRef.current = true;
     setMusicUploading(true);
     setError(null);
     try {
-      const data = await uploadRemoteMusic(eventId, token, file, Boolean(snapshot?.blobConfigured));
+      const data = await uploadRemoteMusic(eventId, token, file, Boolean(snapshot?.blobConfigured), {
+        signal: ac.signal,
+      });
+      if (ac.signal.aborted) return;
+      const settled = await waitForRemoteMusicAck(eventId, token, data.commandId, {
+        signal: ac.signal,
+        timeoutMs: 45_000,
+      });
+      if (ac.signal.aborted) return;
       setView({
-        ...data.view,
+        ...settled.view,
         snapshot: {
-          ...data.view.snapshot,
+          ...settled.view.snapshot,
           hasCustomMusic: true,
           usingCustomMusic: true,
           preferBundledBed: false,
@@ -149,10 +173,32 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
         },
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send the song to the booth.");
+      if (musicAbort.current !== ac) return;
+      if (ac.signal.aborted) {
+        const timedOut = Date.now() - startedAt >= 115_000;
+        setError(
+          timedOut
+            ? "Sending the song took too long. Keep Capture open on the phone and try again."
+            : "Stopped sending the song to the booth.",
+        );
+        return;
+      }
+      setError(
+        formatCustomMusicError(err) ||
+          (err instanceof Error ? err.message : "Could not send the song to the booth."),
+      );
     } finally {
-      setMusicUploading(false);
+      window.clearTimeout(timer);
+      if (musicAbort.current === ac) {
+        musicAbort.current = null;
+        musicUploadingRef.current = false;
+        setMusicUploading(false);
+      }
     }
+  }
+
+  function onCancelLaptopSong() {
+    musicAbort.current?.abort();
   }
 
   const connection = view?.connection ?? (token ? "offline" : "waiting");
@@ -385,20 +431,31 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                   ? ` A custom file is stored on the phone (${snapshot.customMusicName}) but a bundled bed is selected.`
                   : ""}
             </p>
-            <label className="relative mt-3 flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-500/15 px-4 text-center text-sm font-medium text-white">
-              {musicUploading ? "Uploading to booth…" : "Use song from this laptop"}
-              <input
-                type="file"
-                accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
-                disabled={locked}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] ?? null;
-                  e.target.value = "";
-                  void onLaptopSong(file);
-                }}
-              />
-            </label>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label className="relative flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-500/15 px-4 text-center text-sm font-medium text-white">
+                {musicUploading ? "Uploading to booth…" : "Use song from this laptop"}
+                <input
+                  type="file"
+                  accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
+                  disabled={locked}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    e.target.value = "";
+                    void onLaptopSong(file);
+                  }}
+                />
+              </label>
+              {musicUploading && (
+                <button
+                  type="button"
+                  className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-xs text-slate-200"
+                  onClick={onCancelLaptopSong}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
             <p className="mt-2 text-xs text-slate-500">
               mp3 / m4a / wav / aac / ogg, max {formatMusicBytes(18 * 1024 * 1024)}. You cannot browse the
               phone’s library from here — pick a file on this laptop. You are responsible for the rights

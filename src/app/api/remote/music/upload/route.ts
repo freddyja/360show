@@ -12,6 +12,7 @@ import { MAX_CUSTOM_MUSIC_BYTES } from "@/lib/music/custom";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   if (!blobConfigured()) {
@@ -63,7 +64,6 @@ export async function POST(request: Request) {
           tokenPayload: JSON.stringify({ pathname, eventId }),
         };
       },
-      onUploadCompleted: async () => undefined,
     });
     return NextResponse.json(jsonResponse);
   } catch (error) {

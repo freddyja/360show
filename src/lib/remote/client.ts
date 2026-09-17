@@ -3,6 +3,7 @@
 import { upload } from "@vercel/blob/client";
 import { formatBlobWriteError, isBlobAccessMismatch, type BlobAccess } from "@/lib/share/access";
 import { validateCustomMusicFile } from "@/lib/music/custom";
+import { materializeCustomMusicFile } from "@/lib/music/ingest";
 import { normalizeMusicBedLabel, type MusicBedLabel } from "@/lib/music/beds";
 import type { AppSettings, CaptureDurationSec, CloudDestination, FrameStyleId, VideoQuality } from "@/lib/types";
 import type {
@@ -161,56 +162,134 @@ export async function sendRemoteCommand(
   return parseJson<{ ok: boolean; commandId: string; view: RemotePublicView }>(res);
 }
 
+function abortSending() {
+  const err = new Error("Stopped sending the song to the booth.");
+  err.name = "AbortError";
+  return err;
+}
+
+async function postRemoteMusicFile(eventId: string, token: string, file: File, signal?: AbortSignal) {
+  const form = new FormData();
+  form.set("eventId", eventId);
+  form.set("token", token);
+  form.set("file", file);
+  const res = await fetch("/api/remote/music", { method: "POST", body: form, signal });
+  return parseJson<{ ok: boolean }>(res);
+}
+
+async function uploadRemoteMusicViaBlobClient(
+  eventId: string,
+  token: string,
+  file: File,
+  signal?: AbortSignal,
+) {
+  const pathname = remoteMusicPath(eventId, file.name);
+  const order: BlobAccess[] = ["public", "private"];
+  let lastError: unknown;
+  for (const access of order) {
+    try {
+      await upload(pathname, file, {
+        access,
+        handleUploadUrl: "/api/remote/music/upload",
+        clientPayload: JSON.stringify({ eventId, token }),
+        multipart: false,
+        abortSignal: signal,
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (signal?.aborted) throw abortSending();
+      if (!isBlobAccessMismatch(error)) {
+        throw new Error(
+          formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed"),
+        );
+      }
+    }
+  }
+  throw new Error(formatBlobWriteError(lastError) || "Could not upload the song.");
+}
+
 export async function uploadRemoteMusic(
   eventId: string,
   token: string,
   file: File,
   blobConfigured: boolean,
+  options?: { signal?: AbortSignal },
 ) {
   const invalid = validateCustomMusicFile(file);
   if (invalid) throw new Error(invalid);
 
-  if (blobConfigured) {
-    const pathname = remoteMusicPath(eventId, file.name);
-    const order: BlobAccess[] = ["public", "private"];
-    let lastError: unknown;
-    let uploaded = false;
-    for (const access of order) {
-      try {
-        await upload(pathname, file, {
-          access,
-          handleUploadUrl: "/api/remote/music/upload",
-          clientPayload: JSON.stringify({ eventId, token }),
-          multipart: true,
-        });
-        uploaded = true;
-        break;
-      } catch (error) {
-        lastError = error;
-        if (!isBlobAccessMismatch(error)) {
-          throw new Error(
-            formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed"),
-          );
-        }
-      }
-    }
-    if (!uploaded) {
-      throw new Error(formatBlobWriteError(lastError) || "Could not upload the song.");
-    }
-  } else {
-    const form = new FormData();
-    form.set("eventId", eventId);
-    form.set("token", token);
-    form.set("file", file);
-    const res = await fetch("/api/remote/music", { method: "POST", body: form });
-    await parseJson<{ ok: boolean }>(res);
+  const local = await materializeCustomMusicFile(file, { signal: options?.signal });
+  if (options?.signal?.aborted) throw abortSending();
+
+  // Always POST through /api/remote/music so the booth GET can read the same object.
+  // Client Blob uploads with onUploadCompleted can hang forever waiting for a webhook.
+  try {
+    await postRemoteMusicFile(eventId, token, local, options?.signal);
+  } catch (error) {
+    if (options?.signal?.aborted) throw abortSending();
+    const message = error instanceof Error ? error.message : "";
+    const tooLarge = /413|too large|payload/i.test(message);
+    if (!blobConfigured || !tooLarge) throw error;
+    await uploadRemoteMusicViaBlobClient(eventId, token, local, options?.signal);
   }
 
   return sendRemoteCommand(eventId, token, "setCustomMusic", {
-    fileName: file.name,
-    contentType: file.type || "application/octet-stream",
-    size: file.size,
+    fileName: local.name,
+    contentType: local.type || "application/octet-stream",
+    size: local.size,
   });
+}
+
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortSending());
+      return;
+    }
+    const timer = window.setTimeout(resolve, ms);
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      reject(abortSending());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** Poll until Capture acks this command, or time out so the laptop spinner cannot stick. */
+export async function waitForRemoteMusicAck(
+  eventId: string,
+  token: string,
+  commandId: string,
+  options?: { signal?: AbortSignal; timeoutMs?: number },
+) {
+  const timeoutMs = options?.timeoutMs ?? 45_000;
+  const started = Date.now();
+  let lastError: unknown;
+  while (Date.now() - started < timeoutMs) {
+    if (options?.signal?.aborted) throw abortSending();
+    try {
+      const data = await remoteStatus(eventId, token);
+      const ack = data.view.lastAck;
+      if (ack?.commandId === commandId) {
+        if (!ack.ok) throw new Error(ack.message || "The booth could not load that song.");
+        return { ack, view: data.view };
+      }
+      lastError = null;
+    } catch (error) {
+      if (options?.signal?.aborted) throw abortSending();
+      if (error instanceof Error && error.message.includes("booth could not load")) throw error;
+      lastError = error;
+    }
+    await sleep(REMOTE_POLL_MS, options?.signal);
+  }
+  const err = new Error(
+    lastError instanceof Error
+      ? lastError.message
+      : "The booth did not confirm the song. Keep Capture open on the phone and try again.",
+  );
+  err.name = "TimeoutError";
+  throw err;
 }
 
 export function snapshotFromBooth(

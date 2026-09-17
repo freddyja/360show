@@ -13,6 +13,7 @@ import { isEventId } from "@/lib/remote/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   if (!remoteStoreReady()) {
@@ -28,7 +29,15 @@ export async function GET(request: Request) {
   if (!session || !sessionIsLive(session) || !tokenMatches(session, token)) {
     return NextResponse.json({ error: "Pair token expired or invalid." }, { status: 401 });
   }
-  const music = await readRemoteMusic(eventId);
+  const music = await Promise.race([
+    readRemoteMusic(eventId),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("timeout")), 25_000);
+    }),
+  ]).catch(() => "timeout" as const);
+  if (music === "timeout") {
+    return NextResponse.json({ error: "Timed out reading the laptop song." }, { status: 504 });
+  }
   if (!music) {
     return NextResponse.json({ error: "No laptop song is waiting on this pair." }, { status: 404 });
   }

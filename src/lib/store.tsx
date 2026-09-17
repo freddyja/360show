@@ -13,6 +13,12 @@ import { sampleEvent } from "./seed";
 import type { AppSettings, BoothEvent, Clip } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
 import { customMusicBlobId } from "./music/custom";
+import {
+  formatCustomMusicError,
+  isMaterializedCustomMusic,
+  isQuotaExceededError,
+  materializeCustomMusicFile,
+} from "./music/ingest";
 import { forgetCustomMusicSrc } from "./music/resolve";
 
 interface BoothStore {
@@ -94,7 +100,24 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
       let next = event;
       if (music && "file" in music) {
         const blobId = customMusicBlobId(event.id);
-        await db.putNamedBlob(blobId, music.file);
+        const local = isMaterializedCustomMusic(music.file)
+          ? music.file
+          : await materializeCustomMusicFile(music.file);
+        try {
+          await db.putNamedBlob(blobId, local);
+        } catch (error) {
+          if (isQuotaExceededError(error) && event.customMusicBlobId && event.customMusicBlobId !== blobId) {
+            forgetCustomMusicSrc(event.customMusicBlobId);
+            await db.deleteNamedBlob(event.customMusicBlobId);
+            try {
+              await db.putNamedBlob(blobId, local);
+            } catch (retryError) {
+              throw new Error(formatCustomMusicError(retryError));
+            }
+          } else {
+            throw new Error(formatCustomMusicError(error));
+          }
+        }
         if (event.customMusicBlobId && event.customMusicBlobId !== blobId) {
           forgetCustomMusicSrc(event.customMusicBlobId);
           await db.deleteNamedBlob(event.customMusicBlobId);
@@ -102,7 +125,8 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
         next = {
           ...event,
           customMusicBlobId: blobId,
-          customMusicName: music.file.name,
+          customMusicName: local.name,
+          preferBundledBed: false,
         };
       } else if (music && "clear" in music) {
         if (event.customMusicBlobId) {

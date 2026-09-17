@@ -16,6 +16,7 @@ import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/captu
 import { bakeSourceForClip, ensureBakedClip, needsExportBake } from "@/lib/capture/ensureBaked";
 import { hasMusicBed, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { usesCustomMusic, musicCaption } from "@/lib/music/custom";
+import { formatCustomMusicError, materializeCustomMusicFile } from "@/lib/music/ingest";
 import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
 import { resolveEventMusic, useEventMusicSrc } from "@/lib/music/resolve";
 import { createStubMotor, probeCamera, type CameraStatus } from "@/lib/hardware";
@@ -281,6 +282,31 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     }
   }, []);
 
+  const flushRemoteAcks = useCallback(async () => {
+    const token = remoteTokenRef.current;
+    const current = eventRef.current;
+    if (!token || !current) return;
+    const acks = pendingAcksRef.current.slice();
+    if (!acks.length) return;
+    try {
+      const result = await heartbeatRemote({
+        eventId,
+        token,
+        boothArmed: true,
+        boothPhase: phaseRef.current,
+        boothStatus: boothStatusForPhase(phaseRef.current, messageRef.current),
+        lastClipId: latestClipRef.current?.id ?? null,
+        snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current),
+        acks,
+      });
+      const remaining = new Set((result.pendingCommands || []).map((item) => item.id));
+      if (result.pendingCommand?.id) remaining.add(result.pendingCommand.id);
+      pendingAcksRef.current = pendingAcksRef.current.filter((item) => remaining.has(item.commandId));
+    } catch {
+      // The next heartbeat interval retries.
+    }
+  }, [boothSnapshot, eventId]);
+
   const applyRemoteCommand = useCallback(
     async (cmd: PendingRemoteCommand) => {
       const ack = (ok: boolean, message: string) => {
@@ -309,28 +335,57 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             return;
           }
           setMessage("Loading song from laptop…");
-          const res = await fetch(
-            `/api/remote/music?eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}`,
-          );
-          if (!res.ok) {
-            const data = (await res.json().catch(() => ({}))) as { error?: string };
-            ack(false, data.error || "Could not download the laptop song");
-            return;
+          const ac = new AbortController();
+          const timer = window.setTimeout(() => ac.abort(), 45_000);
+          const musicUrl = `/api/remote/music?eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}`;
+          try {
+            let res: Response | null = null;
+            let fail = "Could not download the laptop song";
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+              if (ac.signal.aborted) break;
+              res = await fetch(musicUrl, { signal: ac.signal, cache: "no-store" });
+              if (res.ok) break;
+              const data = (await res.json().catch(() => ({}))) as { error?: string };
+              fail = data.error || fail;
+              if (res.status !== 404 && res.status !== 503 && res.status !== 504) break;
+              await new Promise((resolve) => window.setTimeout(resolve, 600));
+              res = null;
+            }
+            if (!res?.ok) {
+              setMessage(fail);
+              ack(false, fail);
+              return;
+            }
+            const blob = await res.blob();
+            const raw = new File([blob], fileName, {
+              type: cmd.payload?.contentType || blob.type || "application/octet-stream",
+            });
+            const file = await materializeCustomMusicFile(raw, { signal: ac.signal });
+            window.clearTimeout(timer);
+            const next = { ...current, preferBundledBed: false, updatedAt: Date.now() };
+            await saveEvent(next, true, { file });
+            eventRef.current = {
+              ...next,
+              preferBundledBed: false,
+              customMusicName: file.name,
+              customMusicBlobId: current.customMusicBlobId || "pending",
+            };
+            setMessage(`Laptop song ready: ${file.name}`);
+            ack(true, `Playing ${file.name} on the booth`);
+          } catch (error) {
+            const fail = formatCustomMusicError(
+              ac.signal.aborted
+                ? Object.assign(new Error("The laptop song took too long to land on this phone."), {
+                    name: "TimeoutError",
+                  })
+                : error,
+            );
+            setMessage(fail);
+            ack(false, fail);
+          } finally {
+            window.clearTimeout(timer);
+            void flushRemoteAcks();
           }
-          const blob = await res.blob();
-          const file = new File([blob], fileName, {
-            type: cmd.payload?.contentType || blob.type || "application/octet-stream",
-          });
-          const next = { ...current, preferBundledBed: false, updatedAt: Date.now() };
-          await saveEvent(next, true, { file });
-          eventRef.current = {
-            ...next,
-            preferBundledBed: false,
-            customMusicName: file.name,
-            customMusicBlobId: current.customMusicBlobId || "pending",
-          };
-          setMessage(`Laptop song ready: ${file.name}`);
-          ack(true, `Playing ${file.name} on the booth`);
           return;
         }
         if (cmd.type === "setSpinLength") {
@@ -459,7 +514,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         ack(false, error instanceof Error ? error.message : "Command failed on booth");
       }
     },
-    [eventId, refreshCloudFlags, saveEvent, saveSettings],
+    [eventId, flushRemoteAcks, refreshCloudFlags, saveEvent, saveSettings],
   );
 
   useEffect(() => {
