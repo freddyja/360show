@@ -105,23 +105,7 @@ export function GuestShareScreen({
 
   useEffect(() => {
     if (publicMode || !ready || !localClip || !localEvent || !config) return;
-    if (settings.forceOffline) {
-      setPublishState("Offline — clip stays on this tablet");
-      return;
-    }
-    if (destination === "blob" && !config.blobConfigured) {
-      setPublishState("Local-only share — add BLOB_READ_WRITE_TOKEN to upload for guest phones");
-      return;
-    }
-    if (destination === "drive" && !config.driveConfigured) {
-      setPublishState("Google Drive is not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET");
-      return;
-    }
-    if (destination === "drive" && !config.driveConnected) {
-      setPublishState("Connect Google Drive in Settings, then open Share again");
-      return;
-    }
-    const publishKey = `${clipId}:${destination}:${operatorSlowMo ? "slowmo" : "1x"}:${musicBedId(localEvent.musicBedLabel)}:${localEvent.customMusicBlobId || "bed"}`;
+    const publishKey = `${clipId}:${destination}:${operatorSlowMo ? "slowmo" : "1x"}:${musicBedId(localEvent.musicBedLabel)}:${localEvent.customMusicBlobId || "bed"}:${localEvent.frameStyle}`;
     if (publishOnce.current === publishKey) return;
     publishOnce.current = publishKey;
     let cancelled = false;
@@ -134,8 +118,20 @@ export function GuestShareScreen({
         let mixedAudio = false;
         const music = await resolveEventMusic(eventToPublish);
         const musicBedLabel = hasCustomMusic(eventToPublish) ? "None" : eventToPublish.musicBedLabel;
-        if (needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, hasCustomMusic(eventToPublish), eventToPublish.frameStyle)) {
-          setPublishState(operatorSlowMo ? "Baking export…" : hasCustomMusic(eventToPublish) || hasMusicBed(eventToPublish.musicBedLabel) ? "Mixing music…" : "Burning frame…");
+        const shouldBake = needsExportBake(
+          operatorSlowMo,
+          eventToPublish.musicBedLabel,
+          hasCustomMusic(eventToPublish),
+          eventToPublish.frameStyle,
+        );
+        if (shouldBake) {
+          setPublishState(
+            operatorSlowMo
+              ? "Baking export…"
+              : hasCustomMusic(eventToPublish) || hasMusicBed(eventToPublish.musicBedLabel)
+                ? "Mixing music…"
+                : "Burning frame…",
+          );
           const baked = await ensureBakedClip({
             clip: clipToPublish,
             source: bakeSourceForClip(clipToPublish, sourceBlob),
@@ -163,6 +159,31 @@ export function GuestShareScreen({
           mixedAudio = baked.mixedAudio;
         }
         if (cancelled) return;
+        if (shouldBake) {
+          await patchClip(clipToPublish.id, {
+            hasBakedBlob: true,
+            bakedAt: Date.now(),
+            hasMixedAudio: mixedAudio,
+          });
+        }
+
+        if (settings.forceOffline) {
+          setPublishState("Offline — clip stays on this tablet");
+          return;
+        }
+        if (destination === "blob" && !config.blobConfigured) {
+          setPublishState("Local-only share — add BLOB_READ_WRITE_TOKEN to upload for guest phones");
+          return;
+        }
+        if (destination === "drive" && !config.driveConfigured) {
+          setPublishState("Google Drive is not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET");
+          return;
+        }
+        if (destination === "drive" && !config.driveConnected) {
+          setPublishState("Connect Google Drive in Settings, then open Share again");
+          return;
+        }
+
         setPublishState(destination === "drive" ? "Uploading to Google Drive…" : "Uploading to guest cloud…");
         const existing = await fetchCloudShare(clipToPublish.id);
         const published =
@@ -245,6 +266,7 @@ export function GuestShareScreen({
     localEvent?.id,
     localEvent?.musicBedLabel,
     localEvent?.customMusicBlobId,
+    localEvent?.frameStyle,
     config,
     settings.forceOffline,
     settings.driveFolderName,
