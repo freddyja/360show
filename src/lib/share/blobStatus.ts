@@ -74,7 +74,7 @@ export function noteBlobFailure(error: unknown) {
         tokenPresent: false,
         usable: false,
         reason: "no-token",
-        message: "Blob is not configured on this deploy.",
+        message: "Vercel Blob is not available on this deploy.",
       },
     });
     return;
@@ -115,7 +115,7 @@ async function probeStore(): Promise<BlobAvailability> {
       tokenPresent: false,
       usable: false,
       reason: "no-token",
-      message: "Blob is not configured on this deploy.",
+      message: "Vercel Blob is not available on this deploy.",
     };
   }
 
