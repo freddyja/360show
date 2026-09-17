@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { blobConfigured } from "@/lib/share/server";
 import { serverPublicOrigin } from "@/lib/share/origin";
 import {
   createPairSession,
   publicViewNow,
   remoteStoreReady,
+  resolveRemoteStoreMode,
   storeUnavailableMessage,
 } from "@/lib/remote/store";
 import { isEventId, type RemoteEventSnapshot } from "@/lib/remote/types";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (!remoteStoreReady()) {
+  if (!(await remoteStoreReady())) {
     return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
   }
 
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       pairCode: session.pairCode,
       remoteUrl,
       expiresAt: session.expiresAt,
-      store: blobConfigured() ? "blob" : "memory",
+      store: await resolveRemoteStoreMode(),
       view: await publicViewNow(session, null),
     });
   } catch (error) {

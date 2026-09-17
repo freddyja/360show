@@ -1,7 +1,8 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
-import { formatBlobWriteError } from "@/lib/share/access";
-import { blobConfigured } from "@/lib/share/server";
+import { BLOB_STORE_UNAVAILABLE_MESSAGE, formatBlobWriteError, isBlobUnusableError } from "@/lib/share/access";
+import { getBlobAvailability } from "@/lib/share/server";
+import { noteBlobFailure } from "@/lib/share/blobStatus";
 import { isClipId } from "@/lib/share/types";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +13,10 @@ function isAllowedVideoPath(pathname: string) {
 }
 
 export async function POST(request: Request) {
-  if (!blobConfigured()) {
+  const blob = await getBlobAvailability();
+  if (!blob.usable) {
     return NextResponse.json(
-      { error: "Blob storage is not configured. Set BLOB_READ_WRITE_TOKEN." },
+      { error: blob.message || BLOB_STORE_UNAVAILABLE_MESSAGE },
       { status: 503 },
     );
   }
@@ -48,9 +50,10 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(jsonResponse);
   } catch (error) {
+    noteBlobFailure(error);
     return NextResponse.json(
       { error: formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed") },
-      { status: 400 },
+      { status: isBlobUnusableError(error) ? 503 : 400 },
     );
   }
 }

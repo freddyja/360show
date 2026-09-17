@@ -178,8 +178,14 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
       <section className="booth-card mt-10 max-w-2xl rounded-3xl border p-5">
         <h2 className="text-lg font-medium text-white">Cloud destination</h2>
         <p className="mt-1 text-sm text-slate-400">
-          Where Share uploads guest clips. Preview always stays on this tablet.
+          Where Share uploads guest clips. Preview and Download always stay on this tablet.
         </p>
+        {config && !config.blobConfigured && (
+          <p className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            Vercel Blob guest share is paused until the store is available again (about 17 Oct 2026).
+            Use Download on this tablet, or Google Drive if you connect it below.
+          </p>
+        )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <button
@@ -196,7 +202,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
             <span>
               <span className="block text-white">Vercel Blob</span>
               <span className="mt-1 block text-sm text-slate-400">
-                Default. Public or private Blob store. Needs BLOB_READ_WRITE_TOKEN.
+                Guest QR uploads when Blob is healthy. Paused while the store is suspended.
               </span>
             </span>
           </button>
@@ -226,7 +232,8 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
               ? config.blobAccess
                 ? `Blob token is set (${config.blobAccess} store). Share uploads clips to Vercel Blob.`
                 : "Blob token is set. Share will upload clips to Vercel Blob."
-              : "Blob is not configured on this deploy. Local preview still works; guest phones need a token or Drive."}
+              : config?.blobUnavailableReason ||
+                "Vercel Blob is paused on this deploy. Capture, local download, and songs on this phone still work. Guest cloud share via Blob and laptop remote wait until Blob is back."}
           </p>
         )}
 

@@ -1,9 +1,11 @@
-import { BlobAccessError, list, put } from "@vercel/blob";
+import { BlobAccessError, BlobNotFoundError, get, put } from "@vercel/blob";
 import {
   formatBlobWriteError,
   isBlobAccessMismatch as isMismatchMessage,
+  isBlobUnusableError,
   type BlobAccess,
 } from "@/lib/share/access";
+import { blobCircuitOpen, noteBlobFailure } from "@/lib/share/blobStatus";
 
 export {
   blobFileProxyPath,
@@ -31,16 +33,18 @@ function isMismatch(error: unknown) {
   return error instanceof BlobAccessError || isMismatchMessage(error);
 }
 
-function accessFromBlobUrl(url: string | undefined): BlobAccess | null {
-  if (!url) return null;
-  if (url.includes(".private.")) return "private";
-  if (url.includes(".public.")) return "public";
-  return null;
+function isNotFound(error: unknown) {
+  return error instanceof BlobNotFoundError || (error instanceof Error && error.name === "BlobNotFoundError");
+}
+
+function accessOrder(preferred: BlobAccess | null): BlobAccess[] {
+  return preferred === "private" ? ["private", "public"] : ["public", "private"];
 }
 
 /**
  * Resolve the access mode the connected Blob store accepts.
- * Prefer BLOB_ACCESS; otherwise infer from existing objects, then probe public then private.
+ * Prefer BLOB_ACCESS, then an in-process cache, then a tiny put probe.
+ * Does not call Blob `list` (Hobby Advanced Ops).
  */
 export async function resolveBlobAccess(): Promise<BlobAccess> {
   const fromEnv = blobAccessFromEnv();
@@ -49,24 +53,13 @@ export async function resolveBlobAccess(): Promise<BlobAccess> {
     return fromEnv;
   }
   if (cachedAccess) return cachedAccess;
-
-  try {
-    const { blobs } = await list({ limit: 8 });
-    for (const item of blobs) {
-      const inferred = accessFromBlobUrl(item.url);
-      if (inferred) {
-        cachedAccess = inferred;
-        return inferred;
-      }
-    }
-  } catch {
-    // Empty or unlistable store — probe with a tiny put.
+  if (blobCircuitOpen()) {
+    throw new Error(formatBlobWriteError(new Error("This store has been suspended.")));
   }
 
   const body = JSON.stringify({ probedAt: Date.now() });
-  const attempts: BlobAccess[] = ["public", "private"];
   let lastError: unknown;
-  for (const access of attempts) {
+  for (const access of accessOrder(null)) {
     try {
       await put(PROBE_PATH, body, {
         access,
@@ -78,7 +71,8 @@ export async function resolveBlobAccess(): Promise<BlobAccess> {
       return access;
     } catch (error) {
       lastError = error;
-      if (!isMismatch(error)) throw error;
+      noteBlobFailure(error);
+      if (isBlobUnusableError(error) || !isMismatch(error)) throw error;
     }
   }
 
@@ -88,15 +82,39 @@ export async function resolveBlobAccess(): Promise<BlobAccess> {
   );
 }
 
+export async function getWithStoreAccess(pathname: string) {
+  if (blobCircuitOpen()) return null;
+  const preferred = blobAccessFromEnv() || cachedAccess;
+  let lastError: unknown;
+  for (const access of accessOrder(preferred)) {
+    try {
+      const result = await get(pathname, { access });
+      if (!result || result.statusCode !== 200) continue;
+      rememberBlobAccess(access);
+      return result;
+    } catch (error) {
+      lastError = error;
+      if (isNotFound(error)) return null;
+      noteBlobFailure(error);
+      if (isBlobUnusableError(error) || blobCircuitOpen()) return null;
+      if (!isMismatch(error)) break;
+    }
+  }
+  if (lastError && isBlobUnusableError(lastError)) return null;
+  return null;
+}
+
 export async function putWithStoreAccess(
   pathname: string,
   body: string | Buffer | Blob,
   extra: { contentType?: string } = {},
 ) {
+  if (blobCircuitOpen()) {
+    throw new Error(formatBlobWriteError(new Error("This store has been suspended.")));
+  }
   const preferred = await resolveBlobAccess().catch(() => blobAccessFromEnv() || cachedAccess || "public");
-  const order: BlobAccess[] = preferred === "private" ? ["private", "public"] : ["public", "private"];
   let lastError: unknown;
-  for (const access of order) {
+  for (const access of accessOrder(preferred)) {
     try {
       const blob = await put(pathname, body, {
         access,
@@ -108,7 +126,8 @@ export async function putWithStoreAccess(
       return { blob, access };
     } catch (error) {
       lastError = error;
-      if (!isMismatch(error)) throw error;
+      noteBlobFailure(error);
+      if (isBlobUnusableError(error) || !isMismatch(error)) throw error;
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatBlobWriteError(lastError));

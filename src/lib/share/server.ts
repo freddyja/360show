@@ -1,17 +1,15 @@
-import { get, list } from "@vercel/blob";
+import { BLOB_CLOUD_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import type { CloudShare } from "@/lib/share/types";
-import { isClipId, isFrameStyleId, shareMetaPath } from "@/lib/share/types";
+import { isClipId, isFrameStyleId, shareMetaPath, shareVideoPath } from "@/lib/share/types";
 import {
   blobFileProxyPath,
+  getWithStoreAccess,
   isPrivateBlobUrl,
   putWithStoreAccess,
-  resolveBlobAccess,
-  type BlobAccess,
 } from "@/lib/share/blobAccess";
+import { blobCircuitOpen, blobConfigured, noteBlobFailure } from "@/lib/share/blobStatus";
 
-export function blobConfigured() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
-}
+export { blobConfigured, blobTokenPresent, blobUsable, getBlobAvailability } from "@/lib/share/blobStatus";
 
 function hydrateShare(data: CloudShare): CloudShare | null {
   if (!data?.clipId || !data.videoUrl || !isFrameStyleId(data.frameStyle)) return null;
@@ -30,62 +28,59 @@ async function parseShareStream(stream: ReadableStream<Uint8Array> | null): Prom
 
 export async function readCloudShare(clipId: string): Promise<CloudShare | null> {
   if (!blobConfigured() || !isClipId(clipId)) return null;
-  const pathname = shareMetaPath(clipId);
-
   try {
-    const { blobs } = await list({ prefix: `shares/${clipId}/`, limit: 20 });
-    const meta = blobs.find((item) => item.pathname === pathname || item.pathname.endsWith("/meta.json"));
-    if (!meta) return null;
-
-    const listedUrl = meta.url || "";
-    if (listedUrl.includes(".private.")) {
-      const result = await get(meta.pathname || pathname, { access: "private" });
-      if (!result || result.statusCode !== 200) return null;
-      return parseShareStream(result.stream);
-    }
-
-    const res = await fetch(meta.url, { cache: "no-store" });
-    if (res.ok) {
-      const data = (await res.json()) as CloudShare;
-      return hydrateShare(data);
-    }
-
-    const result = await get(meta.pathname || pathname, { access: "private" });
+    const result = await getWithStoreAccess(shareMetaPath(clipId));
     if (!result || result.statusCode !== 200) return null;
     return parseShareStream(result.stream);
-  } catch {
-    try {
-      const access = await resolveBlobAccess();
-      const result = await get(pathname, { access });
-      if (!result || result.statusCode !== 200) return null;
-      return parseShareStream(result.stream);
-    } catch {
-      return null;
-    }
+  } catch (error) {
+    noteBlobFailure(error);
+    if (blobCircuitOpen()) return null;
+    return null;
   }
 }
 
 export async function writeCloudShare(share: CloudShare) {
+  if (!blobConfigured()) {
+    throw new Error(BLOB_CLOUD_UNAVAILABLE_MESSAGE);
+  }
   const payload: CloudShare = isPrivateBlobUrl(share.videoUrl)
     ? { ...share, videoUrl: blobFileProxyPath(share.clipId) }
     : share;
-  return putWithStoreAccess(shareMetaPath(share.clipId), JSON.stringify(payload), {
-    contentType: "application/json",
-  });
+  try {
+    return await putWithStoreAccess(shareMetaPath(share.clipId), JSON.stringify(payload), {
+      contentType: "application/json",
+    });
+  } catch (error) {
+    noteBlobFailure(error);
+    throw error;
+  }
 }
+
+const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"] as const;
 
 export async function readShareVideo(clipId: string) {
   if (!blobConfigured() || !isClipId(clipId)) return null;
-  const { blobs } = await list({ prefix: `shares/${clipId}/`, limit: 20 });
-  const video = blobs.find((item) => /\/(video|export)\.(webm|mp4|mov)$/i.test(item.pathname));
-  if (!video) return null;
-  const access: BlobAccess = video.url.includes(".private.") ? "private" : "public";
-  const result = await get(video.pathname, { access });
-  if (!result || result.statusCode !== 200 || !result.stream) return null;
-  return {
-    stream: result.stream,
-    contentType: result.blob.contentType || "video/webm",
-    size: result.blob.size,
-    contentDisposition: result.blob.contentDisposition || "inline",
-  };
+  try {
+    const meta = await readCloudShare(clipId);
+    const paths = [
+      meta?.videoContentType ? shareVideoPath(clipId, meta.videoContentType) : null,
+      ...VIDEO_TYPES.map((type) => shareVideoPath(clipId, type)),
+      `shares/${clipId}/video.webm`,
+    ].filter((path, index, list): path is string => Boolean(path) && list.indexOf(path) === index);
+
+    for (const pathname of paths) {
+      const result = await getWithStoreAccess(pathname);
+      if (!result || result.statusCode !== 200 || !result.stream) continue;
+      return {
+        stream: result.stream,
+        contentType: result.blob.contentType || meta?.videoContentType || "video/webm",
+        size: result.blob.size,
+        contentDisposition: result.blob.contentDisposition || "inline",
+      };
+    }
+    return null;
+  } catch (error) {
+    noteBlobFailure(error);
+    return null;
+  }
 }

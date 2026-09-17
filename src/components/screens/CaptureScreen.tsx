@@ -29,6 +29,7 @@ import { COUNTDOWN_SECONDS, DEMO_ASSET_PATH, captureDurationMs, resolveCaptureDu
 import type { Clip } from "@/lib/types";
 import { useClipSrc } from "@/lib/useClipSrc";
 import { fetchShareConfig } from "@/lib/share/publish";
+import { REMOTE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import {
   clearStoredPair,
   disableRemote,
@@ -77,6 +78,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const [remotePair, setRemotePair] = useState<StoredRemotePair | null>(null);
   const [remoteView, setRemoteView] = useState<RemotePublicView | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [remoteAvailable, setRemoteAvailable] = useState(false);
+  const [remoteUnavailableReason, setRemoteUnavailableReason] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const motor = useMemo(() => createStubMotor(), []);
   const lastSrc = useClipSrc(latestClip?.id, latestClip?.demoAssetPath);
@@ -100,6 +103,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const runSpinRef = useRef<() => Promise<void>>(async () => undefined);
   const cloudFlagsRef = useRef<RemoteCloudFlags>({
     blobConfigured: false,
+    remoteMusicAvailable: false,
     driveConfigured: false,
     driveConnected: false,
   });
@@ -136,10 +140,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
 
   useEffect(() => {
     const stored = readStoredPair(eventId);
-    if (stored?.token) {
-      setRemotePair(stored);
-      setRemoteEnabled(true);
-    }
+    if (stored?.token) setRemotePair(stored);
   }, [eventId]);
 
   const bakeExportInBackground = useCallback(
@@ -274,11 +275,25 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       }
       cloudFlagsRef.current = {
         blobConfigured: Boolean(config.blobConfigured),
+        remoteMusicAvailable: Boolean(config.remoteMusicAvailable),
         driveConfigured: Boolean(config.driveConfigured),
         driveConnected,
       };
+      const available = config.remoteAvailable === true;
+      const reason = available ? null : config.remoteUnavailableReason || REMOTE_UNAVAILABLE_MESSAGE;
+      setRemoteAvailable(available);
+      setRemoteUnavailableReason(reason);
+      if (!available) {
+        setRemoteEnabled(false);
+        setRemoteView(null);
+      }
+      return { available, reason };
     } catch {
-      // snapshot still has settings; cloud flags stay previous
+      setRemoteAvailable(false);
+      setRemoteUnavailableReason(REMOTE_UNAVAILABLE_MESSAGE);
+      setRemoteEnabled(false);
+      setRemoteView(null);
+      return { available: false, reason: REMOTE_UNAVAILABLE_MESSAGE };
     }
   }, []);
 
@@ -518,8 +533,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   );
 
   useEffect(() => {
-    if (!remoteEnabled) return;
     void refreshCloudFlags();
+    if (!remoteEnabled) return;
     const id = window.setInterval(() => void refreshCloudFlags(), 15_000);
     return () => window.clearInterval(id);
   }, [refreshCloudFlags, remoteEnabled]);
@@ -586,11 +601,21 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     };
   }, [applyRemoteCommand, boothSnapshot, event, eventId, remoteEnabled, remotePair]);
 
+  useEffect(() => {
+    if (!remoteAvailable) return;
+    if (remotePair?.token) setRemoteEnabled(true);
+  }, [remoteAvailable, remotePair]);
+
   async function onEnableRemote() {
     if (!event) return;
     setRemoteError(null);
     try {
-      await refreshCloudFlags();
+      const next = await refreshCloudFlags();
+      if (!next.available) {
+        setRemoteError(next.reason || REMOTE_UNAVAILABLE_MESSAGE);
+        setRemoteEnabled(false);
+        return;
+      }
       const data = await pairRemote(event.id, snapshotFromBooth(event, settings, cloudFlagsRef.current));
       setRemotePair({ token: data.token, pairCode: data.pairCode, remoteUrl: data.remoteUrl });
       setRemoteView(data.view);
@@ -646,6 +671,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             view={remoteView}
             error={remoteError}
             busy={busy}
+            available={remoteAvailable}
+            unavailableReason={remoteUnavailableReason}
             onEnable={() => void onEnableRemote()}
             onDisable={() => void onDisableRemote()}
           />

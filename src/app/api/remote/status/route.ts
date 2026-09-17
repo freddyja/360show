@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!remoteStoreReady()) {
+  if (!(await remoteStoreReady())) {
     return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
   }
 

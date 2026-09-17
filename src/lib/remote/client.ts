@@ -1,7 +1,7 @@
 "use client";
 
 import { upload } from "@vercel/blob/client";
-import { formatBlobWriteError, isBlobAccessMismatch, type BlobAccess } from "@/lib/share/access";
+import { formatBlobWriteError, isBlobAccessMismatch, isBlobUnusableError, type BlobAccess } from "@/lib/share/access";
 import { validateCustomMusicFile } from "@/lib/music/custom";
 import { materializeCustomMusicFile } from "@/lib/music/ingest";
 import { normalizeMusicBedLabel, type MusicBedLabel } from "@/lib/music/beds";
@@ -25,6 +25,7 @@ export interface StoredRemotePair {
 
 export interface RemoteCloudFlags {
   blobConfigured: boolean;
+  remoteMusicAvailable: boolean;
   driveConfigured: boolean;
   driveConnected: boolean;
 }
@@ -199,6 +200,11 @@ async function uploadRemoteMusicViaBlobClient(
     } catch (error) {
       lastError = error;
       if (signal?.aborted) throw abortSending();
+      if (isBlobUnusableError(error)) {
+        throw new Error(
+          "Laptop song upload needs Vercel Blob, which is temporarily unavailable. Pick a song on the booth phone in Event setup.",
+        );
+      }
       if (!isBlobAccessMismatch(error)) {
         throw new Error(
           formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed"),
@@ -305,7 +311,7 @@ export function snapshotFromBooth(
     frameStyle: string;
   },
   settings: Pick<AppSettings, "slowMoEnabled" | "videoQuality" | "boothMusicMuted" | "cloudDestination" | "driveFolderName">,
-  cloud: RemoteCloudFlags = { blobConfigured: false, driveConfigured: false, driveConnected: false },
+  cloud: RemoteCloudFlags = { blobConfigured: false, remoteMusicAvailable: false, driveConfigured: false, driveConnected: false },
 ): RemoteEventSnapshot {
   const hasCustom = Boolean(event.customMusicBlobId);
   const prefer = Boolean(event.preferBundledBed);
@@ -328,6 +334,7 @@ export function snapshotFromBooth(
     driveConnected: cloud.driveConnected,
     driveConfigured: cloud.driveConfigured,
     blobConfigured: cloud.blobConfigured,
+    remoteMusicAvailable: Boolean(cloud.remoteMusicAvailable),
   };
 }
 

@@ -37,10 +37,18 @@ export interface CloudShare {
 
 export interface ShareConfig {
   origin: string;
+  /** True only when the Blob store is actually usable (token + health). */
   blobConfigured: boolean;
+  /** Env token is set, even if the store is suspended. */
+  blobTokenPresent?: boolean;
+  blobUnavailableReason?: string | null;
   /** Detected or configured Blob store access. Null when Blob is unset or detection failed. */
   blobAccess?: "public" | "private" | null;
   blobAccessError?: string | null;
+  remoteAvailable?: boolean;
+  remoteStore?: "blob" | "cache" | "memory" | "none";
+  remoteUnavailableReason?: string | null;
+  remoteMusicAvailable?: boolean;
   driveConfigured: boolean;
   driveConnected: boolean;
   driveEmail: string | null;

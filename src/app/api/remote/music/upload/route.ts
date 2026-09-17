@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { formatBlobWriteError } from "@/lib/share/access";
-import { blobConfigured } from "@/lib/share/server";
 import {
+  musicUnavailableMessage,
   readSession,
+  remoteMusicAvailable,
   sessionIsLive,
   tokenMatches,
 } from "@/lib/remote/store";
@@ -15,11 +16,8 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  if (!blobConfigured()) {
-    return NextResponse.json(
-      { error: "Use POST /api/remote/music for local uploads when Blob is not configured." },
-      { status: 503 },
-    );
+  if (!(await remoteMusicAvailable())) {
+    return NextResponse.json({ error: musicUnavailableMessage() }, { status: 503 });
   }
 
   const body = (await request.json()) as HandleUploadBody;

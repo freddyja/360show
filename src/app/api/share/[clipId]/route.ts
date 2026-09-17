@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { blobConfigured, readCloudShare, writeCloudShare } from "@/lib/share/server";
-import { formatBlobWriteError } from "@/lib/share/access";
+import { blobUsable, getBlobAvailability, readCloudShare, writeCloudShare } from "@/lib/share/server";
+import { BLOB_STORE_UNAVAILABLE_MESSAGE, formatBlobWriteError } from "@/lib/share/access";
 import { isClipId, isFrameStyleId, type CloudShare } from "@/lib/share/types";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cli
   if (!isClipId(clipId)) {
     return NextResponse.json({ error: "Invalid clip id" }, { status: 400 });
   }
-  if (blobConfigured()) {
+  if (await blobUsable()) {
     try {
       const share = await readCloudShare(clipId);
       if (share) return NextResponse.json(share);
@@ -43,7 +43,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ clip
     return NextResponse.json({ error: "Invalid share payload" }, { status: 400 });
   }
 
-  if (blobConfigured()) {
+  const blob = await getBlobAvailability();
+  if (blob.usable) {
     try {
       await writeCloudShare(body);
       return NextResponse.json({ ok: true, clipId, stored: "blob" });
@@ -66,7 +67,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ clip
   }
 
   return NextResponse.json(
-    { error: "Blob storage is not configured. Set BLOB_READ_WRITE_TOKEN." },
+    { error: blob.message || BLOB_STORE_UNAVAILABLE_MESSAGE },
     { status: 503 },
   );
 }

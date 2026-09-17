@@ -17,15 +17,36 @@ Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample
 2. Tap **START SPIN**. Capture length is **10, 15, or 20 seconds** (Event setup → Spin length, default 10s). Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
 3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files. If the event has a music bed (not None), it loops under spin / preview / share and is mixed into the export when the browser can record audio. The selected **look-pack frame** is composited into that same baked file.
 4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), booth music mute, force-offline chip, and mock battery %. **Open crowd / TV screen** (Capture or Event) opens a full-bleed room display you can cast.
-5. **Remote operator:** on the booth phone keep Capture open → **Enable remote control** → scan the QR (or open `/e/[eventId]/remote`) on a laptop. The laptop START SPINs and changes look / booth settings over HTTPS. See [Remote operator](#remote-operator).
+5. **Remote operator:** on the booth phone keep Capture open → **Enable remote control** → scan the QR (or open `/e/[eventId]/remote`) on a laptop. The laptop START SPINs and changes look / booth settings over HTTPS. See [Remote operator](#remote-operator). **Paused in production while Vercel Blob is unavailable** (current Hobby store is suspended until about **2026-10-17**). Use the booth phone for capture, look, and songs until then.
 
-Local demo works **without** Blob or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
+Local demo works **without** Blob or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until Blob is healthy or Drive is connected. Custom songs picked on the phone stay in IndexedDB — no cloud upload.
 
 Add to Home Screen from the tablet browser for a PWA-like standalone shell (`display: standalone` in the web manifest).
 
 ## Guest QR / cloud storage (production)
 
-Clips are captured into IndexedDB on the operator tablet. Guest phones on the venue Wi‑Fi still need a **public HTTPS origin** plus **cloud storage**. In **Settings → Cloud destination** pick **Vercel Blob** (default) or **Google Drive**. A LAN IP or a static deploy without storage is not enough.
+Clips are captured into IndexedDB on the operator tablet. Guest phones on the venue Wi‑Fi still need a **public HTTPS origin** plus **cloud storage**. In **Settings → Cloud destination** pick **Vercel Blob** (when the store is healthy) or **Google Drive**. A LAN IP or a static deploy without storage is not enough.
+
+### Blob-free mode (until ~2026-10-17)
+
+The connected Hobby Blob store (`360show-blob` / `store_QGVEYIOJLDEadPj8`) is **suspended** on Advanced Ops until about **17 Oct 2026**. Hobby cannot create a replacement store while usage is over the threshold. This app ships **without Blob** — no R2, no Pro upgrade.
+
+A set `BLOB_READ_WRITE_TOKEN` is **not** enough. If the store is suspended, missing, or otherwise unusable, the app treats Blob as unavailable (cached `head` health check + circuit breaker). It does not hang, retry in a loop, or surface raw SDK errors.
+
+**Works now (no Blob required)**
+
+- Event setup, Capture, START SPIN, frames, bake / preview on the Fold
+- Custom song picked **on the phone** (IndexedDB) — no cloud upload
+- Local download / save of clips on the device
+- Optional Google Drive guest share if you connect it in Settings
+
+**Paused until Blob is healthy again**
+
+- Enable remote control / laptop remote operator (pair, remote START SPIN, laptop song upload)
+- Guest **cloud** share that depends on Blob
+- Any Blob `list()` / heartbeat polling (the app does not call `list` at all)
+
+When the store unsuspends (~2026-10-17), reconnect the existing token if needed. Remote + Blob guest share turn back on from health checks. Do **not** create another Blob store for this.
 
 ### Environment
 
@@ -33,7 +54,8 @@ Copy `.env.example` to `.env.local` (never commit tokens):
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `BLOB_READ_WRITE_TOKEN` | For Blob sharing **and** remote operator in production | Vercel Blob read-write token. Create a Blob store in the Vercel project **Storage** tab. Include the **Development** environment if you want local uploads. Remote operator stores a short-lived session JSON at `remote/{eventId}/session.json`. |
+| `BLOB_READ_WRITE_TOKEN` | Optional (Blob guest share + production laptop remote) | Token for a **healthy** Blob store. If this still points at the suspended `360show-blob` store, the app detects that and keeps the booth working locally. Laptop remote and Blob guest share stay paused until the store is usable again. |
+
 | `BLOB_ACCESS` | Optional | `public` or `private`. Must match the store. New Vercel Blob stores are often **private**; `put(..., { access: "public" })` against a private store fails. If unset, the app detects the mode. |
 | `NEXT_PUBLIC_APP_URL` | Recommended in production | Public site origin used in QR, copy-link, and SMS, e.g. `https://your-app.vercel.app` (no trailing slash). |
 | `GOOGLE_CLIENT_ID` | For Drive sharing | OAuth 2.0 Web client ID from Google Cloud Console. |
@@ -49,24 +71,37 @@ On Vercel, if `NEXT_PUBLIC_APP_URL` is unset, share links fall back to `https://
 1. Push `main` (or this branch `cursor/snap360-operator-mvp-8fb6`) to GitHub.
 2. In [Vercel](https://vercel.com) → **Add New Project** → import `freddyja/360show`.
 3. Framework preset: Next.js. Build command `npm run build`, output as default.
-4. **Storage** → Create Blob store → connect it to this project (Production + Preview; Development optional). This injects `BLOB_READ_WRITE_TOKEN`. If the store is **private** (the current Vercel default), set `BLOB_ACCESS=private` or leave it unset so the app can detect it. Public stores work with `BLOB_ACCESS=public` (or detection).
+4. **Storage** is optional while Blob is suspended. Do **not** create a new Hobby Blob store (Hobby is over the usage threshold). If a healthy Blob token exists later, connect it for Production + Preview. If the store is **private** (Vercel default), set `BLOB_ACCESS=private` or leave it unset so a tiny put probe can detect it. Public stores work with `BLOB_ACCESS=public`.
 5. Set `NEXT_PUBLIC_APP_URL` to the production domain (Project → Settings → Environment Variables).
 6. Deploy. Open the booth on the tablet **at that HTTPS URL**, capture a spin, tap **Share** — wait until the status reads “Live for guest phones” (Blob) or “Live on Google Drive”, then guests scan the QR.
 
-Without storage credentials, Share shows **Local-only share** (Blob) or asks you to connect Drive. `/s/[clipId]` on another device returns “clip not available” until an upload succeeds.
+Without storage credentials **or while Blob is suspended**, Share shows **Local-only share** (Blob destination) or asks you to connect Drive. Download / Save to gallery still work on the booth. `/s/[clipId]` on another device returns “clip not available” until an upload succeeds (Drive still works if connected). Laptop **Enable remote control** stays off in production until Blob is usable.
 
 ### Vercel Blob (default)
 
 Opening operator Share **bakes the time-ramp**, then uploads with `@vercel/blob` **client upload** (files can exceed the 4.5 MB Function body limit) to `shares/{clipId}/export.*`, then writes `shares/{clipId}/meta.json`. `/s/[clipId]` loads IndexedDB when present, otherwise `GET /api/share/[clipId]`.
 
-Writes use the store’s access mode (`public` or `private`):
+**The current Hobby store is suspended until about 2026-10-17.** Token presence is not enough: a health `head` plus a circuit breaker treat a suspended or missing store as unavailable. The booth keeps working locally. Do not create a replacement Hobby store for this.
 
-- Optional env `BLOB_ACCESS=public|private`. If unset, the server infers from existing blobs, then probes public then private.
+Writes use the store’s access mode (`public` or `private`) when Blob is healthy:
+
+- Optional env `BLOB_ACCESS=public|private`. If unset, the server probes with a tiny `put` (not `list`).
 - A **private** store rejects `access: "public"`. That used to surface as **Could not save share metadata** on Share.
 - Private objects are not guest-fetchable by CDN URL. The app rewrites playback to `/api/share/[clipId]/file`, which streams with the server token.
 - If a Blob write still fails, the API returns the underlying Blob error string in JSON so the operator UI can show it.
 
-The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch the cloud clip get the baked file.
+If the Blob store is **suspended** (Hobby Advanced Ops / limits), Share does not retry uploads in a loop. Status becomes a single line: cloud share is temporarily unavailable; **Download still works on this tablet**. Capture, frames, bake, phone custom songs, and local download keep working.
+
+#### Hobby Advanced Ops (2k/month)
+
+Hobby Blob **Advanced Ops** (`list`, `copy`, …) are what suspended the old store. This app avoids them:
+
+- Remote session / commands / operator pings use **Vercel Runtime Cache** (JSON only) **when Blob is healthy**, not Blob `list`/`put` every heartbeat. Production remote is **off** while Blob is unusable.
+- Share and music reads use `get` on known paths (`shares/{clipId}/meta.json`, `export.*`, `remote/{eventId}/music.*`).
+- Access mode is `BLOB_ACCESS` or a one-time `put` probe — no `list` of the bucket.
+- Blob health is a cached `head` (simple op, 15 min TTL) plus a circuit breaker on suspension errors.
+
+Laptop **song upload** and guest video `put` are Simple Ops. Do not add periodic `list` polling.
 
 ### Google Drive
 
@@ -218,7 +253,15 @@ A laptop (or second browser) controls the **booth phone** over the public HTTPS 
 4. Laptop **START SPIN** runs countdown + record **on the phone**. Spin length, frame, bundled music bed, **song from this laptop**, names, accent, slow-mo, quality, mute, and Blob vs Drive apply on the booth for the next spin (and on Capture chrome immediately).
 5. Keep Capture open while remote is armed. Navigating away or **Disable remote** takes the laptop offline. Sessions expire after about 4 hours; Enable remote again to rotate the token.
 
-Production needs the same **Vercel Blob** token as guest Share (`BLOB_READ_WRITE_TOKEN`). Sessions are JSON at `remote/{eventId}/session.json` plus a pending command blob. Local `npm run dev` without Blob uses an in-memory channel in that Node process (two browsers on localhost work; a second machine will not).
+Production remote pairing needs a **working Blob store**. JSON session/commands then use **Vercel Runtime Cache** (shared across serverless instances in a region) so heartbeats do not `list`/`put` on Blob — those Advanced Ops are what suspend Hobby stores.
+
+While Blob is unavailable (current Hobby suspension until ~2026-10-17):
+
+- **Enable remote control** is disabled on Capture with a calm reason. Pair, remote START SPIN, and laptop song upload stay off.
+- The laptop `/remote` page shows that remote is paused instead of retrying.
+- Pick songs on the **booth phone** (IndexedDB). Laptop song upload stays hidden.
+
+Local `npm run dev` without Blob can still use an in-memory channel in that Node process (two browsers on localhost work; a second machine will not).
 
 ### What the laptop can change
 
@@ -228,7 +271,7 @@ Production needs the same **Vercel Blob** token as guest Share (`BLOB_READ_WRITE
 | Spin length 10 / 15 / 20s | Event `captureDurationSec` |
 | Frame style (all look-packs) | Event `frameStyle` (+ pack default accent when set) |
 | Music bed / None | Event `musicBedLabel`. `preferBundledBed` makes the bed win over a stored custom file |
-| Song from this laptop | Uploads over the pair channel (Blob in production, in-memory in local `next dev`) into booth IndexedDB custom music |
+| Song from this laptop | Uploads over the pair channel into booth IndexedDB custom music. **Paused while Vercel Blob is unavailable** — pick the song on the phone instead. |
 | Event name, couple names, accent | Event record |
 | Slow-mo, video quality, mute booth music | App settings on the phone |
 | Cloud destination Blob vs Drive (+ Drive folder name) | App settings. **Connect Google Drive** still runs on the phone (OAuth cookies) |

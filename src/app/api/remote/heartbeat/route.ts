@@ -23,7 +23,7 @@ export const runtime = "nodejs";
 const PHASES: RemoteBoothPhase[] = ["idle", "countdown", "recording", "processing"];
 
 export async function POST(request: Request) {
-  if (!remoteStoreReady()) {
+  if (!(await remoteStoreReady())) {
     return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
   }
 

@@ -4,9 +4,13 @@ import { upload } from "@vercel/blob/client";
 import { uploadClipToDrive } from "@/lib/drive/uploadClient";
 import { DEMO_ASSET_PATH, type BoothEvent, type Clip } from "@/lib/types";
 import {
+  BLOB_CLOUD_UNAVAILABLE_MESSAGE,
+  BLOB_STORE_UNAVAILABLE_MESSAGE,
+  REMOTE_UNAVAILABLE_MESSAGE,
   blobFileProxyPath,
   formatBlobWriteError,
   isBlobAccessMismatch,
+  isBlobUnusableError,
   isPrivateBlobUrl,
   type BlobAccess,
 } from "@/lib/share/access";
@@ -24,35 +28,62 @@ function driveShareComplete(payload: CloudShare) {
 }
 
 export async function fetchShareConfig(): Promise<ShareConfig> {
-  const res = await fetch("/api/share/config", { cache: "no-store" });
-  if (!res.ok) {
+  try {
+    const res = await fetch("/api/share/config", { cache: "no-store", signal: AbortSignal.timeout(8_000) });
+    if (!res.ok) {
+      return emptyShareConfig();
+    }
+    const data = (await res.json()) as Partial<ShareConfig>;
     return {
-      origin: window.location.origin,
-      blobConfigured: false,
-      blobAccess: null,
-      blobAccessError: null,
-      driveConfigured: false,
-      driveConnected: false,
-      driveEmail: null,
+      origin: data.origin || window.location.origin,
+      blobConfigured: Boolean(data.blobConfigured),
+      blobTokenPresent: Boolean(data.blobTokenPresent),
+      blobUnavailableReason: data.blobUnavailableReason ?? null,
+      blobAccess: data.blobAccess === "private" || data.blobAccess === "public" ? data.blobAccess : null,
+      blobAccessError: data.blobAccessError ?? null,
+      remoteAvailable: data.remoteAvailable,
+      remoteStore: data.remoteStore,
+      remoteUnavailableReason: data.remoteUnavailableReason ?? null,
+      remoteMusicAvailable: data.remoteMusicAvailable,
+      driveConfigured: Boolean(data.driveConfigured),
+      driveConnected: Boolean(data.driveConnected),
+      driveEmail: data.driveEmail ?? null,
     };
+  } catch {
+    return emptyShareConfig();
   }
-  const data = (await res.json()) as Partial<ShareConfig>;
+}
+
+function emptyShareConfig(): ShareConfig {
   return {
-    origin: data.origin || window.location.origin,
-    blobConfigured: Boolean(data.blobConfigured),
-    blobAccess: data.blobAccess === "private" || data.blobAccess === "public" ? data.blobAccess : null,
-    blobAccessError: data.blobAccessError ?? null,
-    driveConfigured: Boolean(data.driveConfigured),
-    driveConnected: Boolean(data.driveConnected),
-    driveEmail: data.driveEmail ?? null,
+    origin: typeof window !== "undefined" ? window.location.origin : "",
+    blobConfigured: false,
+    blobTokenPresent: false,
+    blobUnavailableReason: BLOB_STORE_UNAVAILABLE_MESSAGE,
+    blobAccess: null,
+    blobAccessError: null,
+    remoteAvailable: false,
+    remoteStore: "none",
+    remoteUnavailableReason: REMOTE_UNAVAILABLE_MESSAGE,
+    remoteMusicAvailable: false,
+    driveConfigured: false,
+    driveConnected: false,
+    driveEmail: null,
   };
 }
 
 export async function fetchCloudShare(clipId: string): Promise<CloudShare | null> {
-  const res = await fetch(`/api/share/${encodeURIComponent(clipId)}`, { cache: "no-store" });
-  if (res.status === 404 || res.status === 503) return null;
-  if (!res.ok) return null;
-  return (await res.json()) as CloudShare;
+  try {
+    const res = await fetch(`/api/share/${encodeURIComponent(clipId)}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (res.status === 404 || res.status === 503) return null;
+    if (!res.ok) return null;
+    return (await res.json()) as CloudShare;
+  } catch {
+    return null;
+  }
 }
 
 export async function fileForUpload(clip: Clip, localBlob: Blob | null): Promise<{ file: File; contentType: string } | null> {
@@ -117,6 +148,9 @@ async function uploadVideoToBlob(pathname: string, file: File, preferred: BlobAc
       });
     } catch (error) {
       lastError = error;
+      if (isBlobUnusableError(error)) {
+        throw new Error(BLOB_CLOUD_UNAVAILABLE_MESSAGE);
+      }
       if (!isBlobAccessMismatch(error)) {
         throw new Error(formatBlobWriteError(error));
       }

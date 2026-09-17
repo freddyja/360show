@@ -27,6 +27,8 @@ import {
   type RemoteEventSnapshot,
   type RemotePublicView,
 } from "@/lib/remote/types";
+import { fetchShareConfig } from "@/lib/share/publish";
+import { REMOTE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import { CAPTURE_DURATION_SECS } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
@@ -43,6 +45,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   const [musicUploading, setMusicUploading] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [namesDraft, setNamesDraft] = useState("");
+  const [remotePaused, setRemotePaused] = useState<string | null>(null);
   const musicAbort = useRef<AbortController | null>(null);
   const musicUploadingRef = useRef(false);
 
@@ -54,28 +57,46 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   }, [eventId, urlToken]);
 
   useEffect(() => {
-    if (!token) return;
+    let cancelled = false;
+    void fetchShareConfig().then((config) => {
+      if (cancelled) return;
+      if (config.remoteAvailable === false) {
+        setRemotePaused(config.remoteUnavailableReason || REMOTE_UNAVAILABLE_MESSAGE);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (remotePaused || !token) return;
+    const pairToken = token;
     let cancelled = false;
     async function poll() {
       try {
-        const data = await remoteStatus(eventId, token);
+        const data = await remoteStatus(eventId, pairToken);
         if (cancelled) return;
         setView(data.view);
         setPairCode(data.view.pairCode);
         if (!musicUploadingRef.current) setError(null);
         writeStoredPair(eventId, {
-          token,
+          token: pairToken,
           pairCode: data.view.pairCode,
-          remoteUrl: `${window.location.origin}/e/${eventId}/remote?k=${encodeURIComponent(token)}`,
+          remoteUrl: `${window.location.origin}/e/${eventId}/remote?k=${encodeURIComponent(pairToken)}`,
         });
         if (!urlToken && typeof window !== "undefined") {
-          const next = `${window.location.pathname}?k=${encodeURIComponent(token)}`;
+          const next = `${window.location.pathname}?k=${encodeURIComponent(pairToken)}`;
           window.history.replaceState(null, "", next);
         }
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not reach the booth.");
+        const message = err instanceof Error ? err.message : "Could not reach the booth.";
+        setError(message);
         setView(null);
+        if (message === REMOTE_UNAVAILABLE_MESSAGE) {
+          setRemotePaused(message);
+        }
       }
     }
     void poll();
@@ -84,7 +105,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [eventId, token, urlToken]);
+  }, [eventId, token, urlToken, remotePaused]);
 
   useEffect(() => {
     return () => {
@@ -108,7 +129,9 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       setPairCode(data.pairCode);
       setView(data.view);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not pair.");
+      const message = err instanceof Error ? err.message : "Could not pair.";
+      setError(message);
+      if (message === REMOTE_UNAVAILABLE_MESSAGE) setRemotePaused(message);
     }
   }
 
@@ -215,6 +238,22 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     }
     return view.boothStatus || boothStatusForPhase(view.boothPhase);
   }, [view, token]);
+
+  if (remotePaused && !view) {
+    return (
+      <div className="booth-page min-h-dvh p-4 sm:p-8">
+        <div className="booth-frame mx-auto max-w-xl rounded-[28px] p-6 sm:p-10">
+          <p className="text-xs uppercase tracking-[0.25em] text-cyan-200">Remote operator</p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">Laptop remote is paused</h1>
+          <p className="mt-3 text-slate-300">{remotePaused}</p>
+          <p className="mt-3 text-sm text-slate-400">
+            Capture, look, frames, and custom songs stay on the booth phone. Guest cloud share via
+            Blob is paused too. This page will work again when Vercel Blob is back.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!token) {
     return (
@@ -431,36 +470,45 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                   ? ` A custom file is stored on the phone (${snapshot.customMusicName}) but a bundled bed is selected.`
                   : ""}
             </p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-500/15 px-4 text-center text-sm font-medium text-white">
-                {musicUploading ? "Uploading to booth…" : "Use song from this laptop"}
-                <input
-                  type="file"
-                  accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
-                  disabled={locked}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    e.target.value = "";
-                    void onLaptopSong(file);
-                  }}
-                />
-              </label>
-              {musicUploading && (
-                <button
-                  type="button"
-                  className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-xs text-slate-200"
-                  onClick={onCancelLaptopSong}
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              mp3 / m4a / wav / aac / ogg, max {formatMusicBytes(18 * 1024 * 1024)}. You cannot browse the
-              phone’s library from here — pick a file on this laptop. You are responsible for the rights
-              to play it.
-            </p>
+            {snapshot?.remoteMusicAvailable === false ? (
+              <p className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                Laptop song upload is paused while Vercel Blob is unavailable. Pick a song on the booth
+                phone in Event setup instead.
+              </p>
+            ) : (
+              <>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <label className="relative flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-500/15 px-4 text-center text-sm font-medium text-white">
+                    {musicUploading ? "Uploading to booth…" : "Use song from this laptop"}
+                    <input
+                      type="file"
+                      accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
+                      disabled={locked}
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        e.target.value = "";
+                        void onLaptopSong(file);
+                      }}
+                    />
+                  </label>
+                  {musicUploading && (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-xs text-slate-200"
+                      onClick={onCancelLaptopSong}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  mp3 / m4a / wav / aac / ogg, max {formatMusicBytes(18 * 1024 * 1024)}. You cannot browse the
+                  phone’s library from here — pick a file on this laptop. You are responsible for the rights
+                  to play it.
+                </p>
+              </>
+            )}
           </div>
 
           <div className="mt-5">
@@ -584,7 +632,9 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               >
                 <span className="block text-white">Vercel Blob</span>
                 <span className="mt-1 block text-sm text-slate-400">
-                  {snapshot?.blobConfigured ? "Token is set on this deploy." : "Needs BLOB_READ_WRITE_TOKEN on Vercel."}
+                  {snapshot?.blobConfigured
+                    ? "Guest QR uploads work on this deploy."
+                    : "Temporarily unavailable — use Drive or local download."}
                 </span>
               </button>
               <button

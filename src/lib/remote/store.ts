@@ -1,8 +1,19 @@
 import { timingSafeEqual } from "crypto";
-import { del, get, list } from "@vercel/blob";
+import { del } from "@vercel/blob";
+import { getWithStoreAccess, putWithStoreAccess } from "@/lib/share/blobAccess";
 import { blobConfigured } from "@/lib/share/server";
-import { putWithStoreAccess, resolveBlobAccess } from "@/lib/share/blobAccess";
+import { blobCircuitOpen, blobUsable, noteBlobFailure } from "@/lib/share/blobStatus";
+import { REMOTE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import { createId } from "@/lib/ids";
+import {
+  cacheCommandKey,
+  cacheDeleteKey,
+  cacheGetJson,
+  cacheOperatorKey,
+  cacheSessionKey,
+  cacheSetJson,
+  runtimeCacheReady,
+} from "./cacheBackend";
 import {
   REMOTE_COMMAND_TTL_MS,
   REMOTE_SESSION_TTL_MS,
@@ -42,14 +53,54 @@ function memoryMap() {
   return memory.__360showRemote;
 }
 
-export function remoteStoreReady() {
-  return blobConfigured() || process.env.NODE_ENV !== "production";
+export type RemoteStoreMode = "blob" | "cache" | "memory" | "none";
+
+const MODE_TTL_MS = 30_000;
+const gMode = globalThis as unknown as { __360showRemoteMode?: { at: number; mode: RemoteStoreMode } };
+
+export async function resolveRemoteStoreMode(): Promise<RemoteStoreMode> {
+  const cached = gMode.__360showRemoteMode;
+  if (cached && Date.now() - cached.at < MODE_TTL_MS) {
+    if ((cached.mode === "blob" || cached.mode === "cache") && blobCircuitOpen()) {
+      // Store just proved unusable — do not keep serving a pairing channel.
+    } else {
+      return cached.mode;
+    }
+  }
+  let mode: RemoteStoreMode = "none";
+  // Production remote stays off unless Blob is actually usable. Runtime Cache is
+  // only the JSON backend *after* that (avoids Blob list/put heartbeats).
+  if (await blobUsable()) {
+    mode = (await runtimeCacheReady()) ? "cache" : "blob";
+  } else if (process.env.NODE_ENV !== "production") {
+    mode = "memory";
+  }
+  gMode.__360showRemoteMode = { at: Date.now(), mode };
+  return mode;
 }
 
-export function remoteStoreMode(): "blob" | "memory" | "none" {
-  if (blobConfigured()) return "blob";
-  if (process.env.NODE_ENV !== "production") return "memory";
-  return "none";
+export async function remoteStoreReady() {
+  return (await resolveRemoteStoreMode()) !== "none";
+}
+
+/** @deprecated Use resolveRemoteStoreMode(); kept as an alias. */
+export async function remoteStoreMode() {
+  return resolveRemoteStoreMode();
+}
+
+export async function remoteMusicAvailable() {
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "none") return false;
+  if (mode === "memory") return true;
+  return blobUsable();
+}
+
+export function storeUnavailableMessage() {
+  return REMOTE_UNAVAILABLE_MESSAGE;
+}
+
+export function musicUnavailableMessage() {
+  return "Laptop song upload needs a working Vercel Blob store. Pick a song on the booth phone in Event setup.";
 }
 
 function randomPairCode() {
@@ -76,32 +127,22 @@ export function safeEqual(a: string, b: string) {
 async function readJsonBlob<T>(pathname: string): Promise<T | null> {
   if (!blobConfigured()) return null;
   try {
-    const prefix = pathname.slice(0, pathname.lastIndexOf("/") + 1);
-    const { blobs } = await list({ prefix, limit: 12 });
-    const match = blobs.find((item) => item.pathname === pathname || item.pathname.endsWith(pathname.split("/").pop() || ""));
-    if (match?.url && !match.url.includes(".private.")) {
-      const res = await fetch(match.url, { cache: "no-store" });
-      if (res.ok) return (await res.json()) as T;
-    }
-    const listedPath = match?.pathname || pathname;
-    const access = match?.url?.includes(".private.") ? "private" : await resolveBlobAccess();
-    const result = await get(listedPath, { access });
+    const result = await getWithStoreAccess(pathname);
     if (!result || result.statusCode !== 200 || !result.stream) return null;
     return (await new Response(result.stream).json()) as T;
-  } catch {
-    try {
-      const access = await resolveBlobAccess();
-      const result = await get(pathname, { access });
-      if (!result || result.statusCode !== 200 || !result.stream) return null;
-      return (await new Response(result.stream).json()) as T;
-    } catch {
-      return null;
-    }
+  } catch (error) {
+    noteBlobFailure(error);
+    return null;
   }
 }
 
 async function writeJsonBlob(pathname: string, data: unknown) {
-  await putWithStoreAccess(pathname, JSON.stringify(data), { contentType: "application/json" });
+  try {
+    await putWithStoreAccess(pathname, JSON.stringify(data), { contentType: "application/json" });
+  } catch (error) {
+    noteBlobFailure(error);
+    throw error;
+  }
 }
 
 async function deleteJsonBlob(pathname: string) {
@@ -116,19 +157,32 @@ async function deleteJsonBlob(pathname: string) {
   }
 }
 
+function liveSession(data: RemoteSession | null | undefined, eventId: string): RemoteSession | null {
+  if (!data?.eventId || data.eventId !== eventId || !data.token) return null;
+  return data;
+}
+
 export async function readSession(eventId: string): Promise<RemoteSession | null> {
   if (!isEventId(eventId)) return null;
-  if (blobConfigured()) {
-    const data = await readJsonBlob<RemoteSession>(remoteSessionPath(eventId));
-    if (!data?.eventId || data.eventId !== eventId || !data.token) return null;
-    return data;
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "blob") {
+    return liveSession(await readJsonBlob<RemoteSession>(remoteSessionPath(eventId)), eventId);
   }
-  return memoryMap().get(eventId)?.session ?? null;
+  if (mode === "cache") {
+    return liveSession(await cacheGetJson<RemoteSession>(cacheSessionKey(eventId)), eventId);
+  }
+  if (mode === "memory") return memoryMap().get(eventId)?.session ?? null;
+  return null;
 }
 
 export async function writeSession(session: RemoteSession) {
-  if (blobConfigured()) {
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "blob") {
     await writeJsonBlob(remoteSessionPath(session.eventId), session);
+    return;
+  }
+  if (mode === "cache") {
+    await cacheSetJson(cacheSessionKey(session.eventId), session);
     return;
   }
   const bucket = memoryMap().get(session.eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
@@ -147,11 +201,15 @@ function commandsFromFile(data: CommandFile | null | undefined, now = Date.now()
 
 export async function readCommands(eventId: string): Promise<RemoteCommand[]> {
   if (!isEventId(eventId)) return [];
-  if (blobConfigured()) {
-    const data = await readJsonBlob<CommandFile>(remoteCommandPath(eventId));
-    return commandsFromFile(data);
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "blob") {
+    return commandsFromFile(await readJsonBlob<CommandFile>(remoteCommandPath(eventId)));
   }
-  return commandsFromFile({ commands: memoryMap().get(eventId)?.commands ?? [] });
+  if (mode === "cache") {
+    return commandsFromFile(await cacheGetJson<CommandFile>(cacheCommandKey(eventId)));
+  }
+  if (mode === "memory") return commandsFromFile({ commands: memoryMap().get(eventId)?.commands ?? [] });
+  return [];
 }
 
 export async function readCommand(eventId: string): Promise<RemoteCommand | null> {
@@ -160,12 +218,21 @@ export async function readCommand(eventId: string): Promise<RemoteCommand | null
 }
 
 async function persistCommands(eventId: string, commands: RemoteCommand[]) {
-  if (blobConfigured()) {
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "blob") {
     if (!commands.length) {
       await deleteJsonBlob(remoteCommandPath(eventId));
       return;
     }
     await writeJsonBlob(remoteCommandPath(eventId), { commands });
+    return;
+  }
+  if (mode === "cache") {
+    if (!commands.length) {
+      await cacheDeleteKey(cacheCommandKey(eventId));
+      return;
+    }
+    await cacheSetJson(cacheCommandKey(eventId), { commands });
     return;
   }
   const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
@@ -197,8 +264,13 @@ export async function removeCommands(eventId: string, ids: string[]) {
 
 export async function touchOperatorPing(eventId: string, now = Date.now()) {
   if (!isEventId(eventId)) return now;
-  if (blobConfigured()) {
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "blob") {
     await writeJsonBlob(remoteOperatorPath(eventId), { at: now });
+    return now;
+  }
+  if (mode === "cache") {
+    await cacheSetJson(cacheOperatorKey(eventId), { at: now });
     return now;
   }
   const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
@@ -209,8 +281,13 @@ export async function touchOperatorPing(eventId: string, now = Date.now()) {
 
 export async function readOperatorPing(eventId: string): Promise<number> {
   if (!isEventId(eventId)) return 0;
-  if (blobConfigured()) {
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "blob") {
     const data = await readJsonBlob<{ at?: number }>(remoteOperatorPath(eventId));
+    return typeof data?.at === "number" ? data.at : 0;
+  }
+  if (mode === "cache") {
+    const data = await cacheGetJson<{ at?: number }>(cacheOperatorKey(eventId));
     return typeof data?.at === "number" ? data.at : 0;
   }
   return memoryMap().get(eventId)?.operatorAt ?? 0;
@@ -224,11 +301,13 @@ export async function writeRemoteMusicMeta(
     await writeJsonBlob(remoteMusicMetaPath(eventId), { ...meta, uploadedAt: Date.now() });
     return;
   }
-  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
-  if (bucket.music) {
-    bucket.music = { ...bucket.music, fileName: meta.fileName, contentType: meta.contentType };
+  if ((await resolveRemoteStoreMode()) === "memory") {
+    const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
+    if (bucket.music) {
+      bucket.music = { ...bucket.music, fileName: meta.fileName, contentType: meta.contentType };
+    }
+    memoryMap().set(eventId, bucket);
   }
-  memoryMap().set(eventId, bucket);
 }
 
 export async function writeRemoteMusic(
@@ -243,22 +322,13 @@ export async function writeRemoteMusic(
     await writeRemoteMusicMeta(eventId, { ...meta, size: bytes.length });
     return;
   }
-  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
-  bucket.music = { bytes, fileName: meta.fileName, contentType: meta.contentType };
-  memoryMap().set(eventId, bucket);
-}
-
-async function streamToBuffer(stream: ReadableStream<Uint8Array> | null) {
-  if (!stream) return null;
-  const buf = Buffer.from(await new Response(stream).arrayBuffer());
-  return buf.length ? buf : null;
-}
-
-async function fetchBuffer(url: string) {
-  const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) return null;
-  const buf = Buffer.from(await res.arrayBuffer());
-  return buf.length ? buf : null;
+  if ((await resolveRemoteStoreMode()) === "memory") {
+    const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
+    bucket.music = { bytes, fileName: meta.fileName, contentType: meta.contentType };
+    memoryMap().set(eventId, bucket);
+    return;
+  }
+  throw new Error(musicUnavailableMessage());
 }
 
 export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile | null> {
@@ -268,53 +338,36 @@ export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile 
   }
 
   const meta = await readJsonBlob<{ fileName?: string; contentType?: string }>(remoteMusicMetaPath(eventId));
-  const namedPath = meta?.fileName ? remoteMusicPath(eventId, meta.fileName) : null;
+  const paths = [
+    meta?.fileName ? remoteMusicPath(eventId, meta.fileName) : null,
+    "mp3",
+    "m4a",
+    "aac",
+    "wav",
+    "ogg",
+    "flac",
+    "opus",
+    "bin",
+  ]
+    .map((item) => (item && item.includes("/") ? item : item ? remoteMusicPath(eventId, item) : null))
+    .filter((path, index, list): path is string => Boolean(path) && list.indexOf(path) === index);
 
   try {
-    const { blobs } = await list({ prefix: `remote/${eventId}/music`, limit: 12 });
-    const listed = blobs.filter((item) => /\/music\.(mp3|m4a|aac|wav|ogg|flac|opus|bin)$/i.test(item.pathname));
-    const preferred =
-      (namedPath ? listed.find((item) => item.pathname === namedPath) : null) || listed[0] || null;
-
-    if (preferred?.url && !preferred.url.includes(".private.")) {
-      const bytes = await fetchBuffer(preferred.url);
-      if (bytes) {
-        return {
-          bytes,
-          fileName: meta?.fileName || preferred.pathname.split("/").pop() || "song",
-          contentType: meta?.contentType || "application/octet-stream",
-        };
-      }
-    }
-
-    const pathname = preferred?.pathname || namedPath;
-    if (!pathname) return null;
-    const access = preferred?.url?.includes(".private.") ? "private" : await resolveBlobAccess();
-    const result = await get(pathname, { access });
-    if (!result || result.statusCode !== 200) return null;
-    const bytes = await streamToBuffer(result.stream);
-    if (!bytes) return null;
-    return {
-      bytes,
-      fileName: meta?.fileName || pathname.split("/").pop() || "song",
-      contentType: meta?.contentType || result.blob.contentType || "application/octet-stream",
-    };
-  } catch {
-    if (!namedPath) return null;
-    try {
-      const access = await resolveBlobAccess();
-      const result = await get(namedPath, { access });
-      if (!result || result.statusCode !== 200) return null;
-      const bytes = await streamToBuffer(result.stream);
-      if (!bytes) return null;
+    for (const pathname of paths) {
+      const result = await getWithStoreAccess(pathname);
+      if (!result || result.statusCode !== 200 || !result.stream) continue;
+      const bytes = Buffer.from(await new Response(result.stream).arrayBuffer());
+      if (!bytes.length) continue;
       return {
         bytes,
-        fileName: meta?.fileName || namedPath.split("/").pop() || "song",
+        fileName: meta?.fileName || pathname.split("/").pop() || "song",
         contentType: meta?.contentType || result.blob.contentType || "application/octet-stream",
       };
-    } catch {
-      return null;
     }
+    return memoryMap().get(eventId)?.music ?? null;
+  } catch (error) {
+    noteBlobFailure(error);
+    return memoryMap().get(eventId)?.music ?? null;
   }
 }
 
@@ -406,11 +459,4 @@ export function newCommandId() {
 
 export function applyAck(session: RemoteSession, ack: RemoteAck): RemoteSession {
   return { ...session, lastAck: ack };
-}
-
-export function storeUnavailableMessage() {
-  if (remoteStoreMode() === "none") {
-    return "Remote operator needs Vercel Blob on production. Set BLOB_READ_WRITE_TOKEN (same store as guest Share).";
-  }
-  return "Remote channel is not available.";
 }
