@@ -45,7 +45,12 @@ export async function mixMusicIntoStream(
 
   try {
     ctx = new AudioCtx();
-    if (ctx.state === "suspended") await ctx.resume();
+    if (ctx.state === "suspended") {
+      await Promise.race([
+        ctx.resume().catch(() => undefined),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 400)),
+      ]);
+    }
     const res = await fetch(musicSrc);
     if (!res.ok) throw new Error("Music missing");
     const raw = await res.arrayBuffer();
