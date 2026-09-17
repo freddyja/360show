@@ -92,7 +92,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   latestClipRef.current = latestClip;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
-  const pendingAckRef = useRef<{ commandId: string; ok: boolean; message: string } | null>(null);
+  const pendingAcksRef = useRef<{ commandId: string; ok: boolean; message: string }[]>([]);
   const handledCommands = useRef(new Set<string>());
   const runSpinRef = useRef<() => Promise<void>>(async () => undefined);
   const cloudFlagsRef = useRef<RemoteCloudFlags>({
@@ -281,64 +281,69 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
 
   const applyRemoteCommand = useCallback(
     async (cmd: PendingRemoteCommand) => {
+      const ack = (ok: boolean, message: string) => {
+        pendingAcksRef.current.push({ commandId: cmd.id, ok, message });
+      };
       const current = eventRef.current;
       if (!current) {
-        pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Event not loaded" };
+        ack(false, "Event not loaded");
         return;
       }
       try {
         if (cmd.type === "startSpin") {
           if (phaseRef.current !== "idle") {
-            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Booth is busy" };
+            ack(false, "Booth is busy");
             return;
           }
           await runSpinRef.current();
-          pendingAckRef.current = { commandId: cmd.id, ok: true, message: "Spin captured" };
+          ack(true, "Spin captured");
           return;
         }
         if (cmd.type === "setSpinLength") {
           const sec = cmd.payload?.captureDurationSec;
           if (!isCaptureDurationSec(sec)) {
-            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid spin length" };
+            ack(false, "Invalid spin length");
             return;
           }
-          await saveEvent({ ...current, captureDurationSec: sec, updatedAt: Date.now() });
-          pendingAckRef.current = { commandId: cmd.id, ok: true, message: `Spin length ${sec}s` };
+          const next = { ...current, captureDurationSec: sec, updatedAt: Date.now() };
+          await saveEvent(next);
+          eventRef.current = next;
+          ack(true, `Spin length ${sec}s`);
           return;
         }
         if (cmd.type === "setMusicBed") {
           const label = cmd.payload?.musicBedLabel;
           if (!isMusicBedLabel(label)) {
-            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Unknown music bed" };
+            ack(false, "Unknown music bed");
             return;
           }
-          await saveEvent({
+          const next = {
             ...current,
             musicBedLabel: normalizeMusicBedLabel(label),
             preferBundledBed: true,
             updatedAt: Date.now(),
-          });
-          pendingAckRef.current = {
-            commandId: cmd.id,
-            ok: true,
-            message: label === "None" ? "Music cleared for next spin" : `Music bed: ${label}`,
           };
+          await saveEvent(next);
+          eventRef.current = next;
+          ack(true, label === "None" ? "Music cleared for next spin" : `Music bed: ${label}`);
           return;
         }
         if (cmd.type === "setFrameStyle") {
           const id = cmd.payload?.frameStyle;
           if (typeof id !== "string" || !isFrameStyleId(id)) {
-            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Unknown frame" };
+            ack(false, "Unknown frame");
             return;
           }
           const style = getFrameStyle(id);
-          await saveEvent({
+          const next = {
             ...current,
             frameStyle: style.id,
             accentColor: style.defaultAccent || current.accentColor,
             updatedAt: Date.now(),
-          });
-          pendingAckRef.current = { commandId: cmd.id, ok: true, message: `Frame: ${style.name}` };
+          };
+          await saveEvent(next);
+          eventRef.current = next;
+          ack(true, `Frame: ${style.name}`);
           return;
         }
         if (cmd.type === "setEventBranding") {
@@ -357,80 +362,67 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             bits.push("accent");
           }
           await saveEvent(next);
-          pendingAckRef.current = {
-            commandId: cmd.id,
-            ok: true,
-            message: bits.length ? `Updated ${bits.join(", ")}` : "Branding unchanged",
-          };
+          eventRef.current = next;
+          ack(true, bits.length ? `Updated ${bits.join(", ")}` : "Branding unchanged");
           return;
         }
         if (cmd.type === "setSlowMo") {
           if (typeof cmd.payload?.slowMoEnabled !== "boolean") {
-            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid slow-mo value" };
+            ack(false, "Invalid slow-mo value");
             return;
           }
-          await saveSettings({ ...settingsRef.current, slowMoEnabled: cmd.payload.slowMoEnabled });
-          pendingAckRef.current = {
-            commandId: cmd.id,
-            ok: true,
-            message: cmd.payload.slowMoEnabled ? "Slow-mo on" : "Slow-mo off",
-          };
+          const next = { ...settingsRef.current, slowMoEnabled: cmd.payload.slowMoEnabled };
+          await saveSettings(next);
+          settingsRef.current = next;
+          ack(true, cmd.payload.slowMoEnabled ? "Slow-mo on" : "Slow-mo off");
           return;
         }
         if (cmd.type === "setVideoQuality") {
           if (!isVideoQuality(cmd.payload?.videoQuality)) {
-            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid video quality" };
+            ack(false, "Invalid video quality");
             return;
           }
-          await saveSettings({ ...settingsRef.current, videoQuality: cmd.payload.videoQuality });
-          pendingAckRef.current = {
-            commandId: cmd.id,
-            ok: true,
-            message: cmd.payload.videoQuality === "standard" ? "Quality: Standard 720p" : "Quality: High 1080p",
-          };
+          const next = { ...settingsRef.current, videoQuality: cmd.payload.videoQuality };
+          await saveSettings(next);
+          settingsRef.current = next;
+          ack(true, cmd.payload.videoQuality === "standard" ? "Quality: Standard 720p" : "Quality: High 1080p");
           return;
         }
         if (cmd.type === "setBoothMusicMuted") {
           if (typeof cmd.payload?.boothMusicMuted !== "boolean") {
-            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid mute value" };
+            ack(false, "Invalid mute value");
             return;
           }
-          await saveSettings({ ...settingsRef.current, boothMusicMuted: cmd.payload.boothMusicMuted });
-          pendingAckRef.current = {
-            commandId: cmd.id,
-            ok: true,
-            message: cmd.payload.boothMusicMuted ? "Booth music muted" : "Booth music on",
-          };
+          const next = { ...settingsRef.current, boothMusicMuted: cmd.payload.boothMusicMuted };
+          await saveSettings(next);
+          settingsRef.current = next;
+          ack(true, cmd.payload.boothMusicMuted ? "Booth music muted" : "Booth music on");
           return;
         }
         if (cmd.type === "setCloudDestination") {
           if (!isCloudDestination(cmd.payload?.cloudDestination)) {
-            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid cloud destination" };
+            ack(false, "Invalid cloud destination");
             return;
           }
-          await saveSettings({
+          const next = {
             ...settingsRef.current,
             cloudDestination: cmd.payload.cloudDestination,
             driveFolderName: cmd.payload.driveFolderName || settingsRef.current.driveFolderName,
-          });
-          await refreshCloudFlags();
-          pendingAckRef.current = {
-            commandId: cmd.id,
-            ok: true,
-            message:
-              cmd.payload.cloudDestination === "drive"
-                ? "Cloud destination: Google Drive (connect on the phone if needed)"
-                : "Cloud destination: Vercel Blob",
           };
+          await saveSettings(next);
+          settingsRef.current = next;
+          await refreshCloudFlags();
+          ack(
+            true,
+            cmd.payload.cloudDestination === "drive"
+              ? "Cloud destination: Google Drive (connect on the phone if needed)"
+              : "Cloud destination: Vercel Blob",
+          );
           return;
         }
-        pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Unknown command" };
+        ack(false, "Unknown command");
       } catch (error) {
-        pendingAckRef.current = {
-          commandId: cmd.id,
-          ok: false,
-          message: error instanceof Error ? error.message : "Command failed on booth",
-        };
+        ack(false, error instanceof Error ? error.message : "Command failed on booth");
       }
     },
     [refreshCloudFlags, saveEvent, saveSettings],
@@ -454,7 +446,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       const current = eventRef.current;
       if (!current) return;
       inFlight = true;
-      const ack = pendingAckRef.current;
+      const acks = pendingAcksRef.current.slice();
       try {
         const result = await heartbeatRemote({
           eventId,
@@ -464,16 +456,17 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           boothStatus: boothStatusForPhase(phaseRef.current, messageRef.current),
           lastClipId: latestClipRef.current?.id ?? null,
           snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current),
-          ack,
+          acks,
         });
         if (cancelled) return;
-        if (ack && result.view.lastAck?.commandId === ack.commandId) {
-          pendingAckRef.current = null;
-        }
+        const remaining = new Set((result.pendingCommands || []).map((item) => item.id));
+        if (result.pendingCommand?.id) remaining.add(result.pendingCommand.id);
+        pendingAcksRef.current = pendingAcksRef.current.filter((item) => remaining.has(item.commandId));
         setRemoteView(result.view);
         setRemoteError(null);
-        const cmd = result.pendingCommand as PendingRemoteCommand | null;
-        if (cmd?.id && !handledCommands.current.has(cmd.id)) {
+        const cmds = (result.pendingCommands || (result.pendingCommand ? [result.pendingCommand] : [])) as PendingRemoteCommand[];
+        for (const cmd of cmds) {
+          if (!cmd?.id || handledCommands.current.has(cmd.id)) continue;
           handledCommands.current.add(cmd.id);
           if (cmd.type === "startSpin") void applyRemoteCommand(cmd);
           else await applyRemoteCommand(cmd);

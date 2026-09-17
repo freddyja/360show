@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { isFrameStyleId } from "@/lib/share/types";
 import {
+  enqueueCommand,
   newCommandId,
   publicViewNow,
-  readCommand,
+  readCommands,
   readSession,
   remoteStoreReady,
   sessionIsLive,
   storeUnavailableMessage,
   tokenMatches,
   touchOperatorPing,
-  writeCommand,
 } from "@/lib/remote/store";
 import {
   clipText,
@@ -112,18 +112,26 @@ export async function POST(request: Request) {
     if (folder) command.payload.driveFolderName = folder;
   }
 
-  const existing = await readCommand(eventId);
-  if (existing?.type === "startSpin" && command.type === "startSpin") {
+  const existing = await readCommands(eventId);
+  if (existing.some((cmd) => cmd.type === "startSpin") && command.type === "startSpin") {
     return NextResponse.json({ error: "A START SPIN is already waiting on the booth." }, { status: 409 });
   }
 
   const now = Date.now();
   await touchOperatorPing(eventId, now);
-  await writeCommand(eventId, command);
+  try {
+    await enqueueCommand(eventId, command);
+  } catch (error) {
+    if (error instanceof Error && error.message === "START_SPIN_PENDING") {
+      return NextResponse.json({ error: "A START SPIN is already waiting on the booth." }, { status: 409 });
+    }
+    throw error;
+  }
+  const pending = await readCommands(eventId);
 
   return NextResponse.json({
     ok: true,
     commandId: command.id,
-    view: await publicViewNow(session, command, now),
+    view: await publicViewNow(session, pending[0] ?? null, now),
   });
 }

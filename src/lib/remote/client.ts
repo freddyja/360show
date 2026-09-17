@@ -108,6 +108,7 @@ export async function heartbeatRemote(input: {
   lastClipId?: string | null;
   snapshot: RemoteEventSnapshot;
   ack?: { commandId: string; ok: boolean; message: string } | null;
+  acks?: { commandId: string; ok: boolean; message: string }[] | null;
 }) {
   const res = await fetch("/api/remote/heartbeat", {
     method: "POST",
@@ -124,6 +125,12 @@ export async function heartbeatRemote(input: {
       createdAt: number;
       payload: RemoteCommandPayload;
     } | null;
+    pendingCommands?: {
+      id: string;
+      type: RemoteCommandType;
+      createdAt: number;
+      payload: RemoteCommandPayload;
+    }[];
   }>(res);
 }
 

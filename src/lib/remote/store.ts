@@ -22,7 +22,7 @@ const PAIR_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 type MemoryBucket = {
   session: RemoteSession | null;
-  command: RemoteCommand | null;
+  commands: RemoteCommand[];
   operatorAt: number;
 };
 
@@ -122,36 +122,68 @@ export async function writeSession(session: RemoteSession) {
     await writeJsonBlob(remoteSessionPath(session.eventId), session);
     return;
   }
-  const bucket = memoryMap().get(session.eventId) ?? { session: null, command: null, operatorAt: 0 };
+  const bucket = memoryMap().get(session.eventId) ?? { session: null, commands: [], operatorAt: 0 };
   bucket.session = session;
   memoryMap().set(session.eventId, bucket);
 }
 
-export async function readCommand(eventId: string): Promise<RemoteCommand | null> {
-  if (!isEventId(eventId)) return null;
-  let data: RemoteCommand | { empty?: boolean } | null = null;
-  if (blobConfigured()) {
-    data = await readJsonBlob<RemoteCommand | { empty?: boolean }>(remoteCommandPath(eventId));
-  } else {
-    data = memoryMap().get(eventId)?.command ?? null;
-  }
-  if (!data || "empty" in data || !("id" in data) || !data.id || !data.type) return null;
-  if (Date.now() - data.createdAt > REMOTE_COMMAND_TTL_MS) return null;
-  return data;
+type CommandFile = { commands: RemoteCommand[] } | RemoteCommand | { empty?: boolean };
+
+function commandsFromFile(data: CommandFile | null | undefined, now = Date.now()): RemoteCommand[] {
+  if (!data || typeof data !== "object") return [];
+  if ("empty" in data && data.empty) return [];
+  const list = "commands" in data && Array.isArray(data.commands) ? data.commands : "id" in data && data.id ? [data as RemoteCommand] : [];
+  return list.filter((cmd) => cmd?.id && cmd.type && now - cmd.createdAt <= REMOTE_COMMAND_TTL_MS);
 }
 
-export async function writeCommand(eventId: string, command: RemoteCommand | null) {
+export async function readCommands(eventId: string): Promise<RemoteCommand[]> {
+  if (!isEventId(eventId)) return [];
   if (blobConfigured()) {
-    if (!command) {
+    const data = await readJsonBlob<CommandFile>(remoteCommandPath(eventId));
+    return commandsFromFile(data);
+  }
+  return commandsFromFile({ commands: memoryMap().get(eventId)?.commands ?? [] });
+}
+
+export async function readCommand(eventId: string): Promise<RemoteCommand | null> {
+  const list = await readCommands(eventId);
+  return list[0] ?? null;
+}
+
+async function persistCommands(eventId: string, commands: RemoteCommand[]) {
+  if (blobConfigured()) {
+    if (!commands.length) {
       await deleteJsonBlob(remoteCommandPath(eventId));
       return;
     }
-    await writeJsonBlob(remoteCommandPath(eventId), command);
+    await writeJsonBlob(remoteCommandPath(eventId), { commands });
     return;
   }
-  const bucket = memoryMap().get(eventId) ?? { session: null, command: null, operatorAt: 0 };
-  bucket.command = command;
+  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0 };
+  bucket.commands = commands;
   memoryMap().set(eventId, bucket);
+}
+
+export async function writeCommand(eventId: string, command: RemoteCommand | null) {
+  await persistCommands(eventId, command ? [command] : []);
+}
+
+export async function enqueueCommand(eventId: string, command: RemoteCommand) {
+  const existing = await readCommands(eventId);
+  if (existing.some((cmd) => cmd.type === "startSpin") && command.type === "startSpin") {
+    throw new Error("START_SPIN_PENDING");
+  }
+  await persistCommands(eventId, [...existing, command].slice(-24));
+}
+
+export async function removeCommands(eventId: string, ids: string[]) {
+  if (!ids.length) return;
+  const idSet = new Set(ids);
+  const existing = await readCommands(eventId);
+  await persistCommands(
+    eventId,
+    existing.filter((cmd) => !idSet.has(cmd.id)),
+  );
 }
 
 export async function touchOperatorPing(eventId: string, now = Date.now()) {
@@ -160,7 +192,7 @@ export async function touchOperatorPing(eventId: string, now = Date.now()) {
     await writeJsonBlob(remoteOperatorPath(eventId), { at: now });
     return now;
   }
-  const bucket = memoryMap().get(eventId) ?? { session: null, command: null, operatorAt: 0 };
+  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0 };
   bucket.operatorAt = now;
   memoryMap().set(eventId, bucket);
   return now;

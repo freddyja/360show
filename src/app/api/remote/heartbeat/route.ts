@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import {
   publicViewNow,
-  readCommand,
+  readCommands,
   readSession,
   remoteStoreReady,
+  removeCommands,
   sessionIsLive,
   storeUnavailableMessage,
   tokenMatches,
-  writeCommand,
   writeSession,
 } from "@/lib/remote/store";
 import {
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     lastClipId?: string | null;
     snapshot?: RemoteEventSnapshot;
     ack?: { commandId: string; ok: boolean; message: string } | null;
+    acks?: { commandId: string; ok: boolean; message: string }[] | null;
   } | null;
 
   const eventId = body?.eventId?.trim() || "";
@@ -49,21 +50,29 @@ export async function POST(request: Request) {
   }
 
   const now = Date.now();
-  let pending = await readCommand(eventId);
-  let lastAck = session.lastAck;
-  if (body.ack?.commandId) {
-    const ack: RemoteAck = {
-      commandId: body.ack.commandId,
-      ok: Boolean(body.ack.ok),
-      message: String(body.ack.message || ""),
+  const acks: RemoteAck[] = [];
+  const incoming = [
+    ...(Array.isArray(body.acks) ? body.acks : []),
+    ...(body.ack?.commandId ? [body.ack] : []),
+  ];
+  for (const item of incoming) {
+    if (!item?.commandId) continue;
+    acks.push({
+      commandId: item.commandId,
+      ok: Boolean(item.ok),
+      message: String(item.message || ""),
       at: now,
-    };
-    if (pending?.id === body.ack.commandId) {
-      pending = null;
-      await writeCommand(eventId, null);
-    }
-    lastAck = ack;
+    });
   }
+  if (acks.length) {
+    await removeCommands(
+      eventId,
+      acks.map((item) => item.commandId),
+    );
+  }
+
+  const pendingList = await readCommands(eventId);
+  const lastAck = acks[acks.length - 1] ?? session.lastAck;
 
   const phase = PHASES.includes(body.boothPhase as RemoteBoothPhase) ? (body.boothPhase as RemoteBoothPhase) : session.boothPhase;
   const next = {
@@ -80,7 +89,8 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    view: await publicViewNow(next, pending, now),
-    pendingCommand: pending,
+    view: await publicViewNow(next, pendingList[0] ?? null, now),
+    pendingCommand: pendingList[0] ?? null,
+    pendingCommands: pendingList,
   });
 }
