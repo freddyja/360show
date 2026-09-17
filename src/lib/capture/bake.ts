@@ -172,6 +172,7 @@ export async function bakeTimeRamp(options: {
     await video.play();
     paint();
     recorder.start(200);
+    options.onProgress?.(0);
 
     const started = performance.now();
     await new Promise<void>((resolve, reject) => {

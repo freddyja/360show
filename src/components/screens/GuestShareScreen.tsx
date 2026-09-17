@@ -255,6 +255,7 @@ export function GuestShareScreen({
     })();
     return () => {
       cancelled = true;
+      if (publishOnce.current === publishKey) publishOnce.current = null;
     };
     // localClip / localEvent objects are read once per clip id so a bake metadata
     // saveClip does not cancel an in-flight upload.
