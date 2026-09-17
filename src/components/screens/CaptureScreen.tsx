@@ -282,6 +282,31 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     }
   }, []);
 
+  const flushRemoteAcks = useCallback(async () => {
+    const token = remoteTokenRef.current;
+    const current = eventRef.current;
+    if (!token || !current) return;
+    const acks = pendingAcksRef.current.slice();
+    if (!acks.length) return;
+    try {
+      const result = await heartbeatRemote({
+        eventId,
+        token,
+        boothArmed: true,
+        boothPhase: phaseRef.current,
+        boothStatus: boothStatusForPhase(phaseRef.current, messageRef.current),
+        lastClipId: latestClipRef.current?.id ?? null,
+        snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current),
+        acks,
+      });
+      const remaining = new Set((result.pendingCommands || []).map((item) => item.id));
+      if (result.pendingCommand?.id) remaining.add(result.pendingCommand.id);
+      pendingAcksRef.current = pendingAcksRef.current.filter((item) => remaining.has(item.commandId));
+    } catch {
+      // The next heartbeat interval retries.
+    }
+  }, [boothSnapshot, eventId]);
+
   const applyRemoteCommand = useCallback(
     async (cmd: PendingRemoteCommand) => {
       const ack = (ok: boolean, message: string) => {
@@ -312,14 +337,21 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           setMessage("Loading song from laptop…");
           const ac = new AbortController();
           const timer = window.setTimeout(() => ac.abort(), 45_000);
+          const musicUrl = `/api/remote/music?eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}`;
           try {
-            const res = await fetch(
-              `/api/remote/music?eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}`,
-              { signal: ac.signal, cache: "no-store" },
-            );
-            if (!res.ok) {
+            let res: Response | null = null;
+            let fail = "Could not download the laptop song";
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+              if (ac.signal.aborted) break;
+              res = await fetch(musicUrl, { signal: ac.signal, cache: "no-store" });
+              if (res.ok) break;
               const data = (await res.json().catch(() => ({}))) as { error?: string };
-              const fail = data.error || "Could not download the laptop song";
+              fail = data.error || fail;
+              if (res.status !== 404 && res.status !== 503 && res.status !== 504) break;
+              await new Promise((resolve) => window.setTimeout(resolve, 600));
+              res = null;
+            }
+            if (!res?.ok) {
               setMessage(fail);
               ack(false, fail);
               return;
@@ -352,6 +384,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             ack(false, fail);
           } finally {
             window.clearTimeout(timer);
+            void flushRemoteAcks();
           }
           return;
         }
@@ -481,7 +514,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         ack(false, error instanceof Error ? error.message : "Command failed on booth");
       }
     },
-    [eventId, refreshCloudFlags, saveEvent, saveSettings],
+    [eventId, flushRemoteAcks, refreshCloudFlags, saveEvent, saveSettings],
   );
 
   useEffect(() => {

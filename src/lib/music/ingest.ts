@@ -39,7 +39,7 @@ export function isAbortError(error: unknown) {
 export function formatCustomMusicError(error: unknown): string {
   if (error instanceof Error && error.message.trim()) {
     if (
-      /this phone|that song|audio file|too large|looks empty|Drive or Samsung|Stopped reading|Stopped sending/i.test(
+      /this phone|that song|audio file|too large|looks empty|Drive or Samsung|Stopped reading|Stopped sending|booth|Capture/i.test(
         error.message,
       )
     ) {

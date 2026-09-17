@@ -254,6 +254,13 @@ async function streamToBuffer(stream: ReadableStream<Uint8Array> | null) {
   return buf.length ? buf : null;
 }
 
+async function fetchBuffer(url: string) {
+  const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) return null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  return buf.length ? buf : null;
+}
+
 export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile | null> {
   if (!isEventId(eventId)) return null;
   if (!blobConfigured()) {
@@ -261,33 +268,53 @@ export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile 
   }
 
   const meta = await readJsonBlob<{ fileName?: string; contentType?: string }>(remoteMusicMetaPath(eventId));
+  const namedPath = meta?.fileName ? remoteMusicPath(eventId, meta.fileName) : null;
+
   try {
     const { blobs } = await list({ prefix: `remote/${eventId}/music`, limit: 12 });
-    const file = blobs.find((item) => /\/music\.(mp3|m4a|aac|wav|ogg|flac|opus|bin)$/i.test(item.pathname));
-    if (!file) return null;
-    const access = file.url.includes(".private.") ? "private" : await resolveBlobAccess();
-    if (!file.url.includes(".private.")) {
-      const res = await fetch(file.url, { cache: "no-store" });
-      if (res.ok) {
-        const bytes = Buffer.from(await res.arrayBuffer());
+    const listed = blobs.filter((item) => /\/music\.(mp3|m4a|aac|wav|ogg|flac|opus|bin)$/i.test(item.pathname));
+    const preferred =
+      (namedPath ? listed.find((item) => item.pathname === namedPath) : null) || listed[0] || null;
+
+    if (preferred?.url && !preferred.url.includes(".private.")) {
+      const bytes = await fetchBuffer(preferred.url);
+      if (bytes) {
         return {
           bytes,
-          fileName: meta?.fileName || file.pathname.split("/").pop() || "song",
-          contentType: meta?.contentType || res.headers.get("content-type") || "application/octet-stream",
+          fileName: meta?.fileName || preferred.pathname.split("/").pop() || "song",
+          contentType: meta?.contentType || "application/octet-stream",
         };
       }
     }
-    const result = await get(file.pathname, { access });
+
+    const pathname = preferred?.pathname || namedPath;
+    if (!pathname) return null;
+    const access = preferred?.url?.includes(".private.") ? "private" : await resolveBlobAccess();
+    const result = await get(pathname, { access });
     if (!result || result.statusCode !== 200) return null;
     const bytes = await streamToBuffer(result.stream);
     if (!bytes) return null;
     return {
       bytes,
-      fileName: meta?.fileName || file.pathname.split("/").pop() || "song",
+      fileName: meta?.fileName || pathname.split("/").pop() || "song",
       contentType: meta?.contentType || result.blob.contentType || "application/octet-stream",
     };
   } catch {
-    return null;
+    if (!namedPath) return null;
+    try {
+      const access = await resolveBlobAccess();
+      const result = await get(namedPath, { access });
+      if (!result || result.statusCode !== 200) return null;
+      const bytes = await streamToBuffer(result.stream);
+      if (!bytes) return null;
+      return {
+        bytes,
+        fileName: meta?.fileName || namedPath.split("/").pop() || "song",
+        contentType: meta?.contentType || result.blob.contentType || "application/octet-stream",
+      };
+    } catch {
+      return null;
+    }
   }
 }
 

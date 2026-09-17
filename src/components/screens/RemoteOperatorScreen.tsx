@@ -7,7 +7,7 @@ import { FrameOverlay } from "@/components/FrameOverlay";
 import { FRAME_STYLES, getFrameStyle } from "@/lib/frames";
 import { MUSIC_BEDS, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { formatMusicBytes, validateCustomMusicFile } from "@/lib/music/custom";
-import { formatCustomMusicError, isAbortError } from "@/lib/music/ingest";
+import { formatCustomMusicError } from "@/lib/music/ingest";
 import { crowdUrl } from "@/lib/crowd/channel";
 import {
   clearStoredPair,
@@ -16,6 +16,7 @@ import {
   remoteStatus,
   sendRemoteCommand,
   uploadRemoteMusic,
+  waitForRemoteMusicAck,
   writeStoredPair,
 } from "@/lib/remote/client";
 import {
@@ -43,6 +44,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   const [nameDraft, setNameDraft] = useState("");
   const [namesDraft, setNamesDraft] = useState("");
   const musicAbort = useRef<AbortController | null>(null);
+  const musicUploadingRef = useRef(false);
 
   useEffect(() => {
     const stored = readStoredPair(eventId);
@@ -60,7 +62,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
         if (cancelled) return;
         setView(data.view);
         setPairCode(data.view.pairCode);
-        setError(null);
+        if (!musicUploadingRef.current) setError(null);
         writeStoredPair(eventId, {
           token,
           pairCode: data.view.pairCode,
@@ -145,7 +147,9 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     musicAbort.current?.abort();
     const ac = new AbortController();
     musicAbort.current = ac;
+    const startedAt = Date.now();
     const timer = window.setTimeout(() => ac.abort(), 120_000);
+    musicUploadingRef.current = true;
     setMusicUploading(true);
     setError(null);
     try {
@@ -153,10 +157,15 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
         signal: ac.signal,
       });
       if (ac.signal.aborted) return;
+      const settled = await waitForRemoteMusicAck(eventId, token, data.commandId, {
+        signal: ac.signal,
+        timeoutMs: 45_000,
+      });
+      if (ac.signal.aborted) return;
       setView({
-        ...data.view,
+        ...settled.view,
         snapshot: {
-          ...data.view.snapshot,
+          ...settled.view.snapshot,
           hasCustomMusic: true,
           usingCustomMusic: true,
           preferBundledBed: false,
@@ -165,15 +174,24 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       });
     } catch (err) {
       if (musicAbort.current !== ac) return;
-      if (ac.signal.aborted || isAbortError(err)) {
-        setError("Stopped sending the song to the booth, or it took too long. Try again.");
+      if (ac.signal.aborted) {
+        const timedOut = Date.now() - startedAt >= 115_000;
+        setError(
+          timedOut
+            ? "Sending the song took too long. Keep Capture open on the phone and try again."
+            : "Stopped sending the song to the booth.",
+        );
         return;
       }
-      setError(formatCustomMusicError(err) || (err instanceof Error ? err.message : "Could not send the song to the booth."));
+      setError(
+        formatCustomMusicError(err) ||
+          (err instanceof Error ? err.message : "Could not send the song to the booth."),
+      );
     } finally {
       window.clearTimeout(timer);
       if (musicAbort.current === ac) {
         musicAbort.current = null;
+        musicUploadingRef.current = false;
         setMusicUploading(false);
       }
     }
