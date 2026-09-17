@@ -1,4 +1,3 @@
-import { bakedBlobKeysForClip } from "./capture/bake";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { AppSettings, BoothEvent, Clip } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
@@ -25,7 +24,12 @@ interface Snap360Schema extends DBSchema {
 }
 
 function hydrateEvent(event: BoothEvent): BoothEvent {
-  return { ...event, musicBedLabel: normalizeMusicBedLabel(event.musicBedLabel) };
+  return {
+    ...event,
+    musicBedLabel: normalizeMusicBedLabel(event.musicBedLabel),
+    customMusicBlobId: event.customMusicBlobId || null,
+    customMusicName: event.customMusicName || null,
+  };
 }
 
 const DB_NAME = "snap360-booth";
@@ -78,15 +82,19 @@ export async function putEvent(event: BoothEvent) {
 
 export async function deleteEvent(id: string) {
   const db = await getDb();
+  const event = await db.get("events", id);
   const clips = await db.getAllFromIndex("clips", "by-event", id);
+  const blobKeys = await db.getAllKeys("blobs");
   const tx = db.transaction(["events", "clips", "blobs"], "readwrite");
   await tx.objectStore("events").delete(id);
   for (const clip of clips) {
     await tx.objectStore("clips").delete(clip.id);
-    await tx.objectStore("blobs").delete(clip.id);
-    for (const key of bakedBlobKeysForClip(clip.id)) {
-      await tx.objectStore("blobs").delete(key);
-    }
+  }
+  for (const key of blobKeys) {
+    const k = String(key);
+    const clipHit = clips.some((clip) => k === clip.id || k.startsWith(`${clip.id}__`));
+    const musicHit = k === event?.customMusicBlobId || k.startsWith(`music:${id}`);
+    if (clipHit || musicHit) await tx.objectStore("blobs").delete(key);
   }
   await tx.done;
 }
@@ -112,6 +120,21 @@ export async function putClip(clip: Clip, blob?: Blob | null) {
     await tx.objectStore("blobs").put(blob, clip.id);
   }
   await tx.done;
+}
+
+export async function getNamedBlob(key: string) {
+  const db = await getDb();
+  return (await db.get("blobs", key)) ?? null;
+}
+
+export async function putNamedBlob(key: string, blob: Blob) {
+  const db = await getDb();
+  await db.put("blobs", blob, key);
+}
+
+export async function deleteNamedBlob(key: string) {
+  const db = await getDb();
+  await db.delete("blobs", key);
 }
 
 export async function getClipBlob(id: string) {

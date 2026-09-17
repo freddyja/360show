@@ -21,6 +21,10 @@ export interface BoothEvent {
   accentColor: string;
   logoDataUrl: string | null;
   musicBedLabel: string;
+  /** IndexedDB blobs key for an operator-picked song. Wins over musicBedLabel when set. */
+  customMusicBlobId?: string | null;
+  /** Display name of the operator-picked song. */
+  customMusicName?: string | null;
   frameStyle: FrameStyleId;
   createdAt: number;
   updatedAt: number;

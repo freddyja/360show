@@ -1,7 +1,5 @@
 "use client";
 
-import { musicBedSrc } from "./beds";
-
 export const MIX_GAIN = 0.36;
 
 export interface MusicMixHandle {
@@ -11,16 +9,16 @@ export interface MusicMixHandle {
 }
 
 /**
- * Decode a looping bed and add it as an audio track on the given (usually
- * canvas) stream. Best-effort: if Web Audio / decode fails, returns the
- * original video-only stream.
+ * Decode a looping bed or custom song and add it as an audio track on the
+ * given (usually canvas) stream. `musicSrc` may be a bundled `/music/*.wav`
+ * path or an IndexedDB blob object URL. Best-effort: if Web Audio / decode
+ * fails, returns the original video-only stream.
  */
 export async function mixMusicIntoStream(
   videoStream: MediaStream,
-  musicLabel: string | null | undefined,
+  musicSrc: string | null | undefined,
 ): Promise<MusicMixHandle> {
-  const src = musicBedSrc(musicLabel);
-  if (!src) {
+  if (!musicSrc) {
     return { stream: videoStream, mixedAudio: false, stop: () => undefined };
   }
 
@@ -48,8 +46,8 @@ export async function mixMusicIntoStream(
   try {
     ctx = new AudioCtx();
     if (ctx.state === "suspended") await ctx.resume();
-    const res = await fetch(src);
-    if (!res.ok) throw new Error("Music bed missing");
+    const res = await fetch(musicSrc);
+    if (!res.ok) throw new Error("Music missing");
     const raw = await res.arrayBuffer();
     const buffer = await ctx.decodeAudioData(raw.slice(0));
     const dest = ctx.createMediaStreamDestination();

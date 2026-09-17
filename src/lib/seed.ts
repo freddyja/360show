@@ -11,6 +11,8 @@ export function sampleEvent(now = Date.now()): BoothEvent {
     accentColor: "#3B82F6",
     logoDataUrl: null,
     musicBedLabel: "Romantic piano",
+    customMusicBlobId: null,
+    customMusicName: null,
     frameStyle: "gold-oval",
     createdAt: now,
     updatedAt: now,

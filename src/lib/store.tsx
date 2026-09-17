@@ -12,6 +12,8 @@ import * as db from "./db";
 import { sampleEvent } from "./seed";
 import type { AppSettings, BoothEvent, Clip } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
+import { customMusicBlobId } from "./music/custom";
+import { forgetCustomMusicSrc } from "./music/resolve";
 
 interface BoothStore {
   ready: boolean;
@@ -21,11 +23,16 @@ interface BoothStore {
   settings: AppSettings;
   activeEventId: string | null;
   refresh: () => Promise<void>;
-  saveEvent: (event: BoothEvent, makeActive?: boolean) => Promise<void>;
+  saveEvent: (
+    event: BoothEvent,
+    makeActive?: boolean,
+    music?: { file: File } | { clear: true },
+  ) => Promise<void>;
   removeEvent: (id: string) => Promise<void>;
   saveClip: (clip: Clip, blob?: Blob | null) => Promise<void>;
   patchClip: (clipId: string, patch: Partial<Clip>) => Promise<void>;
   getBlob: (clipId: string) => Promise<Blob | null>;
+  getMusicBlob: (blobId: string) => Promise<Blob | null>;
   getBakedBlob: (clipId: string) => Promise<Blob | null>;
   saveSettings: (settings: AppSettings) => Promise<void>;
   setActive: (id: string | null) => Promise<void>;
@@ -82,11 +89,34 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
     };
   }, [refresh]);
 
-  const saveEvent = useCallback(async (event: BoothEvent, makeActive = false) => {
-    await db.putEvent(event);
-    if (makeActive) await db.setActiveEventId(event.id);
-    await refresh();
-  }, [refresh]);
+  const saveEvent = useCallback(
+    async (event: BoothEvent, makeActive = false, music?: { file: File } | { clear: true }) => {
+      let next = event;
+      if (music && "file" in music) {
+        const blobId = customMusicBlobId(event.id);
+        await db.putNamedBlob(blobId, music.file);
+        if (event.customMusicBlobId && event.customMusicBlobId !== blobId) {
+          forgetCustomMusicSrc(event.customMusicBlobId);
+          await db.deleteNamedBlob(event.customMusicBlobId);
+        }
+        next = {
+          ...event,
+          customMusicBlobId: blobId,
+          customMusicName: music.file.name,
+        };
+      } else if (music && "clear" in music) {
+        if (event.customMusicBlobId) {
+          forgetCustomMusicSrc(event.customMusicBlobId);
+          await db.deleteNamedBlob(event.customMusicBlobId);
+        }
+        next = { ...event, customMusicBlobId: null, customMusicName: null };
+      }
+      await db.putEvent(next);
+      if (makeActive) await db.setActiveEventId(next.id);
+      await refresh();
+    },
+    [refresh],
+  );
 
   const removeEvent = useCallback(async (id: string) => {
     await db.deleteEvent(id);
@@ -108,6 +138,8 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const getBlob = useCallback(async (clipId: string) => db.getClipBlob(clipId), []);
+
+  const getMusicBlob = useCallback(async (blobId: string) => db.getNamedBlob(blobId), []);
 
   const getBakedBlob = useCallback(async (clipId: string) => db.getBakedBlob(clipId), []);
 
@@ -145,6 +177,7 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
       saveClip,
       patchClip,
       getBlob,
+      getMusicBlob,
       getBakedBlob,
       saveSettings,
       setActive,
@@ -163,6 +196,7 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
       saveClip,
       patchClip,
       getBlob,
+      getMusicBlob,
       getBakedBlob,
       saveSettings,
       setActive,

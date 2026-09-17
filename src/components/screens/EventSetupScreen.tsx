@@ -10,6 +10,7 @@ import { capturePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
 import { MUSIC_BEDS, type BoothEvent } from "@/lib/types";
 import { SOFT_MUSIC_BEDS, hasMusicBed, musicBedSrc, normalizeMusicBedLabel } from "@/lib/music/beds";
+import { hasCustomMusic, musicCaption, validateCustomMusicFile } from "@/lib/music/custom";
 import { nudgeBoothMusic, syncBoothMusic } from "@/lib/music/player";
 import { cn } from "@/lib/cn";
 
@@ -30,6 +31,8 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
       accentColor: "#3B82F6",
       logoDataUrl: null,
       musicBedLabel: MUSIC_BEDS[1],
+      customMusicBlobId: null,
+      customMusicName: null,
       frameStyle: "gold-oval",
       createdAt: now,
       updatedAt: now,
@@ -38,10 +41,29 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
 
   const [form, setForm] = useState(initial);
   const [saved, setSaved] = useState(false);
+  const [pendingMusic, setPendingMusic] = useState<File | null>(null);
+  const [clearCustom, setClearCustom] = useState(false);
+  const [musicError, setMusicError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (existing) setForm(existing);
+    if (existing) {
+      setForm(existing);
+      setPendingMusic(null);
+      setClearCustom(false);
+      setMusicError(null);
+    }
   }, [existing]);
+
+  useEffect(() => {
+    if (!pendingMusic) return;
+    const url = URL.createObjectURL(pendingMusic);
+    syncBoothMusic({ src: url, playing: true, muted: false });
+    nudgeBoothMusic();
+    return () => {
+      syncBoothMusic({ src: null, playing: false });
+      URL.revokeObjectURL(url);
+    };
+  }, [pendingMusic]);
 
   useEffect(() => {
     return () => syncBoothMusic({ src: null, playing: false });
@@ -72,6 +94,33 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
     update("logoDataUrl", data);
   }
 
+  async function onMusicFile(file: File | null) {
+    if (!file) return;
+    const error = validateCustomMusicFile(file);
+    if (error) {
+      setMusicError(error);
+      return;
+    }
+    setMusicError(null);
+    setClearCustom(false);
+    setPendingMusic(file);
+    setSaved(false);
+  }
+
+  function onClearCustomSong() {
+    setPendingMusic(null);
+    setClearCustom(true);
+    setMusicError(null);
+    setSaved(false);
+    const bed = normalizeMusicBedLabel(form.musicBedLabel);
+    syncBoothMusic({
+      src: musicBedSrc(bed),
+      playing: hasMusicBed(bed),
+      muted: false,
+    });
+    if (hasMusicBed(bed)) nudgeBoothMusic();
+  }
+
   async function persist(andOpen: boolean) {
     const next = {
       ...form,
@@ -80,7 +129,11 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
       musicBedLabel: normalizeMusicBedLabel(form.musicBedLabel),
     };
     syncBoothMusic({ src: null, playing: false });
-    await saveEvent(next, true);
+    const music =
+      pendingMusic ? { file: pendingMusic } : clearCustom ? { clear: true as const } : undefined;
+    await saveEvent(next, true, music);
+    setPendingMusic(null);
+    setClearCustom(false);
     setSaved(true);
     if (andOpen) router.push(capturePath(next.id));
     else if (isNew) router.replace(`/e/${next.id}`);
@@ -135,12 +188,14 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
             <input value={form.accentColor} onChange={(e) => update("accentColor", e.target.value)} className={inputClass} />
           </div>
         </Field>
-        <Field label="Music bed">
+        <div>
+          <span className="mb-2 block text-sm text-slate-400">Music bed</span>
           <select
             value={normalizeMusicBedLabel(form.musicBedLabel)}
             onChange={(e) => {
               const next = e.target.value;
               update("musicBedLabel", next);
+              if (pendingMusic || (!clearCustom && hasCustomMusic(form))) return;
               syncBoothMusic({
                 src: musicBedSrc(next),
                 playing: hasMusicBed(next),
@@ -156,12 +211,52 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
               </option>
             ))}
           </select>
-          <span className="mt-1 block text-xs text-slate-500">
-            Plays under spin, preview, and guest share. Mixed into Download / Share when this browser
-            can record an audio track. Softer beds ({SOFT_MUSIC_BEDS.join(", ")}) suit Christian
-            Fellowship and gentle events.
+          <label className="relative mt-3 flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-blue-400/40 bg-blue-500/15 px-4 text-center text-sm font-medium text-white">
+            Use song from this phone
+            <input
+              type="file"
+              accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                e.target.value = "";
+                void onMusicFile(file);
+              }}
+            />
+          </label>
+          {(pendingMusic || (!clearCustom && (form.customMusicName || form.customMusicBlobId))) && (
+            <div className="mt-3 flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+              <p className="min-w-0 text-sm text-slate-200">
+                <span className="block truncate font-medium text-white">
+                  {musicCaption(
+                    pendingMusic
+                      ? { customMusicName: pendingMusic.name, customMusicBlobId: "pending" }
+                      : form,
+                    "",
+                  )}
+                </span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  Plays instead of the bed on this tablet. Not uploaded to Blob/Drive except inside
+                  a mixed video.
+                </span>
+              </p>
+              <button
+                type="button"
+                className="shrink-0 rounded-full border border-white/15 px-3 py-1.5 text-xs text-slate-200"
+                onClick={onClearCustomSong}
+              >
+                Clear custom song
+              </button>
+            </div>
+          )}
+          {musicError && <p className="mt-2 text-sm text-red-300">{musicError}</p>}
+          <span className="mt-2 block text-xs text-slate-500">
+            Built-in beds loop under spin, preview, and guest share, and mix into Download / Share
+            when this browser can record audio. A song from this phone wins over the bed until you
+            clear it (mp3/m4a/wav/aac/ogg, max 18 MB). Softer beds ({SOFT_MUSIC_BEDS.join(", ")})
+            suit Christian Fellowship and gentle events.
           </span>
-        </Field>
+        </div>
         <Field label="Logo (stored locally)">
           <input
             type="file"

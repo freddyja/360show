@@ -13,8 +13,8 @@ export function bakeSourceForClip(clip: Clip, localBlob?: Blob | null): Blob | s
   return clip.demoAssetPath || DEMO_ASSET_PATH;
 }
 
-export function needsExportBake(slowMo: boolean, musicLabel?: string | null) {
-  return slowMo || hasMusicBed(musicLabel);
+export function needsExportBake(slowMo: boolean, musicLabel?: string | null, hasCustom = false) {
+  return slowMo || hasCustom || hasMusicBed(musicLabel);
 }
 
 /**
@@ -27,12 +27,14 @@ export async function ensureBakedClip(options: {
   source?: Blob | string | null;
   quality?: VideoQuality;
   musicBedLabel?: string | null;
+  musicSrc?: string | null;
+  musicId?: string | null;
   applyRamp?: boolean;
   onProgress?: (progress: number) => void;
 }): Promise<BakeResult> {
   const { clip, onProgress } = options;
   const applyRamp = options.applyRamp !== false;
-  const musicId = musicBedId(options.musicBedLabel);
+  const musicId = options.musicId || musicBedId(options.musicBedLabel);
   const cacheKey = bakedBlobKey(clip.id, musicId, applyRamp);
   const workKey = `${clip.id}:${applyRamp ? "sm" : "1x"}:${musicId}`;
 
@@ -57,6 +59,7 @@ export async function ensureBakedClip(options: {
     expectedDurationSec: clip.durationMs / 1000,
     quality: options.quality,
     musicBedLabel: options.musicBedLabel,
+    musicSrc: options.musicSrc,
     applyRamp,
     onProgress,
   }).then(async (result) => {

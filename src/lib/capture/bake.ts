@@ -1,5 +1,5 @@
 import type { RampProfileId } from "../types";
-import { MUSIC_BED_CATALOG } from "../music/beds";
+import { MUSIC_BED_CATALOG, musicBedSrc } from "../music/beds";
 import { mixMusicIntoStream } from "../music/mix";
 import { playbackRateAt, rampKeyframes } from "./ramp";
 import { createVideoRecorder, fitWithinQuality, resolveVideoQuality, type VideoQuality } from "./quality";
@@ -35,7 +35,7 @@ export interface BakeResult {
  * Re-encode a source clip so the time-ramp (and optional music bed) is in the file.
  * Records a canvas of the video playing at the profile's playbackRate
  * (wall-clock MediaRecorder), then holds a freeze if the profile ends at 0.
- * When `musicBedLabel` is set, Web Audio loops the bed onto a MediaStream
+ * When a music src is set, Web Audio loops the bed or custom song onto a
  * audio track. If the browser drops that track, the video still bakes and
  * `mixedAudio` is false (live overlay remains the fallback).
  */
@@ -45,6 +45,8 @@ export async function bakeTimeRamp(options: {
   expectedDurationSec?: number;
   quality?: VideoQuality;
   musicBedLabel?: string | null;
+  /** Blob URL or bundled path. Wins over musicBedLabel when set. */
+  musicSrc?: string | null;
   applyRamp?: boolean;
   onProgress?: (progress: number) => void;
 }): Promise<BakeResult> {
@@ -108,7 +110,8 @@ export async function bakeTimeRamp(options: {
     if (!ctx) throw new Error("Canvas 2D unavailable");
 
     const canvasStream = canvas.captureStream(fitted.fps);
-    const mix = await mixMusicIntoStream(canvasStream, options.musicBedLabel);
+    const mixSrc = options.musicSrc ?? musicBedSrc(options.musicBedLabel);
+    const mix = await mixMusicIntoStream(canvasStream, mixSrc);
     mixStop = mix.stop;
 
     let recorder: MediaRecorder;

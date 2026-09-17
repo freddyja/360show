@@ -280,8 +280,9 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
           Operator MVP for a 360 photo booth. Camera capture is real in the browser. Video quality
           (Settings) requests 1080p high or 720p standard. Slow-mo can be toggled: on uses a live
           playback-rate ramp and bakes it into Download / Share files; off keeps normal speed. Event
-          music beds loop under spin / preview / share and mix into exports when the browser allows.
-          Share can upload to Vercel Blob or Google Drive. Platform motor and GoPro control are stubbed.
+          music beds loop under spin / preview / share; a song from this phone can replace the bed
+          and mix into exports when the browser allows. Share can upload to Vercel Blob or Google
+          Drive. Platform motor and GoPro control are stubbed.
         </p>
         <p className="mt-3 text-sm text-slate-500">
           {events.length} event{events.length === 1 ? "" : "s"} · {clips.length} clip{clips.length === 1 ? "" : "s"} on this tablet

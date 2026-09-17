@@ -15,8 +15,10 @@ import { cn } from "@/lib/cn";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudShare, fetchShareConfig, publishClipToCloud, publishClipToDrive } from "@/lib/share/publish";
 import { bakeSourceForClip, ensureBakedClip, needsExportBake, extensionForBlob, triggerBlobDownload } from "@/lib/capture/ensureBaked";
-import { hasMusicBed, musicBedById, musicBedId, normalizeMusicBedLabel } from "@/lib/music/beds";
+import { hasMusicBed, musicBedById, musicBedId, musicBedSrc, normalizeMusicBedLabel } from "@/lib/music/beds";
+import { hasCustomMusic } from "@/lib/music/custom";
 import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
+import { resolveEventMusic, useEventMusicSrc } from "@/lib/music/resolve";
 import { driveDownloadUrl, drivePreviewUrl, driveViewUrl, isDrivePlaybackUrl } from "@/lib/drive/urls";
 import { clipFromCloud, eventFromCloud, isFrameStyleId, type CloudShare, type ShareConfig } from "@/lib/share/types";
 
@@ -50,13 +52,19 @@ export function GuestShareScreen({
   const destination = settings.cloudDestination || "blob";
   const operatorSlowMo = settings.slowMoEnabled !== false;
   const musicLabel = normalizeMusicBedLabel(event?.musicBedLabel || resolvedCloud?.musicBedLabel);
+  const operatorMusicSrc = useEventMusicSrc(publicMode ? undefined : localEvent);
   const skipOverlay = Boolean(resolvedCloud?.hasAudio && isDrivePlaybackUrl(src));
-  const overlayLabel = skipOverlay ? "None" : musicLabel;
+  const overlaySrc = skipOverlay
+    ? null
+    : publicMode
+      ? musicBedSrc(musicLabel)
+      : operatorMusicSrc;
   useBoothMusic({
-    label: overlayLabel,
-    active: Boolean(clip && event && hasMusicBed(overlayLabel)),
+    src: overlaySrc,
+    active: Boolean(clip && event && overlaySrc),
     muted: publicMode ? false : settings.boothMusicMuted,
   });
+  const fileHasAudio = Boolean(publicMode && resolvedCloud?.hasAudio && !isDrivePlaybackUrl(src));
   const shareUrl = useMemo(
     () => guestShareLink(clipId, config, resolvedCloud, event),
     [clipId, config, resolvedCloud, event],
@@ -109,7 +117,7 @@ export function GuestShareScreen({
       setPublishState("Connect Google Drive in Settings, then open Share again");
       return;
     }
-    const publishKey = `${clipId}:${destination}:${operatorSlowMo ? "slowmo" : "1x"}:${musicBedId(localEvent.musicBedLabel)}`;
+    const publishKey = `${clipId}:${destination}:${operatorSlowMo ? "slowmo" : "1x"}:${musicBedId(localEvent.musicBedLabel)}:${localEvent.customMusicBlobId || "bed"}`;
     if (publishOnce.current === publishKey) return;
     publishOnce.current = publishKey;
     let cancelled = false;
@@ -120,14 +128,17 @@ export function GuestShareScreen({
         const sourceBlob = await getBlob(clipToPublish.id);
         let exportBlob = sourceBlob;
         let mixedAudio = false;
-        const musicBedLabel = localEvent.musicBedLabel;
-        if (needsExportBake(operatorSlowMo, musicBedLabel)) {
-          setPublishState(operatorSlowMo ? "Baking export…" : "Mixing music bed…");
+        const music = await resolveEventMusic(eventToPublish);
+        const musicBedLabel = hasCustomMusic(eventToPublish) ? "None" : eventToPublish.musicBedLabel;
+        if (needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, hasCustomMusic(eventToPublish))) {
+          setPublishState(operatorSlowMo ? "Baking export…" : "Mixing music…");
           const baked = await ensureBakedClip({
             clip: clipToPublish,
             source: bakeSourceForClip(clipToPublish, sourceBlob),
             quality: settings.videoQuality,
-            musicBedLabel,
+            musicBedLabel: eventToPublish.musicBedLabel,
+            musicSrc: music.src,
+            musicId: music.musicId,
             applyRamp: operatorSlowMo,
             onProgress: (progress) => {
               if (!cancelled) {
@@ -172,8 +183,10 @@ export function GuestShareScreen({
         if (cancelled) return;
         setCloud(published);
         await patchClip(clipToPublish.id, {
-          hasBakedBlob: needsExportBake(operatorSlowMo, musicBedLabel),
-          bakedAt: needsExportBake(operatorSlowMo, musicBedLabel) ? Date.now() : null,
+          hasBakedBlob: needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, hasCustomMusic(eventToPublish)),
+          bakedAt: needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, hasCustomMusic(eventToPublish))
+            ? Date.now()
+            : null,
           hasMixedAudio: mixedAudio,
           remoteVideoUrl: published.videoUrl,
           cloudShareAt: Date.now(),
@@ -206,6 +219,7 @@ export function GuestShareScreen({
     localClip?.id,
     localEvent?.id,
     localEvent?.musicBedLabel,
+    localEvent?.customMusicBlobId,
     config,
     settings.forceOffline,
     settings.driveFolderName,
@@ -255,7 +269,7 @@ export function GuestShareScreen({
               ((resolvedCloud.slowMoEnabled !== false && !resolvedCloud.baked) ||
                 (hasMusicBed(musicLabel) && !resolvedCloud.hasAudio)),
           )
-        : needsExportBake(operatorSlowMo, musicLabel);
+        : needsExportBake(operatorSlowMo, musicLabel, hasCustomMusic(eventRecord));
       const savedAsSlowMo = publicMode
         ? Boolean(resolvedCloud?.baked) || Boolean(resolvedCloud && resolvedCloud.slowMoEnabled !== false && shouldBakeNow)
         : operatorSlowMo;
@@ -277,11 +291,14 @@ export function GuestShareScreen({
               ? remoteUrl
               : bakeSourceForClip(clipRecord, sourceBlob);
         if (shouldBakeNow) {
+          const music = publicMode ? { src: musicBedSrc(musicLabel), musicId: musicBedId(musicLabel) } : await resolveEventMusic(eventRecord);
           const baked = await ensureBakedClip({
             clip: clipRecord,
             source,
             quality: settings.videoQuality,
             musicBedLabel: musicLabel,
+            musicSrc: music.src,
+            musicId: music.musicId,
             applyRamp: publicMode
               ? Boolean(resolvedCloud && resolvedCloud.slowMoEnabled !== false)
               : operatorSlowMo,
@@ -315,13 +332,14 @@ export function GuestShareScreen({
       const base = eventRecord.clientNames.replace(/\s+/g, "-") || "360-spin";
       const suffix = savedAsSlowMo ? "-360-spin-slowmo" : "-360-spin";
       triggerBlobDownload(file, `${base}${suffix}.${ext}`);
+      const hasMixableMusic = hasMusicBed(musicLabel) || (!publicMode && hasCustomMusic(eventRecord));
       setStatus(
         savedAsSlowMo
-          ? hasMusicBed(musicLabel)
+          ? hasMixableMusic
             ? "Saved baked export (music mixed when this browser allowed it)"
             : "Saved baked slow-mo"
-          : hasMusicBed(musicLabel)
-            ? "Saved clip with music bed (mixed when this browser allowed it)"
+          : hasMixableMusic
+            ? "Saved clip with music (mixed when this browser allowed it)"
             : "Saved original-speed clip",
       );
     } catch (error) {
@@ -372,8 +390,8 @@ export function GuestShareScreen({
             className="relative aspect-video"
             onPointerDown={() => {
               syncBoothMusic({
-                src: skipOverlay ? null : musicBedById(musicBedId(overlayLabel)).src,
-                playing: hasMusicBed(overlayLabel),
+                src: overlaySrc,
+                playing: Boolean(overlaySrc),
                 muted: publicMode ? false : settings.boothMusicMuted,
               });
               nudgeBoothMusic();
@@ -385,6 +403,7 @@ export function GuestShareScreen({
               className={cn("h-full w-full object-cover", frameMediaClass(event.frameStyle))}
               rampProfile={rampProfile}
               liveRamp={liveRamp}
+              allowSound={fileHasAudio}
               onPlayingChange={setPlaying}
             />
             <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />
@@ -446,11 +465,11 @@ export function GuestShareScreen({
                   : "Baked slow-mo for this device"
                 : "Download to this device"
               : operatorSlowMo
-                ? hasMusicBed(musicLabel)
+                ? hasMusicBed(musicLabel) || hasCustomMusic(event)
                   ? "Baked slow-mo · music mixed when possible"
                   : "Baked slow-mo for this device"
-                : hasMusicBed(musicLabel)
-                  ? "File with music bed (mixed when possible)"
+                : hasMusicBed(musicLabel) || hasCustomMusic(event)
+                  ? "File with music (mixed when possible)"
                   : "Normal-speed file for this device"
           }
         />
@@ -465,8 +484,9 @@ export function GuestShareScreen({
         <p className="mt-3 text-center text-xs text-slate-500">
           Guest phones load this clip from Vercel Blob or Google Drive when the booth has uploaded
           it. Use the deployed HTTPS URL in the QR, not a LAN IP. Downloads are ramp-baked when
-          slow-mo is on; a music bed is mixed in when this browser can record audio. The frame stays
-          as a web overlay.
+          slow-mo is on; a music bed or a song from the booth tablet is mixed in when this browser
+          can record audio. Custom songs stay on the booth except inside that mixed file. The frame
+          stays as a web overlay.
         </p>
       )}
     </Shell>

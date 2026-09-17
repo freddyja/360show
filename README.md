@@ -130,7 +130,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 | --- | --- |
 | `/` | Events list — create / select tonight’s event |
 | `/events/new` | New event setup |
-| `/e/[eventId]` | Event setup — name, date, couple names, accent, logo, **music bed**, frame style |
+| `/e/[eventId]` | Event setup — name, date, couple names, accent, logo, **music bed or song from this phone**, frame style |
 | `/e/[eventId]/capture` | Operator capture (mockup 1) |
 | `/e/[eventId]/gallery` | Tonight’s clips |
 | `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, **mute booth music**, force offline, **Blob vs Drive destination**, Google Drive connect |
@@ -150,7 +150,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - Copy link, `sms:` “Text me”, download when a blob, demo file, or cloud URL exists
 - **Live time-ramp preview**: `playbackRate` keyframes when **Slow-mo / time ramp** is on (Settings)
 - **Baked slow-mo export**: same ramp re-encoded for Download / Share when slow-mo is on; skipped when off
-- **Music beds**: original CC0 instrumentals under `/music/`. Looping playback on spin / preview / share; best-effort mix into Download / Share via Web Audio + MediaRecorder
+- **Music beds**: original CC0 instrumentals under `/music/`. Looping playback on spin / preview / share; best-effort mix into Download / Share via Web Audio + MediaRecorder. **Song from this phone** stores an operator-picked audio file in IndexedDB (not uploaded except inside a mixed export).
 - Event frames overlaid on **web preview** (gold oval, neon ring, midnight arch, classic plaque, minimal, **Christian Fellowship** PNG pack) — not composited into the downloaded file yet
 - **Christian Fellowship** look-pack: navy/gold plaque overlay (`/frames/christian-fellowship.png`), default accent `#C9A227`, gentle slow-mo ramp (no freeze-flash)
 - Force-offline chip, mock battery, Camera OK / demo status
@@ -200,9 +200,11 @@ Event setup picks a bed. **None** is silence. Everything else is an original 16-
 | Upbeat house | Party | Club / reception energy |
 | Silent disco pulse | Party | Electronic / silent-disco nights |
 
-**Live playback:** an `HTMLAudioElement` loops under operator spin, Preview, and the guest share player. Volume defaults to ~0.28. Browsers block autoplay without a gesture — **START SPIN**, Preview, changing the bed in setup, or tapping the share player counts. **Settings → Mute booth music** silences the operator tablet only; guest phones still overlay the bed, and mixed files keep their audio.
+**Live playback:** an `HTMLAudioElement` loops under operator spin, Preview, and the guest share player. Volume defaults to ~0.28. Browsers block autoplay without a gesture — **START SPIN**, Preview, changing the bed in setup, picking a song, or tapping the share player counts. **Settings → Mute booth music** silences the operator tablet only; guest phones still overlay a bundled bed, and mixed files keep their audio.
 
-**Export mix (best-effort):** Download / Share decode the WAV with Web Audio, loop it onto a `MediaStreamDestination`, and record it with the canvas video (`webm` + Opus when `MediaRecorder` supports it). Chrome/Android usually produce a file you can hear in Photos. Some browsers (notably iOS Safari, or mp4-only recorders) drop the audio track — then the downloaded file is video-only and the **web player still plays the looping bed**. Drive guest links pass `?m=` so overlay works even without Blob metadata; `?a=1` means the uploaded file already has audio (skip a second overlay on the Drive iframe).
+**Song from this phone:** Event setup also has **Use song from this phone** (`accept="audio/*"`, mp3/m4a/wav/aac/ogg as the browser allows, max 18 MB). The file stays in IndexedDB on this device (`customMusicBlobId` + display name) and wins over the bed until **Clear custom song**. It is not uploaded to Vercel Blob or Google Drive as a standalone file — only mixed into the exported video when the bake path succeeds. **You are responsible for having the rights to play and share any song you pick.**
+
+**Export mix (best-effort):** Download / Share decode the WAV or the stored custom file with Web Audio, loop it onto a `MediaStreamDestination`, and record it with the canvas video (`webm` + Opus when `MediaRecorder` supports it). Chrome/Android usually produce a file you can hear in Photos. Some browsers (notably iOS Safari, or mp4-only recorders) drop the audio track — then the downloaded file is video-only and the **web player still plays the looping bed or custom song on the booth**. Guest phones only hear a custom song if the mix landed in the file. Drive guest links pass `?m=` so bundled-bed overlay works even without Blob metadata; `?a=1` means the uploaded file already has audio (skip a second overlay on the Drive iframe).
 
 Regenerate assets with `npm run music:generate`.
 

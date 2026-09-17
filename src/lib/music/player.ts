@@ -65,10 +65,12 @@ export function nudgeBoothMusic() {
 
 export function useBoothMusic(options: {
   label?: string | null;
+  /** When provided (including null), wins over the bundled bed for `label`. */
+  src?: string | null;
   active: boolean;
   muted?: boolean;
 }) {
-  const src = musicBedSrc(options.label);
+  const src = options.src === undefined ? musicBedSrc(options.label) : options.src;
   const playing = options.active;
   const muted = Boolean(options.muted);
 

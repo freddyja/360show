@@ -11,6 +11,7 @@ export function RampPlayer({
   className,
   rampProfile = "time-ramp-v1",
   liveRamp = true,
+  allowSound = false,
   onPlayingChange,
 }: {
   src: string | null;
@@ -19,10 +20,32 @@ export function RampPlayer({
   rampProfile?: RampProfileId;
   /** When false, play the file as-is (already ramp-baked). */
   liveRamp?: boolean;
+  /** Unmute the baked file after a user gesture (guest downloads with mixed audio). */
+  allowSound?: boolean;
   onPlayingChange?: (playing: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const driveSrc = isDrivePlaybackUrl(src);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || driveSrc) return;
+    if (!allowSound) {
+      video.muted = true;
+      return;
+    }
+    video.muted = true;
+    const unmute = () => {
+      video.muted = false;
+      void video.play().catch(() => undefined);
+    };
+    window.addEventListener("pointerdown", unmute, { passive: true });
+    window.addEventListener("keydown", unmute);
+    return () => {
+      window.removeEventListener("pointerdown", unmute);
+      window.removeEventListener("keydown", unmute);
+    };
+  }, [src, allowSound, driveSrc]);
 
   useEffect(() => {
     const video = videoRef.current;
