@@ -21,7 +21,7 @@ import { createId } from "@/lib/ids";
 import { rampProfileForFrame } from "@/lib/frames";
 import { operatorSharePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
-import { CAPTURE_DURATION_MS, COUNTDOWN_SECONDS, DEMO_ASSET_PATH } from "@/lib/types";
+import { COUNTDOWN_SECONDS, DEMO_ASSET_PATH, captureDurationMs, resolveCaptureDurationSec } from "@/lib/types";
 import type { Clip } from "@/lib/types";
 import { useClipSrc } from "@/lib/useClipSrc";
 
@@ -72,6 +72,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const offline = settings.forceOffline || (typeof navigator !== "undefined" && !navigator.onLine);
   const busy = phase !== "idle";
   const hasClip = Boolean(latestClip);
+  const spinSec = resolveCaptureDurationSec(event.captureDurationSec);
+  const spinMs = captureDurationMs(spinSec);
 
   async function runSpin() {
     if (busy || !event) return;
@@ -103,11 +105,11 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     setProgress(0);
     const started = Date.now();
     const tick = window.setInterval(() => {
-      setProgress(Math.min(1, (Date.now() - started) / CAPTURE_DURATION_MS));
+      setProgress(Math.min(1, (Date.now() - started) / spinMs));
     }, 80);
 
-    void motor.spin(CAPTURE_DURATION_MS);
-    const recorded = await recordCapture(CAPTURE_DURATION_MS, live, settings.videoQuality);
+    void motor.spin(spinMs);
+    const recorded = await recordCapture(spinMs, live, settings.videoQuality);
     window.clearInterval(tick);
     setProgress(1);
     live.stop();
@@ -123,7 +125,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       id: createId("clip"),
       eventId: event.id,
       createdAt: Date.now(),
-      durationMs: CAPTURE_DURATION_MS,
+      durationMs: spinMs,
       source: recorded.source,
       hasBlob: Boolean(blob),
       demoAssetPath: blob ? null : DEMO_ASSET_PATH,
@@ -221,9 +223,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
               </span>
               <span className="mt-1 block text-base text-slate-300 sm:text-xl">
                 {phase === "countdown" && "Hold still — capture starting"}
-                {phase === "recording" && `Recording ${Math.round(progress * 10)}s / 10s`}
+                {phase === "recording" && `Recording ${Math.min(spinSec, Math.round(progress * spinSec))}s / ${spinSec}s`}
                 {phase === "processing" && "Saving spin"}
-                {phase === "idle" && "Launch 360° photo booth spin"}
+                {phase === "idle" && `Launch ${spinSec}s 360° photo booth spin`}
               </span>
             </span>
           </div>

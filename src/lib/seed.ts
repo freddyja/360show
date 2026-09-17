@@ -13,6 +13,7 @@ export function sampleEvent(now = Date.now()): BoothEvent {
     musicBedLabel: "Romantic piano",
     customMusicBlobId: null,
     customMusicName: null,
+    captureDurationSec: 10,
     frameStyle: "gold-oval",
     createdAt: now,
     updatedAt: now,

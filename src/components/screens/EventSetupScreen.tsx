@@ -8,7 +8,7 @@ import { FRAME_STYLES } from "@/lib/frames";
 import { createId } from "@/lib/ids";
 import { capturePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
-import { MUSIC_BEDS, type BoothEvent } from "@/lib/types";
+import { MUSIC_BEDS, CAPTURE_DURATION_SECS, resolveCaptureDurationSec, type BoothEvent } from "@/lib/types";
 import { SOFT_MUSIC_BEDS, hasMusicBed, musicBedSrc, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { hasCustomMusic, musicCaption, validateCustomMusicFile } from "@/lib/music/custom";
 import { nudgeBoothMusic, syncBoothMusic } from "@/lib/music/player";
@@ -33,6 +33,7 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
       musicBedLabel: MUSIC_BEDS[1],
       customMusicBlobId: null,
       customMusicName: null,
+      captureDurationSec: 10,
       frameStyle: "gold-oval",
       createdAt: now,
       updatedAt: now,
@@ -127,6 +128,7 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
       updatedAt: Date.now(),
       clientNames: form.clientNames.trim() || "Guests",
       musicBedLabel: normalizeMusicBedLabel(form.musicBedLabel),
+      captureDurationSec: resolveCaptureDurationSec(form.captureDurationSec),
     };
     syncBoothMusic({ src: null, playing: false });
     const music =
@@ -177,6 +179,29 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
         <Field label="Date">
           <input type="date" value={form.date} onChange={(e) => update("date", e.target.value)} className={inputClass} />
         </Field>
+        <div>
+          <span className="mb-2 block text-sm text-slate-400">Spin length</span>
+          <div className="grid grid-cols-3 gap-2">
+            {CAPTURE_DURATION_SECS.map((sec) => (
+              <button
+                key={sec}
+                type="button"
+                onClick={() => update("captureDurationSec", sec)}
+                className={cn(
+                  "min-h-12 rounded-2xl border text-base font-medium",
+                  resolveCaptureDurationSec(form.captureDurationSec) === sec
+                    ? "border-blue-400 bg-blue-500/10 text-white"
+                    : "booth-card border-white/10 text-slate-200",
+                )}
+              >
+                {sec}s
+              </button>
+            ))}
+          </div>
+          <span className="mt-1 block text-xs text-slate-500">
+            How long START SPIN records. Existing events default to 10s.
+          </span>
+        </div>
         <Field label="Accent color">
           <div className="flex items-center gap-3">
             <input

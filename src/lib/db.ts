@@ -1,6 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { AppSettings, BoothEvent, Clip } from "./types";
-import { DEFAULT_SETTINGS } from "./types";
+import { DEFAULT_SETTINGS, resolveCaptureDurationSec } from "./types";
 import { normalizeMusicBedLabel } from "./music/beds";
 
 interface Snap360Schema extends DBSchema {
@@ -29,6 +29,7 @@ function hydrateEvent(event: BoothEvent): BoothEvent {
     musicBedLabel: normalizeMusicBedLabel(event.musicBedLabel),
     customMusicBlobId: event.customMusicBlobId || null,
     customMusicName: event.customMusicName || null,
+    captureDurationSec: resolveCaptureDurationSec(event.captureDurationSec),
   };
 }
 

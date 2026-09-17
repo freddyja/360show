@@ -14,7 +14,7 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample event: **Maya & Jordan**.
 
 1. **Open booth** on the sample event (or create your own).
-2. Tap **START SPIN**. Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
+2. Tap **START SPIN**. Capture length is **10, 15, or 20 seconds** (Event setup → Spin length, default 10s). Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
 3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files. If the event has a music bed (not None), it loops under spin / preview / share and is mixed into the export when the browser can record audio.
 4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), booth music mute, force-offline chip, and mock battery %.
 
@@ -130,7 +130,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 | --- | --- |
 | `/` | Events list — create / select tonight’s event |
 | `/events/new` | New event setup |
-| `/e/[eventId]` | Event setup — name, date, couple names, accent, logo, **music bed or song from this phone**, frame style |
+| `/e/[eventId]` | Event setup — name, date, **spin length (10/15/20s)**, couple names, accent, logo, **music bed or song from this phone**, frame style |
 | `/e/[eventId]/capture` | Operator capture (mockup 1) |
 | `/e/[eventId]/gallery` | Tonight’s clips |
 | `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, **mute booth music**, force offline, **Blob vs Drive destination**, Google Drive connect |
@@ -141,7 +141,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 **Real in this MVP**
 
-- `getUserMedia` capture when the browser allows it (typically ~10s). **High** quality (default) requests 1920×1080 at ~8 Mbps; **Standard** is 1280×720 at ~4 Mbps. MediaRecorder prefers mp4/h264, else vp9/vp8 webm.
+- `getUserMedia` capture when the browser allows it. **Spin length** on Event setup is 10s (default), 15s, or 20s. **High** quality (default) requests 1920×1080 at ~8 Mbps; **Standard** is 1280×720 at ~4 Mbps. MediaRecorder prefers mp4/h264, else vp9/vp8 webm.
 - Fallback to a live canvas demo scene, then a bundled `/demo/spin.mp4` if recording fails
 - IndexedDB persistence for events, clip metadata, and video blobs (`idb`)
 - Guest QR (public origin + `/s/[clipId]`) via `qrcode.react`
@@ -170,7 +170,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 ## Capture pipeline
 
-`START SPIN` → 3-2-1 countdown → timed record (quality from Settings) → save original → if slow-mo is on and/or a music bed is selected, background-bake the time-ramp (and mix the bed) at the same quality cap → gallery / share (upload uses that export).
+`START SPIN` → 3-2-1 countdown → timed record (length from Event setup **Spin length**, quality from Settings) → save original → if slow-mo is on and/or a music bed is selected, background-bake the time-ramp (and mix the bed) at the same quality cap → gallery / share (upload uses that export).
 
 Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during record so a future motor implementation can run in lockstep.
 
@@ -184,7 +184,7 @@ Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during recor
 | Vercel Blob `export.*` | Baked once on the booth before upload | Not in the file |
 | Google Drive (anyone-with-link) | Baked file uploaded from the booth | Not in the file |
 
-Bake uses a hidden `<video>` + canvas `captureStream` + `MediaRecorder`. It follows the clip’s ramp profile (`time-ramp-v1` freeze vs `time-ramp-gentle`). Wall-clock encode is longer than the 10s source (typically tens of seconds). The original blob remains in IndexedDB for recapture/debug.
+Bake uses a hidden `<video>` + canvas `captureStream` + `MediaRecorder`. It follows the clip’s ramp profile (`time-ramp-v1` freeze vs `time-ramp-gentle`). Wall-clock encode is longer than the source clip (10 / 15 / 20s from Event setup, typically tens of seconds of bake). The original blob remains in IndexedDB for recapture/debug.
 
 **Settings → Slow-mo / time ramp** (default on) controls this. Off: Preview plays at 1× and Download / Share skip the slow-mo bake (they still re-encode if a music bed needs mixing). Guest pages honor `slowMoEnabled` on the cloud share so they do not re-apply a live ramp.
 

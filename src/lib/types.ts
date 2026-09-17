@@ -13,6 +13,18 @@ export type RampProfileId = "time-ramp-v1" | "time-ramp-gentle";
 
 export type CaptureSource = "camera" | "demo";
 
+export const CAPTURE_DURATION_SECS = [10, 15, 20] as const;
+export type CaptureDurationSec = (typeof CAPTURE_DURATION_SECS)[number];
+export const DEFAULT_CAPTURE_DURATION_SEC: CaptureDurationSec = 10;
+
+export function resolveCaptureDurationSec(value: unknown): CaptureDurationSec {
+  return value === 15 || value === 20 ? value : DEFAULT_CAPTURE_DURATION_SEC;
+}
+
+export function captureDurationMs(value: unknown): number {
+  return resolveCaptureDurationSec(value) * 1000;
+}
+
 export interface BoothEvent {
   id: string;
   name: string;
@@ -25,6 +37,8 @@ export interface BoothEvent {
   customMusicBlobId?: string | null;
   /** Display name of the operator-picked song. */
   customMusicName?: string | null;
+  /** START SPIN record length. Missing → 10s. */
+  captureDurationSec?: CaptureDurationSec;
   frameStyle: FrameStyleId;
   createdAt: number;
   updatedAt: number;
@@ -90,6 +104,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   boothMusicMuted: false,
 };
 
-export const CAPTURE_DURATION_MS = 10_000;
+export const CAPTURE_DURATION_MS = DEFAULT_CAPTURE_DURATION_SEC * 1000;
 export const COUNTDOWN_SECONDS = 3;
 export const DEMO_ASSET_PATH = "/demo/spin.mp4";

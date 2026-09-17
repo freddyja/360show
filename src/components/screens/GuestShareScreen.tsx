@@ -511,7 +511,10 @@ function cloudFromQuery(clipId: string): CloudShare | null {
     logoDataUrl: null,
     frameStyle: frame && isFrameStyleId(frame) ? frame : "gold-oval",
     createdAt: Date.now(),
-    durationMs: 10_000,
+    durationMs: (() => {
+      const t = Number(q.get("t"));
+      return t === 15 || t === 20 ? t * 1000 : 10_000;
+    })(),
     source: "demo",
     rampProfile: "time-ramp-v1",
     videoUrl: drivePreviewUrl(driveFileId),
@@ -550,6 +553,8 @@ function guestShareLink(
     const music = musicBedId(event?.musicBedLabel || cloud.musicBedLabel);
     if (music && music !== "none") q.set("m", music);
     if (cloud.hasAudio) q.set("a", "1");
+    const dur = Math.round((cloud.durationMs || 10_000) / 1000);
+    if (dur === 15 || dur === 20) q.set("t", String(dur));
     return `${base}?${q.toString()}`;
   }
   return base;
