@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { readShareVideo } from "@/lib/share/server";
-import { CLOUD_SHARE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
+import { getBlobAvailability, readShareVideo } from "@/lib/share/server";
+import { BLOB_STORE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import { isClipId } from "@/lib/share/types";
-import { cloudObjectStoreStatus } from "@/lib/storage/cloudStore";
 
 export const dynamic = "force-dynamic";
 
@@ -11,30 +10,26 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cli
   if (!isClipId(clipId)) {
     return NextResponse.json({ error: "Invalid clip id" }, { status: 400 });
   }
+  const blob = await getBlobAvailability();
+  if (!blob.usable) {
+    return NextResponse.json({ error: blob.message || BLOB_STORE_UNAVAILABLE_MESSAGE }, { status: 503 });
+  }
 
   try {
     const video = await readShareVideo(clipId);
-    if (video) {
-      return new Response(video.stream, {
-        headers: {
-          "Content-Type": video.contentType,
-          "Content-Length": String(video.size),
-          "Content-Disposition": video.contentDisposition || "inline",
-          "Cache-Control": "private, max-age=3600",
-        },
-      });
+    if (!video) {
+      return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
+    return new Response(video.stream, {
+      headers: {
+        "Content-Type": video.contentType,
+        "Content-Length": String(video.size),
+        "Content-Disposition": video.contentDisposition || "inline",
+        "Cache-Control": "private, max-age=3600",
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not read video";
     return NextResponse.json({ error: message }, { status: 502 });
   }
-
-  const cloud = await cloudObjectStoreStatus();
-  if (!cloud.cloudShareReady) {
-    return NextResponse.json(
-      { error: cloud.cloudShareUnavailableReason || CLOUD_SHARE_UNAVAILABLE_MESSAGE },
-      { status: 503 },
-    );
-  }
-  return NextResponse.json({ error: "Video not found" }, { status: 404 });
 }

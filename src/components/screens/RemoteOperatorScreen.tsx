@@ -153,19 +153,9 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     setMusicUploading(true);
     setError(null);
     try {
-      const data = await uploadRemoteMusic(
-        eventId,
-        token,
-        file,
-        {
-          blobConfigured: Boolean(snapshot?.blobConfigured),
-          r2Usable: Boolean(snapshot?.r2Usable || snapshot?.remoteMusicAvailable),
-          remoteMusicAvailable: Boolean(snapshot?.remoteMusicAvailable),
-        },
-        {
-          signal: ac.signal,
-        },
-      );
+      const data = await uploadRemoteMusic(eventId, token, file, Boolean(snapshot?.blobConfigured), {
+        signal: ac.signal,
+      });
       if (ac.signal.aborted) return;
       const settled = await waitForRemoteMusicAck(eventId, token, data.commandId, {
         signal: ac.signal,
@@ -443,7 +433,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
             </p>
             {snapshot?.remoteMusicAvailable === false ? (
               <p className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                Laptop song upload is paused until Cloudflare R2 (or a healthy Blob store) is available. Pick a song on the booth
+                Laptop song upload is paused while Vercel Blob is unavailable. Pick a song on the booth
                 phone in Event setup instead.
               </p>
             ) : (
@@ -601,13 +591,11 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                     : "booth-card border-white/10",
                 )}
               >
-                <span className="block text-white">Guest cloud</span>
+                <span className="block text-white">Vercel Blob</span>
                 <span className="mt-1 block text-sm text-slate-400">
-                  {snapshot?.cloudShareReady || snapshot?.blobConfigured || snapshot?.r2Usable
-                    ? snapshot?.blobConfigured
-                      ? "Guest QR uploads use Vercel Blob on this deploy."
-                      : "Guest QR uploads use Cloudflare R2 on this deploy."
-                    : "Unavailable — use Drive or local download until R2 is configured."}
+                  {snapshot?.blobConfigured
+                    ? "Guest QR uploads work on this deploy."
+                    : "Temporarily unavailable — use Drive or local download."}
                 </span>
               </button>
               <button

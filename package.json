@@ -11,8 +11,6 @@
     "frames:generate": "python3 scripts/generate-frame-packs.py"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1134.0",
-    "@aws-sdk/s3-request-presigner": "^3.1134.0",
     "@vercel/blob": "^2.8.0",
     "@vercel/functions": "^3.9.8",
     "idb": "^8.0.3",

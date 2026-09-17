@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { r2PresignPut } from "@/lib/r2/objects";
-import { noteR2Failure } from "@/lib/r2/status";
 import { formatBlobWriteError } from "@/lib/share/access";
-import { blobUsable } from "@/lib/share/blobStatus";
 import {
   musicUnavailableMessage,
   readSession,
   remoteMusicAvailable,
-  resolveRemoteStoreMode,
   sessionIsLive,
   tokenMatches,
 } from "@/lib/remote/store";
@@ -24,43 +20,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: musicUnavailableMessage() }, { status: 503 });
   }
 
-  const body = (await request.json()) as HandleUploadBody & {
-    store?: string;
-    pathname?: string;
-    contentType?: string;
-    eventId?: string;
-    token?: string;
-  };
-
-  if (body.store === "r2") {
-    const mode = await resolveRemoteStoreMode();
-    if (mode !== "r2") {
-      return NextResponse.json({ error: musicUnavailableMessage() }, { status: 503 });
-    }
-    const eventId = String(body.eventId || "").trim();
-    const pathname = String(body.pathname || "");
-    if (!isEventId(eventId) || !isRemoteMusicPath(pathname, eventId)) {
-      return NextResponse.json({ error: "Invalid music upload path." }, { status: 400 });
-    }
-    const session = await readSession(eventId);
-    if (!session || !sessionIsLive(session) || !tokenMatches(session, body.token)) {
-      return NextResponse.json({ error: "Pair token expired or invalid." }, { status: 401 });
-    }
-    try {
-      const signed = await r2PresignPut(pathname, body.contentType || "application/octet-stream");
-      return NextResponse.json({ store: "r2", ...signed });
-    } catch (error) {
-      noteR2Failure(error);
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "R2 presign failed" },
-        { status: 502 },
-      );
-    }
-  }
-
-  if (!(await blobUsable())) {
-    return NextResponse.json({ error: musicUnavailableMessage() }, { status: 503 });
-  }
+  const body = (await request.json()) as HandleUploadBody;
 
   try {
     const jsonResponse = await handleUpload({

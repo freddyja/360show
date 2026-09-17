@@ -194,9 +194,9 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
           >
             <Cloud className="mt-0.5 h-6 w-6 shrink-0 text-blue-400" />
             <span>
-              <span className="block text-white">Guest cloud</span>
+              <span className="block text-white">Vercel Blob</span>
               <span className="mt-1 block text-sm text-slate-400">
-                Vercel Blob when healthy, otherwise Cloudflare R2. No new Blob store needed.
+                Default. Needs BLOB_READ_WRITE_TOKEN from the new Hobby Blob store on Production.
               </span>
             </span>
           </button>
@@ -222,16 +222,14 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
 
         {destination === "blob" && (
           <p className="mt-4 text-sm text-slate-400">
-            {config?.cloudShareReady || config?.blobConfigured || config?.r2Usable
-              ? config?.blobConfigured
-                ? config.blobAccess
-                  ? `Blob is healthy (${config.blobAccess} store). Share uploads clips to Vercel Blob.`
-                  : "Blob is healthy. Share will upload clips to Vercel Blob."
-                : "Cloudflare R2 is ready. Share uploads clips to R2 (Blob is paused or unset)."
-              : config?.blobTokenPresent || config?.r2Configured || config?.cloudShareUnavailableReason
-                ? config?.cloudShareUnavailableReason ||
-                  "Guest cloud is temporarily unavailable. Booth capture still works; download stays on this tablet."
-                : "Guest cloud is not configured on this deploy. Add Cloudflare R2 env vars on Vercel (Production + Preview). You do not need another Vercel Blob store. Local preview still works."}
+            {config?.blobConfigured
+              ? config.blobAccess
+                ? `Blob token is set (${config.blobAccess} store). Share uploads clips to Vercel Blob.`
+                : "Blob token is set. Share will upload clips to Vercel Blob."
+              : config?.blobTokenPresent || config?.blobUnavailableReason
+                ? config.blobUnavailableReason ||
+                  "Vercel Blob is temporarily unavailable (store suspended or over Hobby limits). Booth capture still works; guest cloud share via Blob is paused. Download stays on this tablet."
+                : "Blob is not configured on this deploy. Set Production BLOB_READ_WRITE_TOKEN to the new Hobby store (not the suspended 360show-blob store). Local preview still works."}
           </p>
         )}
 
@@ -286,7 +284,7 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
           (Settings) requests 1080p high or 720p standard. Slow-mo can be toggled: on uses a live
           playback-rate ramp and bakes it into Download / Share files; off keeps normal speed. Event
           music beds loop under spin / preview / share; a song from this phone can replace the bed
-          and mix into exports when the browser allows. Share can upload to Cloudflare R2, Vercel Blob, or Google
+          and mix into exports when the browser allows. Share can upload to Vercel Blob or Google
           Drive. Platform motor and GoPro control are stubbed.
         </p>
         <p className="mt-3 text-sm text-slate-500">

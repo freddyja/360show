@@ -14,7 +14,7 @@ import { useClipSrc } from "@/lib/useClipSrc";
 import { cn } from "@/lib/cn";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudShare, fetchShareConfig, publishClipToCloud, publishClipToDrive } from "@/lib/share/publish";
-import { CLOUD_SHARE_UNAVAILABLE_MESSAGE, R2_SETUP_HINT, isBlobUnusableError } from "@/lib/share/access";
+import { BLOB_CLOUD_UNAVAILABLE_MESSAGE, isBlobUnusableError } from "@/lib/share/access";
 import { bakeSourceForClip, ensureBakedClip, needsExportBake, extensionForBlob, triggerBlobDownload } from "@/lib/capture/ensureBaked";
 import { isWebmContainer } from "@/lib/capture/quality";
 import { publishCrowd } from "@/lib/crowd/channel";
@@ -172,12 +172,11 @@ export function GuestShareScreen({
           setPublishState("Offline — clip stays on this tablet");
           return;
         }
-        if (destination === "blob" && !(config.cloudShareReady || config.blobConfigured || config.r2Usable)) {
+        if (destination === "blob" && !config.blobConfigured) {
           setPublishState(
-            config.cloudShareUnavailableReason ||
-              (config.blobTokenPresent || config.r2Configured
-                ? CLOUD_SHARE_UNAVAILABLE_MESSAGE
-                : `Local-only share — ${R2_SETUP_HINT}`),
+            config.blobTokenPresent || config.blobUnavailableReason
+              ? BLOB_CLOUD_UNAVAILABLE_MESSAGE
+              : "Local-only share — add BLOB_READ_WRITE_TOKEN to upload for guest phones",
           );
           return;
         }
@@ -253,15 +252,12 @@ export function GuestShareScreen({
           setPublishState("Live for guest phones");
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "";
-        const fatal =
-          isBlobUnusableError(error) ||
-          /temporarily unavailable|R2 is not configured|not reachable/i.test(message);
+        const fatal = isBlobUnusableError(error);
         if (!fatal) publishOnce.current = null;
         if (!cancelled) {
           setPublishState(
             fatal
-              ? CLOUD_SHARE_UNAVAILABLE_MESSAGE
+              ? BLOB_CLOUD_UNAVAILABLE_MESSAGE
               : error instanceof Error
                 ? error.message
                 : "Cloud upload failed",
@@ -306,10 +302,10 @@ export function GuestShareScreen({
           <p className="max-w-lg text-slate-400">
             {destination === "drive"
               ? "This clip is not in cloud storage yet. On the booth, connect Google Drive in Settings, then open Share."
-              : config && !(config.cloudShareReady || config.blobConfigured || config.r2Usable)
-                ? config.blobTokenPresent || config.r2Configured || config.cloudShareUnavailableReason
-                  ? "Guest cloud storage is unavailable, so this guest link has no cloud clip yet. Download still works on the booth tablet."
-                  : `This clip lives on the booth tablet. ${R2_SETUP_HINT} Or connect Google Drive in Settings so guest phones can load it.`
+              : config && !config.blobConfigured
+                ? config.blobTokenPresent || config.blobUnavailableReason
+                  ? "Vercel Blob is temporarily unavailable, so this guest link has no cloud clip yet. Download still works on the booth tablet."
+                  : "This clip lives on the booth tablet. Deploy with Vercel Blob (BLOB_READ_WRITE_TOKEN) or connect Google Drive in Settings so guest phones can load it."
                 : "This share link has no cloud clip yet. Open Share on the booth after connecting storage, or scan again after upload."}
           </p>
         </div>
@@ -526,7 +522,7 @@ export function GuestShareScreen({
             isWebmContainer(resolvedCloud?.videoContentType) && (
               <p className="px-4 pb-3 text-center text-xs text-amber-200/90">
                 Drive often cannot preview WebM (“still being processed”). Download the file, or use
-                guest cloud (Blob / R2) for the guest QR. New bakes prefer MP4 when this browser supports it.
+                Vercel Blob for the guest QR. New bakes prefer MP4 when this browser supports it.
               </p>
             )}
         </div>
@@ -563,7 +559,7 @@ export function GuestShareScreen({
       </footer>
       {publicMode && (
         <p className="mt-3 text-center text-xs text-slate-500">
-          Guest phones load this clip from Cloudflare R2, Vercel Blob, or Google Drive when the booth has uploaded
+          Guest phones load this clip from Vercel Blob or Google Drive when the booth has uploaded
           it. Use the deployed HTTPS URL in the QR, not a LAN IP. Downloads are ramp-baked when
           slow-mo is on; a music bed or a song from the booth tablet is mixed in when this browser
           can record audio. Custom songs stay on the booth except inside that mixed file. Look-pack

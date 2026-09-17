@@ -102,10 +102,6 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const runSpinRef = useRef<() => Promise<void>>(async () => undefined);
   const cloudFlagsRef = useRef<RemoteCloudFlags>({
     blobConfigured: false,
-    r2Configured: false,
-    r2Usable: false,
-    cloudStore: "none",
-    cloudShareReady: false,
     remoteMusicAvailable: false,
     driveConfigured: false,
     driveConnected: false,
@@ -281,10 +277,6 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       }
       cloudFlagsRef.current = {
         blobConfigured: Boolean(config.blobConfigured),
-        r2Configured: Boolean(config.r2Configured),
-        r2Usable: Boolean(config.r2Usable),
-        cloudStore: config.cloudStore,
-        cloudShareReady: Boolean(config.cloudShareReady),
         remoteMusicAvailable: Boolean(config.remoteMusicAvailable),
         driveConfigured: Boolean(config.driveConfigured),
         driveConnected,
@@ -521,7 +513,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             true,
             cmd.payload.cloudDestination === "drive"
               ? "Cloud destination: Google Drive (connect on the phone if needed)"
-              : "Cloud destination: guest cloud",
+              : "Cloud destination: Vercel Blob",
           );
           return;
         }
