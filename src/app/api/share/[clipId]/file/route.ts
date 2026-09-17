@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { blobUsable, readShareVideo } from "@/lib/share/server";
+import { getBlobAvailability, readShareVideo } from "@/lib/share/server";
 import { BLOB_STORE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import { isClipId } from "@/lib/share/types";
 
@@ -10,8 +10,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cli
   if (!isClipId(clipId)) {
     return NextResponse.json({ error: "Invalid clip id" }, { status: 400 });
   }
-  if (!(await blobUsable())) {
-    return NextResponse.json({ error: BLOB_STORE_UNAVAILABLE_MESSAGE }, { status: 503 });
+  const blob = await getBlobAvailability();
+  if (!blob.usable) {
+    return NextResponse.json({ error: blob.message || BLOB_STORE_UNAVAILABLE_MESSAGE }, { status: 503 });
   }
 
   try {

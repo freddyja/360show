@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     blobAccessError: blob.usable ? null : blob.message,
     remoteAvailable,
     remoteStore,
-    remoteUnavailableReason: remoteAvailable ? null : storeUnavailableMessage(remoteStore),
+    remoteUnavailableReason: remoteAvailable ? null : storeUnavailableMessage(),
     remoteMusicAvailable: musicOk,
     driveConfigured: driveConfigured(),
     driveConnected: Boolean(refreshToken),

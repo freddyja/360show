@@ -1,7 +1,7 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { BLOB_STORE_UNAVAILABLE_MESSAGE, formatBlobWriteError, isBlobUnusableError } from "@/lib/share/access";
-import { blobUsable } from "@/lib/share/server";
+import { getBlobAvailability } from "@/lib/share/server";
 import { noteBlobFailure } from "@/lib/share/blobStatus";
 import { isClipId } from "@/lib/share/types";
 
@@ -13,9 +13,10 @@ function isAllowedVideoPath(pathname: string) {
 }
 
 export async function POST(request: Request) {
-  if (!(await blobUsable())) {
+  const blob = await getBlobAvailability();
+  if (!blob.usable) {
     return NextResponse.json(
-      { error: BLOB_STORE_UNAVAILABLE_MESSAGE },
+      { error: blob.message || BLOB_STORE_UNAVAILABLE_MESSAGE },
       { status: 503 },
     );
   }

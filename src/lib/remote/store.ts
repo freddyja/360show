@@ -84,7 +84,7 @@ export async function remoteMusicAvailable() {
   return blobConfigured();
 }
 
-export function storeUnavailableMessage(_mode?: RemoteStoreMode) {
+export function storeUnavailableMessage() {
   return "Laptop remote is paused while cloud storage is unavailable. Use the booth phone for capture, look, and songs until Vercel Blob is back.";
 }
 

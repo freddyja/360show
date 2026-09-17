@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { blobUsable, readCloudShare, writeCloudShare } from "@/lib/share/server";
+import { blobUsable, getBlobAvailability, readCloudShare, writeCloudShare } from "@/lib/share/server";
 import { BLOB_STORE_UNAVAILABLE_MESSAGE, formatBlobWriteError } from "@/lib/share/access";
 import { isClipId, isFrameStyleId, type CloudShare } from "@/lib/share/types";
 
@@ -43,7 +43,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ clip
     return NextResponse.json({ error: "Invalid share payload" }, { status: 400 });
   }
 
-  if (await blobUsable()) {
+  const blob = await getBlobAvailability();
+  if (blob.usable) {
     try {
       await writeCloudShare(body);
       return NextResponse.json({ ok: true, clipId, stored: "blob" });
@@ -66,7 +67,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ clip
   }
 
   return NextResponse.json(
-    { error: BLOB_STORE_UNAVAILABLE_MESSAGE },
+    { error: blob.message || BLOB_STORE_UNAVAILABLE_MESSAGE },
     { status: 503 },
   );
 }

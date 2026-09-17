@@ -32,7 +32,7 @@ export function isBlobUnusableError(error: unknown) {
     return true;
   }
   const msg = blobErrorText(error);
-  return /store has been suspended|store_suspended|limits-exceeded-suspended|limits reached|your store is blocked|store is blocked|usage_threshold|billingstate[:\s]*suspended|this store has been suspended|blob.*suspended|advanced operations quota|over (the )?hobby (plan )?limit/i.test(
+  return /store has been suspended|store_suspended|store does not exist|store_not_found|limits-exceeded-suspended|limits reached|your store is blocked|store is blocked|usage_threshold|billingstate[:\s]*suspended|this store has been suspended|blob.*suspended|advanced operations quota|over (the )?hobby (plan )?limit/i.test(
     msg,
   );
 }
