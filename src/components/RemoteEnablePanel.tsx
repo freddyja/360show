@@ -58,7 +58,12 @@ export function RemoteEnablePanel({
           <button
             type="button"
             disabled={busy || !available}
-            className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 disabled:opacity-40"
+            className={cn(
+              "rounded-full px-4 py-2 text-sm font-medium disabled:cursor-not-allowed",
+              available
+                ? "bg-cyan-500 text-slate-950 disabled:opacity-40"
+                : "border border-white/15 bg-black/30 text-slate-400",
+            )}
             onClick={onEnable}
           >
             Enable remote control
