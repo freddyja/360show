@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getNamedBlob } from "@/lib/db";
 import type { BoothEvent } from "@/lib/types";
 import { musicBedId, musicBedSrc } from "./beds";
-import { exportMusicId, hasCustomMusic } from "./custom";
+import { exportMusicId, usesCustomMusic } from "./custom";
 
 const objectUrls = new Map<string, string>();
 
@@ -32,7 +32,7 @@ export async function resolveEventMusic(event: BoothEvent | null | undefined): P
   musicId: string;
 }> {
   if (!event) return { src: null, musicId: "none" };
-  if (event.customMusicBlobId) {
+  if (event.customMusicBlobId && !event.preferBundledBed) {
     const src = await srcForCustomMusic(event.customMusicBlobId);
     if (src) return { src, musicId: exportMusicId(event) || "custom" };
   }
@@ -45,7 +45,7 @@ export async function resolveEventMusic(event: BoothEvent | null | undefined): P
 /** Object URL for a custom song, or bundled bed path. */
 export function useEventMusicSrc(event: BoothEvent | null | undefined) {
   const [src, setSrc] = useState<string | null>(() =>
-    event && !hasCustomMusic(event) ? musicBedSrc(event.musicBedLabel) : null,
+    event && !usesCustomMusic(event) ? musicBedSrc(event.musicBedLabel) : null,
   );
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export function useEventMusicSrc(event: BoothEvent | null | undefined) {
       setSrc(null);
       return;
     }
-    if (!hasCustomMusic(event)) {
+    if (!usesCustomMusic(event)) {
       setSrc(musicBedSrc(event.musicBedLabel));
       return;
     }
@@ -65,7 +65,7 @@ export function useEventMusicSrc(event: BoothEvent | null | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [event, event?.id, event?.customMusicBlobId, event?.musicBedLabel]);
+  }, [event, event?.id, event?.customMusicBlobId, event?.musicBedLabel, event?.preferBundledBed]);
 
   return src;
 }

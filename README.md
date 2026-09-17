@@ -17,6 +17,7 @@ Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample
 2. Tap **START SPIN**. Capture length is **10, 15, or 20 seconds** (Event setup → Spin length, default 10s). Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
 3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files. If the event has a music bed (not None), it loops under spin / preview / share and is mixed into the export when the browser can record audio. The selected **look-pack frame** is composited into that same baked file.
 4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), booth music mute, force-offline chip, and mock battery %. **Open crowd / TV screen** (Capture or Event) opens a full-bleed room display you can cast.
+5. **Remote operator:** on the booth phone keep Capture open → **Enable remote control** → scan the QR (or open `/e/[eventId]/remote`) on a laptop. The laptop START SPINs and changes look / booth settings over HTTPS. See [Remote operator](#remote-operator).
 
 Local demo works **without** Blob or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
 
@@ -32,7 +33,7 @@ Copy `.env.example` to `.env.local` (never commit tokens):
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `BLOB_READ_WRITE_TOKEN` | For Blob sharing | Vercel Blob read-write token. Create a Blob store in the Vercel project **Storage** tab. Include the **Development** environment if you want local uploads. |
+| `BLOB_READ_WRITE_TOKEN` | For Blob sharing **and** remote operator in production | Vercel Blob read-write token. Create a Blob store in the Vercel project **Storage** tab. Include the **Development** environment if you want local uploads. Remote operator stores a short-lived session JSON at `remote/{eventId}/session.json`. |
 | `BLOB_ACCESS` | Optional | `public` or `private`. Must match the store. New Vercel Blob stores are often **private**; `put(..., { access: "public" })` against a private store fails. If unset, the app detects the mode. |
 | `NEXT_PUBLIC_APP_URL` | Recommended in production | Public site origin used in QR, copy-link, and SMS, e.g. `https://your-app.vercel.app` (no trailing slash). |
 | `GOOGLE_CLIENT_ID` | For Drive sharing | OAuth 2.0 Web client ID from Google Cloud Console. |
@@ -133,7 +134,8 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 | `/` | Events list — create / select tonight’s event |
 | `/events/new` | New event setup |
 | `/e/[eventId]` | Event setup — name, date, **spin length (10/15/20s)**, couple names, accent, logo, **music bed or song from this phone**, frame style |
-| `/e/[eventId]/capture` | Operator capture (mockup 1) — **Open crowd / TV screen** |
+| `/e/[eventId]/capture` | Operator capture (mockup 1) — **Open crowd / TV screen**, **Enable remote control** |
+| `/e/[eventId]/remote` | Laptop remote operator (pair via QR/`?k=` or 6-character code). START SPIN + look + booth settings |
 | `/e/[eventId]/crowd` | Full-bleed TV / room display (idle branding + latest spin) |
 | `/e/[eventId]/gallery` | Tonight’s clips |
 | `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, **mute booth music**, force offline, **Blob vs Drive destination**, Google Drive connect |
@@ -155,7 +157,8 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - **Baked slow-mo export**: same ramp re-encoded for Download / Share when slow-mo is on; skipped when off
 - **Music beds**: original CC0 instrumentals under `/music/`. Looping playback on spin / preview / share; best-effort mix into Download / Share via Web Audio + MediaRecorder. **Song from this phone** stores an operator-picked audio file in IndexedDB (not uploaded except inside a mixed export).
 - Event frames overlaid on **web preview** and **burned into Download / Share / Blob / Drive** (gold oval, neon ring, midnight arch, classic plaque, **Christian Fellowship**, **Polaroid stack**, **Disco chrome**, **Black-tie bar**). **Minimal** stays a thin web border only — the file has no extra decoration.
-- **Crowd / TV screen** at `/e/[eventId]/crowd` — full-bleed looping latest spin, idle “next spin” branding, optional guest QR. Open from Capture or Event setup.
+- **Crowd / TV screen** at `/e/[eventId]/crowd` — full-bleed looping latest spin, idle “next spin” branding, optional guest QR. Open from Capture, Event setup, or the laptop remote page.
+- **Remote operator** at `/e/[eventId]/remote` — a laptop on the public HTTPS site pairs to the booth phone (Capture armed) and START SPINs plus look/settings. Pair token + short code; no extra accounts.
 - **Christian Fellowship** look-pack: navy/gold plaque overlay (`/frames/christian-fellowship.png`), default accent `#C9A227`, gentle slow-mo ramp (no freeze-flash)
 - **Polaroid stack**: warm instant-film border + stacked print (`/frames/polaroid-stack.png`), caption strip for couple names, accent `#F5F0E8`, gentle ramp
 - **Disco chrome**: silver bezel with specular highlights (`/frames/disco-chrome.png`), accent `#67E8F9`, livelier freeze ramp
@@ -202,6 +205,37 @@ Bake uses a hidden `<video>` + canvas `captureStream` + `MediaRecorder`. It foll
 - **Same tablet / same browser profile:** IndexedDB + `BroadcastChannel` / `localStorage`. Cast that tab to the TV. Idle shows event + couple names; countdown/recording flash big type; after a spin the latest clip loops.
 - **Second device without the booth session:** it cannot read IndexedDB. After Share uploads, the copied `?c=` link can load the cloud clip. Otherwise it stays on “waiting for next spin”.
 - Autoplay is **muted** (browser policy); **Tap for sound** unmutes.
+
+## Remote operator
+
+A laptop (or second browser) controls the **booth phone** over the public HTTPS site — not a LAN IP. The phone stays the camera/capture device with **Capture** open. BroadcastChannel is same-origin only and is **not** used for this.
+
+### How to use
+
+1. On the **booth phone**, open the production site (e.g. `https://360show.vercel.app`) → tonight’s event → **Capture**.
+2. Tap **Enable remote control**. The phone shows a QR, HTTPS link, 6-character pair code, and pair status (waiting / paired).
+3. On the **laptop**, scan the QR or open `/e/[eventId]/remote` and type the code (or use the `?k=` token in the link). No separate account.
+4. Laptop **START SPIN** runs countdown + record **on the phone**. Spin length, frame, music bed, names, accent, slow-mo, quality, mute, and Blob vs Drive apply on the booth for the next spin (and on Capture chrome immediately).
+5. Keep Capture open while remote is armed. Navigating away or **Disable remote** takes the laptop offline. Sessions expire after about 4 hours; Enable remote again to rotate the token.
+
+Production needs the same **Vercel Blob** token as guest Share (`BLOB_READ_WRITE_TOKEN`). Sessions are JSON at `remote/{eventId}/session.json` plus a pending command blob. Local `npm run dev` without Blob uses an in-memory channel in that Node process (two browsers on localhost work; a second machine will not).
+
+### What the laptop can change
+
+| Control | Where it lands |
+| --- | --- |
+| START SPIN | Capture on the phone (only while remote is armed and idle) |
+| Spin length 10 / 15 / 20s | Event `captureDurationSec` |
+| Frame style (all look-packs) | Event `frameStyle` (+ pack default accent when set) |
+| Music bed / None | Event `musicBedLabel`. Custom phone file is **not deleted**; `preferBundledBed` makes the bed win |
+| Event name, couple names, accent | Event record |
+| Slow-mo, video quality, mute booth music | App settings on the phone |
+| Cloud destination Blob vs Drive (+ Drive folder name) | App settings. **Connect Google Drive** still runs on the phone (OAuth cookies) |
+| Open / copy crowd TV link | Same `/e/[eventId]/crowd` URL; no extra pairing |
+
+Phone-only (shown disabled on the laptop with a reason): custom song from the phone library, Drive OAuth connect, event logo file, camera hardware.
+
+Strangers cannot spin a random event: the booth creates a pair token (in the QR) and a short code bound to that `eventId`. Commands require the token. The phone executes them only while Capture has remote enabled.
 
 ## Music beds
 

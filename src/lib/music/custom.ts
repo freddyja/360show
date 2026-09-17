@@ -14,8 +14,15 @@ export function hasCustomMusic(event: { customMusicBlobId?: string | null } | nu
   return Boolean(event?.customMusicBlobId);
 }
 
-export function exportMusicId(event: { customMusicBlobId?: string | null; musicBedLabel?: string | null } | null | undefined) {
-  if (event?.customMusicBlobId) {
+/** Custom file is stored and currently winning over the bundled bed. */
+export function usesCustomMusic(
+  event: { customMusicBlobId?: string | null; preferBundledBed?: boolean } | null | undefined,
+) {
+  return Boolean(event?.customMusicBlobId) && !event?.preferBundledBed;
+}
+
+export function exportMusicId(event: { customMusicBlobId?: string | null; musicBedLabel?: string | null; preferBundledBed?: boolean } | null | undefined) {
+  if (event?.customMusicBlobId && !event.preferBundledBed) {
     return `c${event.customMusicBlobId.replace(/[^A-Za-z0-9]/g, "").slice(-48)}`;
   }
   return null;
@@ -47,9 +54,10 @@ export function validateCustomMusicFile(file: File): string | null {
 }
 
 export function musicCaption(
-  event: { customMusicName?: string | null; customMusicBlobId?: string | null; musicBedLabel?: string } | null | undefined,
+  event: { customMusicName?: string | null; customMusicBlobId?: string | null; musicBedLabel?: string; preferBundledBed?: boolean } | null | undefined,
   fallbackBed: string,
 ) {
+  if (event?.preferBundledBed) return fallbackBed;
   if (event?.customMusicName?.trim()) return event.customMusicName.trim();
   if (event?.customMusicBlobId) return "Song from this phone";
   return fallbackBed;

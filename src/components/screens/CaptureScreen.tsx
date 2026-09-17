@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Eye, Share2 } from "lucide-react";
 import { SpinIcon } from "@/components/SpinIcon";
@@ -9,29 +9,61 @@ import { FrameOverlay, frameMediaClass } from "@/components/FrameOverlay";
 import { RampPlayer } from "@/components/RampPlayer";
 import { BootScreen } from "@/components/BootScreen";
 import { CrowdOpenControls } from "@/components/CrowdOpenControls";
+import { RemoteEnablePanel } from "@/components/RemoteEnablePanel";
 import { OperatorShell } from "@/components/OperatorShell";
 import { publishCrowd } from "@/lib/crowd/channel";
 import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/capture/record";
 import { bakeSourceForClip, ensureBakedClip, needsExportBake } from "@/lib/capture/ensureBaked";
 import { hasMusicBed, normalizeMusicBedLabel } from "@/lib/music/beds";
-import { hasCustomMusic, musicCaption } from "@/lib/music/custom";
+import { usesCustomMusic, musicCaption } from "@/lib/music/custom";
 import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
 import { resolveEventMusic, useEventMusicSrc } from "@/lib/music/resolve";
 import { createStubMotor, probeCamera, type CameraStatus } from "@/lib/hardware";
 import { cn } from "@/lib/cn";
 import { createId } from "@/lib/ids";
-import { rampProfileForFrame } from "@/lib/frames";
+import { getFrameStyle, rampProfileForFrame } from "@/lib/frames";
 import { operatorSharePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
 import { COUNTDOWN_SECONDS, DEMO_ASSET_PATH, captureDurationMs, resolveCaptureDurationSec } from "@/lib/types";
 import type { Clip } from "@/lib/types";
 import { useClipSrc } from "@/lib/useClipSrc";
+import { fetchShareConfig } from "@/lib/share/publish";
+import {
+  clearStoredPair,
+  disableRemote,
+  heartbeatRemote,
+  pairRemote,
+  readStoredPair,
+  snapshotFromBooth,
+  type RemoteCloudFlags,
+  type StoredRemotePair,
+} from "@/lib/remote/client";
+import {
+  REMOTE_POLL_MS,
+  boothStatusForPhase,
+  isAccentColor,
+  isCaptureDurationSec,
+  isCloudDestination,
+  isMusicBedLabel,
+  isVideoQuality,
+  type RemoteCommandPayload,
+  type RemoteCommandType,
+  type RemotePublicView,
+} from "@/lib/remote/types";
+import { isFrameStyleId } from "@/lib/share/types";
 
 type Phase = "idle" | "countdown" | "recording" | "processing";
 
+type PendingRemoteCommand = {
+  id: string;
+  type: RemoteCommandType;
+  createdAt: number;
+  payload?: RemoteCommandPayload;
+};
+
 export function CaptureScreen({ eventId }: { eventId: string }) {
   const router = useRouter();
-  const { ready, settings, saveClip, patchClip } = useBooth();
+  const { ready, settings, saveClip, patchClip, saveEvent, saveSettings } = useBooth();
   const { event, latestClip } = useEvent(eventId);
   const [camera, setCamera] = useState<CameraStatus>("unavailable");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -40,11 +72,34 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [livePreview, setLivePreview] = useState(false);
+  const [remoteEnabled, setRemoteEnabled] = useState(false);
+  const [remotePair, setRemotePair] = useState<StoredRemotePair | null>(null);
+  const [remoteView, setRemoteView] = useState<RemotePublicView | null>(null);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const motor = useMemo(() => createStubMotor(), []);
   const lastSrc = useClipSrc(latestClip?.id, latestClip?.demoAssetPath);
   const musicSrc = useEventMusicSrc(event);
   const musicActive = phase !== "idle" || previewOpen;
+
+  const eventRef = useRef(event);
+  eventRef.current = event;
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const messageRef = useRef(message);
+  messageRef.current = message;
+  const latestClipRef = useRef(latestClip);
+  latestClipRef.current = latestClip;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const pendingAckRef = useRef<{ commandId: string; ok: boolean; message: string } | null>(null);
+  const handledCommands = useRef(new Set<string>());
+  const runSpinRef = useRef<() => Promise<void>>(async () => undefined);
+  const cloudFlagsRef = useRef<RemoteCloudFlags>({
+    blobConfigured: false,
+    driveConfigured: false,
+    driveConnected: false,
+  });
 
   useBoothMusic({
     src: musicSrc,
@@ -76,28 +131,54 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     };
   }, []);
 
-  if (!ready) return <BootScreen />;
-  if (!event) {
-    return (
-      <OperatorShell eventId={eventId}>
-        <p className="text-slate-300">This event was not found.</p>
-      </OperatorShell>
-    );
-  }
+  useEffect(() => {
+    const stored = readStoredPair(eventId);
+    if (stored?.token) {
+      setRemotePair(stored);
+      setRemoteEnabled(true);
+    }
+  }, [eventId]);
 
-  const offline = settings.forceOffline || (typeof navigator !== "undefined" && !navigator.onLine);
-  const busy = phase !== "idle";
-  const hasClip = Boolean(latestClip);
-  const spinSec = resolveCaptureDurationSec(event.captureDurationSec);
-  const spinMs = captureDurationMs(spinSec);
+  const bakeExportInBackground = useCallback(
+    async (clip: Clip, blob: Blob | null) => {
+      const current = eventRef.current;
+      if (!current) return;
+      try {
+        const music = await resolveEventMusic(current);
+        const result = await ensureBakedClip({
+          clip,
+          source: bakeSourceForClip(clip, blob),
+          quality: settingsRef.current.videoQuality,
+          musicBedLabel: current.musicBedLabel,
+          musicSrc: music.src,
+          musicId: music.musicId,
+          applyRamp: settingsRef.current.slowMoEnabled !== false,
+          frameStyle: current.frameStyle,
+          frameNames: current.clientNames,
+          frameAccent: current.accentColor,
+        });
+        await patchClip(clip.id, {
+          hasBakedBlob: true,
+          bakedAt: Date.now(),
+          hasMixedAudio: result.mixedAudio,
+        });
+      } catch {
+        // Download / Share will retry the bake.
+      }
+    },
+    [patchClip],
+  );
 
-  async function runSpin() {
-    if (busy || !event) return;
-    const resolved = await resolveEventMusic(event);
+  const runSpin = useCallback(async () => {
+    const current = eventRef.current;
+    if (!current || phaseRef.current !== "idle") return;
+    const spinMs = captureDurationMs(current.captureDurationSec);
+    const resolved = await resolveEventMusic(current);
+    const boothSettings = settingsRef.current;
     syncBoothMusic({
       src: resolved.src,
       playing: Boolean(resolved.src),
-      muted: settings.boothMusicMuted,
+      muted: boothSettings.boothMusicMuted,
     });
     nudgeBoothMusic();
     setMessage(null);
@@ -105,7 +186,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     setPhase("countdown");
     setLivePreview(true);
 
-    const live = await beginLivePreview(true, settings.videoQuality);
+    const live = await beginLivePreview(true, boothSettings.videoQuality);
     if (live.source === "camera") setCamera("ok");
     if (videoRef.current) {
       videoRef.current.srcObject = live.stream;
@@ -125,7 +206,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     }, 80);
 
     void motor.spin(spinMs);
-    const recorded = await recordCapture(spinMs, live, settings.videoQuality);
+    const recorded = await recordCapture(spinMs, live, boothSettings.videoQuality);
     window.clearInterval(tick);
     setProgress(1);
     live.stop();
@@ -139,60 +220,330 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     if (blob) URL.revokeObjectURL(src);
     const clip: Clip = {
       id: createId("clip"),
-      eventId: event.id,
+      eventId: current.id,
       createdAt: Date.now(),
       durationMs: spinMs,
       source: recorded.source,
       hasBlob: Boolean(blob),
       demoAssetPath: blob ? null : DEMO_ASSET_PATH,
       thumbnailDataUrl: thumbnail,
-      rampProfile: rampProfileForFrame(event.frameStyle),
+      rampProfile: rampProfileForFrame(current.frameStyle),
     };
     await saveClip(clip, blob);
-    if (needsExportBake(settings.slowMoEnabled !== false, event.musicBedLabel, hasCustomMusic(event), event.frameStyle)) {
+    if (needsExportBake(boothSettings.slowMoEnabled !== false, current.musicBedLabel, usesCustomMusic(current), current.frameStyle)) {
       void bakeExportInBackground(clip, blob);
     }
     await wait(600);
     setPhase("idle");
     setMessage(
       recorded.source === "demo"
-        ? settings.slowMoEnabled !== false
+        ? boothSettings.slowMoEnabled !== false
           ? "Demo spin saved — camera was unavailable. Baking export in the background."
-          : hasMusicBed(event.musicBedLabel) || hasCustomMusic(event)
+          : hasMusicBed(current.musicBedLabel) || usesCustomMusic(current)
             ? "Demo spin saved — camera was unavailable. Mixing music into the export."
             : "Demo spin saved — camera was unavailable. Slow-mo is off; the look-pack frame still burns on Download / Share."
-        : settings.slowMoEnabled !== false
+        : boothSettings.slowMoEnabled !== false
           ? "Spin saved. Baking export in the background."
-          : hasMusicBed(event.musicBedLabel) || hasCustomMusic(event)
+          : hasMusicBed(current.musicBedLabel) || usesCustomMusic(current)
             ? "Spin saved. Mixing music into the export."
             : "Spin saved at normal speed. Download / Share still burn the look-pack frame.",
     );
-  }
+  }, [bakeExportInBackground, motor, saveClip]);
 
-  async function bakeExportInBackground(clip: Clip, blob: Blob | null) {
+  runSpinRef.current = runSpin;
+
+  const boothSnapshot = useCallback(() => {
+    const current = eventRef.current;
+    if (!current) return null;
+    return snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current);
+  }, []);
+
+  const refreshCloudFlags = useCallback(async () => {
     try {
-      const music = await resolveEventMusic(event);
-      const result = await ensureBakedClip({
-        clip,
-        source: bakeSourceForClip(clip, blob),
-        quality: settings.videoQuality,
-        musicBedLabel: event?.musicBedLabel,
-        musicSrc: music.src,
-        musicId: music.musicId,
-        applyRamp: settings.slowMoEnabled !== false,
-        frameStyle: event?.frameStyle,
-        frameNames: event?.clientNames,
-        frameAccent: event?.accentColor,
-      });
-      await patchClip(clip.id, {
-        hasBakedBlob: true,
-        bakedAt: Date.now(),
-        hasMixedAudio: result.mixedAudio,
-      });
+      const config = await fetchShareConfig();
+      let driveConnected = Boolean(config.driveConnected);
+      try {
+        const statusRes = await fetch("/api/drive/status", { cache: "no-store" });
+        const status = (await statusRes.json()) as { connected?: boolean };
+        driveConnected = Boolean(status.connected);
+      } catch {
+        // share config is enough
+      }
+      cloudFlagsRef.current = {
+        blobConfigured: Boolean(config.blobConfigured),
+        driveConfigured: Boolean(config.driveConfigured),
+        driveConnected,
+      };
     } catch {
-      // Download / Share will retry the bake.
+      // snapshot still has settings; cloud flags stay previous
+    }
+  }, []);
+
+  const applyRemoteCommand = useCallback(
+    async (cmd: PendingRemoteCommand) => {
+      const current = eventRef.current;
+      if (!current) {
+        pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Event not loaded" };
+        return;
+      }
+      try {
+        if (cmd.type === "startSpin") {
+          if (phaseRef.current !== "idle") {
+            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Booth is busy" };
+            return;
+          }
+          await runSpinRef.current();
+          pendingAckRef.current = { commandId: cmd.id, ok: true, message: "Spin captured" };
+          return;
+        }
+        if (cmd.type === "setSpinLength") {
+          const sec = cmd.payload?.captureDurationSec;
+          if (!isCaptureDurationSec(sec)) {
+            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid spin length" };
+            return;
+          }
+          await saveEvent({ ...current, captureDurationSec: sec, updatedAt: Date.now() });
+          pendingAckRef.current = { commandId: cmd.id, ok: true, message: `Spin length ${sec}s` };
+          return;
+        }
+        if (cmd.type === "setMusicBed") {
+          const label = cmd.payload?.musicBedLabel;
+          if (!isMusicBedLabel(label)) {
+            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Unknown music bed" };
+            return;
+          }
+          await saveEvent({
+            ...current,
+            musicBedLabel: normalizeMusicBedLabel(label),
+            preferBundledBed: true,
+            updatedAt: Date.now(),
+          });
+          pendingAckRef.current = {
+            commandId: cmd.id,
+            ok: true,
+            message: label === "None" ? "Music cleared for next spin" : `Music bed: ${label}`,
+          };
+          return;
+        }
+        if (cmd.type === "setFrameStyle") {
+          const id = cmd.payload?.frameStyle;
+          if (typeof id !== "string" || !isFrameStyleId(id)) {
+            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Unknown frame" };
+            return;
+          }
+          const style = getFrameStyle(id);
+          await saveEvent({
+            ...current,
+            frameStyle: style.id,
+            accentColor: style.defaultAccent || current.accentColor,
+            updatedAt: Date.now(),
+          });
+          pendingAckRef.current = { commandId: cmd.id, ok: true, message: `Frame: ${style.name}` };
+          return;
+        }
+        if (cmd.type === "setEventBranding") {
+          const next = { ...current, updatedAt: Date.now() };
+          const bits: string[] = [];
+          if (cmd.payload?.name) {
+            next.name = cmd.payload.name;
+            bits.push("name");
+          }
+          if (cmd.payload?.clientNames) {
+            next.clientNames = cmd.payload.clientNames;
+            bits.push("names");
+          }
+          if (cmd.payload?.accentColor && isAccentColor(cmd.payload.accentColor)) {
+            next.accentColor = cmd.payload.accentColor;
+            bits.push("accent");
+          }
+          await saveEvent(next);
+          pendingAckRef.current = {
+            commandId: cmd.id,
+            ok: true,
+            message: bits.length ? `Updated ${bits.join(", ")}` : "Branding unchanged",
+          };
+          return;
+        }
+        if (cmd.type === "setSlowMo") {
+          if (typeof cmd.payload?.slowMoEnabled !== "boolean") {
+            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid slow-mo value" };
+            return;
+          }
+          await saveSettings({ ...settingsRef.current, slowMoEnabled: cmd.payload.slowMoEnabled });
+          pendingAckRef.current = {
+            commandId: cmd.id,
+            ok: true,
+            message: cmd.payload.slowMoEnabled ? "Slow-mo on" : "Slow-mo off",
+          };
+          return;
+        }
+        if (cmd.type === "setVideoQuality") {
+          if (!isVideoQuality(cmd.payload?.videoQuality)) {
+            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid video quality" };
+            return;
+          }
+          await saveSettings({ ...settingsRef.current, videoQuality: cmd.payload.videoQuality });
+          pendingAckRef.current = {
+            commandId: cmd.id,
+            ok: true,
+            message: cmd.payload.videoQuality === "standard" ? "Quality: Standard 720p" : "Quality: High 1080p",
+          };
+          return;
+        }
+        if (cmd.type === "setBoothMusicMuted") {
+          if (typeof cmd.payload?.boothMusicMuted !== "boolean") {
+            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid mute value" };
+            return;
+          }
+          await saveSettings({ ...settingsRef.current, boothMusicMuted: cmd.payload.boothMusicMuted });
+          pendingAckRef.current = {
+            commandId: cmd.id,
+            ok: true,
+            message: cmd.payload.boothMusicMuted ? "Booth music muted" : "Booth music on",
+          };
+          return;
+        }
+        if (cmd.type === "setCloudDestination") {
+          if (!isCloudDestination(cmd.payload?.cloudDestination)) {
+            pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Invalid cloud destination" };
+            return;
+          }
+          await saveSettings({
+            ...settingsRef.current,
+            cloudDestination: cmd.payload.cloudDestination,
+            driveFolderName: cmd.payload.driveFolderName || settingsRef.current.driveFolderName,
+          });
+          await refreshCloudFlags();
+          pendingAckRef.current = {
+            commandId: cmd.id,
+            ok: true,
+            message:
+              cmd.payload.cloudDestination === "drive"
+                ? "Cloud destination: Google Drive (connect on the phone if needed)"
+                : "Cloud destination: Vercel Blob",
+          };
+          return;
+        }
+        pendingAckRef.current = { commandId: cmd.id, ok: false, message: "Unknown command" };
+      } catch (error) {
+        pendingAckRef.current = {
+          commandId: cmd.id,
+          ok: false,
+          message: error instanceof Error ? error.message : "Command failed on booth",
+        };
+      }
+    },
+    [refreshCloudFlags, saveEvent, saveSettings],
+  );
+
+  useEffect(() => {
+    if (!remoteEnabled) return;
+    void refreshCloudFlags();
+    const id = window.setInterval(() => void refreshCloudFlags(), 15_000);
+    return () => window.clearInterval(id);
+  }, [refreshCloudFlags, remoteEnabled]);
+
+  useEffect(() => {
+    if (!remoteEnabled || !remotePair?.token || !event) return;
+    const token = remotePair.token;
+    let cancelled = false;
+    let inFlight = false;
+
+    async function tick() {
+      if (cancelled || inFlight) return;
+      const current = eventRef.current;
+      if (!current) return;
+      inFlight = true;
+      const ack = pendingAckRef.current;
+      try {
+        const result = await heartbeatRemote({
+          eventId,
+          token,
+          boothArmed: true,
+          boothPhase: phaseRef.current,
+          boothStatus: boothStatusForPhase(phaseRef.current, messageRef.current),
+          lastClipId: latestClipRef.current?.id ?? null,
+          snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current),
+          ack,
+        });
+        if (cancelled) return;
+        if (ack && result.view.lastAck?.commandId === ack.commandId) {
+          pendingAckRef.current = null;
+        }
+        setRemoteView(result.view);
+        setRemoteError(null);
+        const cmd = result.pendingCommand as PendingRemoteCommand | null;
+        if (cmd?.id && !handledCommands.current.has(cmd.id)) {
+          handledCommands.current.add(cmd.id);
+          if (cmd.type === "startSpin") void applyRemoteCommand(cmd);
+          else await applyRemoteCommand(cmd);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setRemoteError(error instanceof Error ? error.message : "Remote heartbeat failed");
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    void tick();
+    const id = window.setInterval(() => void tick(), REMOTE_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      void heartbeatRemote({
+        eventId,
+        token,
+        boothArmed: false,
+        boothPhase: "idle",
+        boothStatus: "Capture closed",
+        lastClipId: latestClipRef.current?.id ?? null,
+        snapshot: boothSnapshot() || snapshotFromBooth(eventRef.current || event, settingsRef.current, cloudFlagsRef.current),
+      }).catch(() => undefined);
+    };
+  }, [applyRemoteCommand, boothSnapshot, event, eventId, remoteEnabled, remotePair]);
+
+  async function onEnableRemote() {
+    if (!event) return;
+    setRemoteError(null);
+    try {
+      await refreshCloudFlags();
+      const data = await pairRemote(event.id, snapshotFromBooth(event, settings, cloudFlagsRef.current));
+      setRemotePair({ token: data.token, pairCode: data.pairCode, remoteUrl: data.remoteUrl });
+      setRemoteView(data.view);
+      setRemoteEnabled(true);
+    } catch (error) {
+      setRemoteError(error instanceof Error ? error.message : "Could not enable remote");
+      setRemoteEnabled(false);
     }
   }
+
+  async function onDisableRemote() {
+    const token = remotePair?.token;
+    setRemoteEnabled(false);
+    setRemoteView(null);
+    setRemotePair(null);
+    clearStoredPair(eventId);
+    if (token) {
+      await disableRemote(eventId, token).catch(() => undefined);
+    }
+  }
+
+  if (!ready) return <BootScreen />;
+  if (!event) {
+    return (
+      <OperatorShell eventId={eventId}>
+        <p className="text-slate-300">This event was not found.</p>
+      </OperatorShell>
+    );
+  }
+
+  const offline = settings.forceOffline || (typeof navigator !== "undefined" && !navigator.onLine);
+  const busy = phase !== "idle";
+  const hasClip = Boolean(latestClip);
+  const spinSec = resolveCaptureDurationSec(event.captureDurationSec);
+  const customActive = usesCustomMusic(event);
 
   return (
     <OperatorShell eventId={eventId}>
@@ -205,6 +556,18 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         </h1>
         <div className="mt-1 h-1 w-24 rounded-full" style={{ backgroundColor: event.accentColor }} />
         <CrowdOpenControls eventId={event.id} clipId={latestClip?.id} className="mt-4" />
+        <div className="mt-3">
+          <RemoteEnablePanel
+            enabled={remoteEnabled}
+            remoteUrl={remotePair?.remoteUrl ?? null}
+            pairCode={remotePair?.pairCode ?? remoteView?.pairCode ?? null}
+            view={remoteView}
+            error={remoteError}
+            busy={busy}
+            onEnable={() => void onEnableRemote()}
+            onDisable={() => void onDisableRemote()}
+          />
+        </div>
       </div>
 
       <div className="relative mt-6 flex min-h-[240px] flex-1 flex-col">
@@ -309,7 +672,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
                 {settings.slowMoEnabled !== false
                   ? "Live playback ramp · Download / Share bake slow-mo and the look-pack frame"
                   : "Normal speed · Download / Share still burn the frame into the file"}
-                {hasMusicBed(event.musicBedLabel) || hasCustomMusic(event)
+                {hasMusicBed(event.musicBedLabel) || customActive
                   ? settings.boothMusicMuted
                     ? " · booth music muted"
                     : ` · ${musicCaption(event, normalizeMusicBedLabel(event.musicBedLabel))}`

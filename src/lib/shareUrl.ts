@@ -16,3 +16,8 @@ export function operatorSharePath(eventId: string, clipId: string) {
 export function capturePath(eventId: string) {
   return `/e/${eventId}/capture`;
 }
+
+export function remoteOperatorPath(eventId: string, token?: string) {
+  const path = `/e/${eventId}/remote`;
+  return token ? `${path}?k=${encodeURIComponent(token)}` : path;
+}

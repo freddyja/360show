@@ -130,6 +130,7 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
       clientNames: form.clientNames.trim() || "Guests",
       musicBedLabel: normalizeMusicBedLabel(form.musicBedLabel),
       captureDurationSec: resolveCaptureDurationSec(form.captureDurationSec),
+      preferBundledBed: pendingMusic ? false : form.preferBundledBed,
     };
     syncBoothMusic({ src: null, playing: false });
     const music =
@@ -274,6 +275,12 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
                 Clear custom song
               </button>
             </div>
+          )}
+          {(form.preferBundledBed && !pendingMusic && !clearCustom && hasCustomMusic(form)) && (
+            <p className="mt-2 text-xs text-cyan-200/80">
+              Remote operator is using the bundled bed. The custom file stays on this phone until you
+              pick it again or clear it.
+            </p>
           )}
           {musicError && <p className="mt-2 text-sm text-red-300">{musicError}</p>}
           <span className="mt-2 block text-xs text-slate-500">

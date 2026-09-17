@@ -18,7 +18,7 @@ import { bakeSourceForClip, ensureBakedClip, needsExportBake, extensionForBlob, 
 import { isWebmContainer } from "@/lib/capture/quality";
 import { publishCrowd } from "@/lib/crowd/channel";
 import { hasMusicBed, musicBedById, musicBedId, musicBedSrc, normalizeMusicBedLabel } from "@/lib/music/beds";
-import { hasCustomMusic } from "@/lib/music/custom";
+import { usesCustomMusic } from "@/lib/music/custom";
 import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
 import { resolveEventMusic, useEventMusicSrc } from "@/lib/music/resolve";
 import { driveDownloadUrl, drivePreviewUrl, driveViewUrl, isDrivePlaybackUrl } from "@/lib/drive/urls";
@@ -117,18 +117,18 @@ export function GuestShareScreen({
         let exportBlob = sourceBlob;
         let mixedAudio = false;
         const music = await resolveEventMusic(eventToPublish);
-        const musicBedLabel = hasCustomMusic(eventToPublish) ? "None" : eventToPublish.musicBedLabel;
+        const musicBedLabel = usesCustomMusic(eventToPublish) ? "None" : eventToPublish.musicBedLabel;
         const shouldBake = needsExportBake(
           operatorSlowMo,
           eventToPublish.musicBedLabel,
-          hasCustomMusic(eventToPublish),
+          usesCustomMusic(eventToPublish),
           eventToPublish.frameStyle,
         );
         if (shouldBake) {
           setPublishState(
             operatorSlowMo
               ? "Baking export…"
-              : hasCustomMusic(eventToPublish) || hasMusicBed(eventToPublish.musicBedLabel)
+              : usesCustomMusic(eventToPublish) || hasMusicBed(eventToPublish.musicBedLabel)
                 ? "Mixing music…"
                 : "Burning frame…",
           );
@@ -148,7 +148,7 @@ export function GuestShareScreen({
                 setPublishState(
                   operatorSlowMo
                     ? `Baking export… ${Math.round(progress * 100)}%`
-                    : hasCustomMusic(eventToPublish) || hasMusicBed(eventToPublish.musicBedLabel)
+                    : usesCustomMusic(eventToPublish) || hasMusicBed(eventToPublish.musicBedLabel)
                       ? `Mixing music… ${Math.round(progress * 100)}%`
                       : `Burning frame… ${Math.round(progress * 100)}%`,
                 );
@@ -213,8 +213,8 @@ export function GuestShareScreen({
         if (cancelled) return;
         setCloud(published);
         await patchClip(clipToPublish.id, {
-          hasBakedBlob: needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, hasCustomMusic(eventToPublish), eventToPublish.frameStyle),
-          bakedAt: needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, hasCustomMusic(eventToPublish), eventToPublish.frameStyle)
+          hasBakedBlob: needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, usesCustomMusic(eventToPublish), eventToPublish.frameStyle),
+          bakedAt: needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, usesCustomMusic(eventToPublish), eventToPublish.frameStyle)
             ? Date.now()
             : null,
           hasMixedAudio: mixedAudio,
@@ -317,7 +317,7 @@ export function GuestShareScreen({
               ((resolvedCloud.slowMoEnabled !== false && !resolvedCloud.baked) ||
                 (hasMusicBed(musicLabel) && !resolvedCloud.hasAudio)),
           )
-        : needsExportBake(operatorSlowMo, musicLabel, hasCustomMusic(eventRecord), eventRecord.frameStyle);
+        : needsExportBake(operatorSlowMo, musicLabel, usesCustomMusic(eventRecord), eventRecord.frameStyle);
       const savedAsSlowMo = publicMode
         ? Boolean(resolvedCloud?.baked) || Boolean(resolvedCloud && resolvedCloud.slowMoEnabled !== false && shouldBakeNow)
         : operatorSlowMo;
@@ -357,7 +357,7 @@ export function GuestShareScreen({
               setStatus(
                 operatorSlowMo || (publicMode && resolvedCloud?.slowMoEnabled !== false)
                   ? `Baking export… ${Math.round(progress * 100)}%`
-                  : hasMusicBed(musicLabel) || hasCustomMusic(eventRecord)
+                  : hasMusicBed(musicLabel) || usesCustomMusic(eventRecord)
                     ? `Mixing music… ${Math.round(progress * 100)}%`
                     : `Burning frame… ${Math.round(progress * 100)}%`,
               ),
@@ -385,7 +385,7 @@ export function GuestShareScreen({
       const base = eventRecord.clientNames.replace(/\s+/g, "-") || "360-spin";
       const suffix = savedAsSlowMo ? "-360-spin-slowmo" : "-360-spin";
       triggerBlobDownload(file, `${base}${suffix}.${ext}`);
-      const hasMixableMusic = hasMusicBed(musicLabel) || (!publicMode && hasCustomMusic(eventRecord));
+      const hasMixableMusic = hasMusicBed(musicLabel) || (!publicMode && usesCustomMusic(eventRecord));
       setStatus(
         savedAsSlowMo
           ? hasMixableMusic
@@ -528,10 +528,10 @@ export function GuestShareScreen({
                   : "Baked slow-mo for this device"
                 : "Download to this device"
               : operatorSlowMo
-                ? hasMusicBed(musicLabel) || hasCustomMusic(event)
+                ? hasMusicBed(musicLabel) || usesCustomMusic(event)
                   ? "Baked slow-mo · music mixed when possible"
                   : "Baked slow-mo for this device"
-                : hasMusicBed(musicLabel) || hasCustomMusic(event)
+                : hasMusicBed(musicLabel) || usesCustomMusic(event)
                   ? "File with music (mixed when possible)"
                   : "Normal-speed file for this device"
           }

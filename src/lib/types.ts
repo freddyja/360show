@@ -42,6 +42,11 @@ export interface BoothEvent {
   customMusicName?: string | null;
   /** START SPIN record length. Missing → 10s. */
   captureDurationSec?: CaptureDurationSec;
+  /**
+   * When true, bundled musicBedLabel wins even if a custom song file is still
+   * stored on this phone (remote operator cannot pick that file).
+   */
+  preferBundledBed?: boolean;
   frameStyle: FrameStyleId;
   createdAt: number;
   updatedAt: number;
