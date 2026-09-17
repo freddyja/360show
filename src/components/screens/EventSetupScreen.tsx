@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OperatorShell } from "@/components/OperatorShell";
 import { BootScreen } from "@/components/BootScreen";
+import { CrowdOpenControls } from "@/components/CrowdOpenControls";
 import { FRAME_STYLES } from "@/lib/frames";
 import { createId } from "@/lib/ids";
 import { capturePath } from "@/lib/shareUrl";
@@ -343,6 +344,7 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
         >
           Save & start spinning
         </button>
+        {!isNew && <CrowdOpenControls eventId={form.id} />}
       </div>
     </div>
   );

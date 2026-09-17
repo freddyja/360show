@@ -1,8 +1,9 @@
 "use client";
 
 import { getBakedBlob, putBakedBlob } from "@/lib/db";
-import { DEMO_ASSET_PATH, type Clip } from "@/lib/types";
-import { hasMusicBed, musicBedId } from "@/lib/music/beds";
+import { DEMO_ASSET_PATH, type Clip, type FrameStyleId } from "@/lib/types";
+import { hasMusicBed, musicBedId } from "../music/beds";
+import { frameBakeId, isBurnableFrame } from "../frames";
 import { bakeTimeRamp, bakedBlobKey, type BakeResult } from "./bake";
 import type { VideoQuality } from "./quality";
 
@@ -13,14 +14,19 @@ export function bakeSourceForClip(clip: Clip, localBlob?: Blob | null): Blob | s
   return clip.demoAssetPath || DEMO_ASSET_PATH;
 }
 
-export function needsExportBake(slowMo: boolean, musicLabel?: string | null, hasCustom = false) {
-  return slowMo || hasCustom || hasMusicBed(musicLabel);
+export function needsExportBake(
+  slowMo: boolean,
+  musicLabel?: string | null,
+  hasCustom = false,
+  frameStyle?: FrameStyleId | string | null,
+) {
+  return Boolean(slowMo) || hasCustom || hasMusicBed(musicLabel) || isBurnableFrame(frameStyle);
 }
 
 /**
- * Return a cached ramp-baked (and optionally music-mixed) blob, or encode one
- * and store it next to the original. Concurrent callers for the same clip +
- * bed + ramp mode share a single bake.
+ * Return a cached ramp-baked (and optionally music-mixed + framed) blob, or
+ * encode one and store it next to the original. Concurrent callers for the
+ * same clip + bed + ramp + frame share a single bake.
  */
 export async function ensureBakedClip(options: {
   clip: Clip;
@@ -30,13 +36,17 @@ export async function ensureBakedClip(options: {
   musicSrc?: string | null;
   musicId?: string | null;
   applyRamp?: boolean;
+  frameStyle?: FrameStyleId | string | null;
+  frameNames?: string | null;
+  frameAccent?: string | null;
   onProgress?: (progress: number) => void;
 }): Promise<BakeResult> {
   const { clip, onProgress } = options;
   const applyRamp = options.applyRamp !== false;
   const musicId = options.musicId || musicBedId(options.musicBedLabel);
-  const cacheKey = bakedBlobKey(clip.id, musicId, applyRamp);
-  const workKey = `${clip.id}:${applyRamp ? "sm" : "1x"}:${musicId}`;
+  const frameId = frameBakeId(options.frameStyle);
+  const cacheKey = bakedBlobKey(clip.id, musicId, applyRamp, frameId);
+  const workKey = `${clip.id}:${applyRamp ? "sm" : "1x"}:${musicId}:${frameId}`;
 
   const running = inflight.get(workKey);
   if (running) return running;
@@ -61,6 +71,9 @@ export async function ensureBakedClip(options: {
     musicBedLabel: options.musicBedLabel,
     musicSrc: options.musicSrc,
     applyRamp,
+    frameStyle: options.frameStyle,
+    frameNames: options.frameNames,
+    frameAccent: options.frameAccent,
     onProgress,
   }).then(async (result) => {
     await putBakedBlob(clip.id, result.blob, cacheKey);

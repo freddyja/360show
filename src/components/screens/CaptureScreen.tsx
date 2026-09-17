@@ -8,7 +8,9 @@ import { StatusBar } from "@/components/StatusBar";
 import { FrameOverlay, frameMediaClass } from "@/components/FrameOverlay";
 import { RampPlayer } from "@/components/RampPlayer";
 import { BootScreen } from "@/components/BootScreen";
+import { CrowdOpenControls } from "@/components/CrowdOpenControls";
 import { OperatorShell } from "@/components/OperatorShell";
+import { publishCrowd } from "@/lib/crowd/channel";
 import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/capture/record";
 import { bakeSourceForClip, ensureBakedClip, needsExportBake } from "@/lib/capture/ensureBaked";
 import { hasMusicBed, normalizeMusicBedLabel } from "@/lib/music/beds";
@@ -49,6 +51,20 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     active: musicActive && Boolean(musicSrc),
     muted: settings.boothMusicMuted,
   });
+
+  useEffect(() => {
+    if (!event) return;
+    const crowdPhase =
+      phase === "idle" ? (latestClip ? "ready" : "idle") : phase;
+    publishCrowd({
+      eventId: event.id,
+      clipId: latestClip?.id ?? null,
+      remoteVideoUrl: latestClip?.remoteVideoUrl ?? null,
+      phase: crowdPhase,
+      count: phase === "countdown" ? count : undefined,
+      updatedAt: Date.now(),
+    });
+  }, [event, latestClip, phase, count]);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,7 +149,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       rampProfile: rampProfileForFrame(event.frameStyle),
     };
     await saveClip(clip, blob);
-    if (needsExportBake(settings.slowMoEnabled !== false, event.musicBedLabel, hasCustomMusic(event))) {
+    if (needsExportBake(settings.slowMoEnabled !== false, event.musicBedLabel, hasCustomMusic(event), event.frameStyle)) {
       void bakeExportInBackground(clip, blob);
     }
     await wait(600);
@@ -144,12 +160,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           ? "Demo spin saved — camera was unavailable. Baking export in the background."
           : hasMusicBed(event.musicBedLabel) || hasCustomMusic(event)
             ? "Demo spin saved — camera was unavailable. Mixing music into the export."
-            : "Demo spin saved — camera was unavailable. Slow-mo is off, so the file stays normal speed."
+            : "Demo spin saved — camera was unavailable. Slow-mo is off; the look-pack frame still burns on Download / Share."
         : settings.slowMoEnabled !== false
           ? "Spin saved. Baking export in the background."
           : hasMusicBed(event.musicBedLabel) || hasCustomMusic(event)
             ? "Spin saved. Mixing music into the export."
-            : "Spin saved at normal speed.",
+            : "Spin saved at normal speed. Download / Share still burn the look-pack frame.",
     );
   }
 
@@ -164,6 +180,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         musicSrc: music.src,
         musicId: music.musicId,
         applyRamp: settings.slowMoEnabled !== false,
+        frameStyle: event?.frameStyle,
+        frameNames: event?.clientNames,
+        frameAccent: event?.accentColor,
       });
       await patchClip(clip.id, {
         hasBakedBlob: true,
@@ -184,7 +203,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
           {event.name} — {event.clientNames}
         </h1>
-        <div className="mt-3 h-1 w-24 rounded-full" style={{ backgroundColor: event.accentColor }} />
+        <div className="mt-1 h-1 w-24 rounded-full" style={{ backgroundColor: event.accentColor }} />
+        <CrowdOpenControls eventId={event.id} clipId={latestClip?.id} className="mt-4" />
       </div>
 
       <div className="relative mt-6 flex min-h-[240px] flex-1 flex-col">
@@ -287,8 +307,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             <div className="flex items-center justify-between px-5 py-4">
               <p className="text-slate-300">
                 {settings.slowMoEnabled !== false
-                  ? "Live playback ramp · Download / Share bake slow-mo"
-                  : "Normal speed · Download / Share save the original file (slow-mo is off)"}
+                  ? "Live playback ramp · Download / Share bake slow-mo and the look-pack frame"
+                  : "Normal speed · Download / Share still burn the frame into the file"}
                 {hasMusicBed(event.musicBedLabel) || hasCustomMusic(event)
                   ? settings.boothMusicMuted
                     ? " · booth music muted"

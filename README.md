@@ -15,8 +15,8 @@ Open [http://localhost:3000](http://localhost:3000). First launch seeds a sample
 
 1. **Open booth** on the sample event (or create your own).
 2. Tap **START SPIN**. Capture length is **10, 15, or 20 seconds** (Event setup → Spin length, default 10s). Allow the camera if you want a live capture; if you deny it or none is available, a bundled demo spin still runs.
-3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files. If the event has a music bed (not None), it loops under spin / preview / share and is mixed into the export when the browser can record audio.
-4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), booth music mute, force-offline chip, and mock battery %.
+3. After the timed capture, use **Preview** or **Share**. With **Slow-mo / time ramp** on (Settings, default), preview ramps live and Download / Share bake the slow-mo file. Turn it off for normal-speed preview and files. If the event has a music bed (not None), it loops under spin / preview / share and is mixed into the export when the browser can record audio. The selected **look-pack frame** is composited into that same baked file.
+4. **Gallery** lists tonight’s clips. **Settings** picks video quality (1080p high / 720p standard), the cloud destination (Vercel Blob or Google Drive), booth music mute, force-offline chip, and mock battery %. **Open crowd / TV screen** (Capture or Event) opens a full-bleed room display you can cast.
 
 Local demo works **without** Blob or Drive credentials: Share stays on this tablet and the QR uses `http://localhost:3000`. Guest phones cannot load that clip until you deploy with storage (below).
 
@@ -133,7 +133,8 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 | `/` | Events list — create / select tonight’s event |
 | `/events/new` | New event setup |
 | `/e/[eventId]` | Event setup — name, date, **spin length (10/15/20s)**, couple names, accent, logo, **music bed or song from this phone**, frame style |
-| `/e/[eventId]/capture` | Operator capture (mockup 1) |
+| `/e/[eventId]/capture` | Operator capture (mockup 1) — **Open crowd / TV screen** |
+| `/e/[eventId]/crowd` | Full-bleed TV / room display (idle branding + latest spin) |
 | `/e/[eventId]/gallery` | Tonight’s clips |
 | `/e/[eventId]/settings` | Device name, mock battery, **video quality**, **slow-mo on/off**, **mute booth music**, force offline, **Blob vs Drive destination**, Google Drive connect |
 | `/e/[eventId]/share/[clipId]` | Operator guest-share screen (mockup 2) |
@@ -153,7 +154,8 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - **Live time-ramp preview**: `playbackRate` keyframes when **Slow-mo / time ramp** is on (Settings)
 - **Baked slow-mo export**: same ramp re-encoded for Download / Share when slow-mo is on; skipped when off
 - **Music beds**: original CC0 instrumentals under `/music/`. Looping playback on spin / preview / share; best-effort mix into Download / Share via Web Audio + MediaRecorder. **Song from this phone** stores an operator-picked audio file in IndexedDB (not uploaded except inside a mixed export).
-- Event frames overlaid on **web preview** (gold oval, neon ring, midnight arch, classic plaque, minimal, **Christian Fellowship** PNG pack) — not composited into the downloaded file yet
+- Event frames overlaid on **web preview** and **burned into Download / Share / Blob / Drive** (gold oval, neon ring, midnight arch, classic plaque, **Christian Fellowship** PNG). **Minimal** stays a thin web border only — the file has no extra decoration.
+- **Crowd / TV screen** at `/e/[eventId]/crowd` — full-bleed looping latest spin, idle “next spin” branding, optional guest QR. Open from Capture or Event setup.
 - **Christian Fellowship** look-pack: navy/gold plaque overlay (`/frames/christian-fellowship.png`), default accent `#C9A227`, gentle slow-mo ramp (no freeze-flash)
 - Force-offline chip, mock battery, Camera OK / demo status
 
@@ -161,8 +163,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 - **Platform motor** — `src/lib/hardware/motor.ts` (`createStubMotor`). Swap in serial / BLE / USB without changing capture orchestration.
 - **GoPro** — `src/lib/hardware/gopro.ts`. Unused on the live path; capture uses the tablet/USB camera.
-- **Frame burned into the file** — overlays stay on the web player; the download is ramp-baked video only.
-- **TV mirror / AI frames** — not built.
+- **AI / custom frame builder** — not built.
 
 ## Stack
 
@@ -172,7 +173,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 
 ## Capture pipeline
 
-`START SPIN` → 3-2-1 countdown → timed record (length from Event setup **Spin length**, quality from Settings) → save original → if slow-mo is on and/or a music bed is selected, background-bake the time-ramp (and mix the bed) at the same quality cap → gallery / share (upload uses that export).
+`START SPIN` → 3-2-1 countdown → timed record (length from Event setup **Spin length**, quality from Settings) → save original → if slow-mo is on, a music bed is selected, **or** the look-pack frame is burnable, background-bake (ramp + mix + frame) at the same quality cap → gallery / share (upload uses that export).
 
 Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during record so a future motor implementation can run in lockstep.
 
@@ -180,15 +181,24 @@ Hardware calls sit beside that: `motor.spin(durationMs)` is invoked during recor
 
 | Surface | Time-ramp | Frame overlay |
 | --- | --- | --- |
-| Operator **Preview** / booth share player | Live `playbackRate` on the original capture | Web overlay |
-| Guest `/s/[clipId]` after cloud upload | File is already baked; player runs at 1× | Web overlay |
-| **Download / Save to gallery** | Baked into the file (slow-mo without this app). Music mixed in when the browser allowed it. | Not in the file (web only) |
-| Vercel Blob `export.*` | Baked once on the booth before upload | Not in the file |
-| Google Drive (anyone-with-link) | Baked file uploaded from the booth | Not in the file |
+| Operator **Preview** / booth share player | Live `playbackRate` on the original capture | Web overlay (matches the baked look) |
+| Guest `/s/[clipId]` after cloud upload | File is already baked; player runs at 1× | In the file (web overlay skipped so it is not doubled) |
+| **Download / Save to gallery** | Baked into the file (slow-mo without this app). Music mixed in when the browser allowed it. | Burned into the file |
+| Vercel Blob `export.*` | Baked once on the booth before upload | Burned into the file |
+| Google Drive (anyone-with-link) | Baked file uploaded from the booth | Burned into the file |
+| **Crowd / TV** `/e/[eventId]/crowd` | Live ramp on this device’s original, or 1× if playing a cloud baked URL | Web overlay on the original; skipped when playing a baked cloud file |
 
 Bake uses a hidden `<video>` + canvas `captureStream` + `MediaRecorder`. It follows the clip’s ramp profile (`time-ramp-v1` freeze vs `time-ramp-gentle`). Wall-clock encode is longer than the source clip (10 / 15 / 20s from Event setup, typically tens of seconds of bake). The original blob remains in IndexedDB for recapture/debug.
 
-**Settings → Slow-mo / time ramp** (default on) controls this. Off: Preview plays at 1× and Download / Share skip the slow-mo bake (they still re-encode if a music bed needs mixing). Guest pages honor `slowMoEnabled` on the cloud share so they do not re-apply a live ramp.
+**Settings → Slow-mo / time ramp** (default on) controls this. Off: Preview plays at 1× and Download / Share skip the slow-mo bake (they still re-encode if a music bed needs mixing **or** the look-pack frame needs burning). Guest pages honor `slowMoEnabled` on the cloud share so they do not re-apply a live ramp.
+
+## Crowd / TV screen
+
+`/e/[eventId]/crowd` is a full-bleed room display. **Open crowd / TV screen** on Capture or Event setup opens it in a new tab; **Copy TV link** copies the HTTPS URL (includes `?c=` for the latest clip when known).
+
+- **Same tablet / same browser profile:** IndexedDB + `BroadcastChannel` / `localStorage`. Cast that tab to the TV. Idle shows event + couple names; countdown/recording flash big type; after a spin the latest clip loops.
+- **Second device without the booth session:** it cannot read IndexedDB. After Share uploads, the copied `?c=` link can load the cloud clip. Otherwise it stays on “waiting for next spin”.
+- Autoplay is **muted** (browser policy); **Tap for sound** unmutes.
 
 ## Music beds
 
@@ -236,5 +246,3 @@ Dark nightclub wash: hot magenta, cyan, violet, and neon gold, painted on `html`
 - GoPro Open GoPro / USB webcam ingest
 - Real platform motor (ESP32 / GRBL / vendor SDK)
 - AI / custom frame builder
-- HDMI / TV mirror for the crowd display
-- Burn the selected frame overlay into the baked export

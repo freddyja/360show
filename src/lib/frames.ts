@@ -61,3 +61,12 @@ export function getFrameStyle(id: FrameStyleId) {
 export function rampProfileForFrame(id: FrameStyleId): RampProfileId {
   return getFrameStyle(id).rampProfile;
 }
+
+/** Minimal is a web-only thin border — nothing to composite into the file. */
+export function isBurnableFrame(id?: FrameStyleId | string | null) {
+  return Boolean(id && id !== "minimal");
+}
+
+export function frameBakeId(id?: FrameStyleId | string | null) {
+  return isBurnableFrame(id) ? String(id) : "none";
+}

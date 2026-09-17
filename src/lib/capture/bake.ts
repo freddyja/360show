@@ -1,6 +1,8 @@
 import type { RampProfileId } from "../types";
 import { MUSIC_BED_CATALOG, musicBedSrc } from "../music/beds";
 import { mixMusicIntoStream } from "../music/mix";
+import { frameBakeId } from "../frames";
+import { drawVideoWithFrame, prepareFrameBurn } from "./burnFrame";
 import { playbackRateAt, rampKeyframes } from "./ramp";
 import { createVideoRecorder, fitWithinQuality, resolveVideoQuality, typedVideoBlob, type VideoQuality } from "./quality";
 
@@ -12,10 +14,15 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function bakedBlobKey(clipId: string, musicId = "none", applyRamp = true) {
-  // `__c2` invalidates music-mix caches that were WebM-first (Drive cannot preview those).
-  if (applyRamp && musicId === "none") return `${clipId}__baked`;
-  return `${clipId}__baked__${applyRamp ? "sm" : "1x"}__${musicId}__c2`;
+export function bakedBlobKey(
+  clipId: string,
+  musicId = "none",
+  applyRamp = true,
+  frameId = "none",
+) {
+  // `__c3` invalidates mixes that had no burned look-pack frame.
+  const frame = frameBakeId(frameId);
+  return `${clipId}__baked__${applyRamp ? "sm" : "1x"}__${musicId}__${frame}__c3`;
 }
 
 export function bakedBlobKeysForClip(clipId: string) {
@@ -33,12 +40,12 @@ export interface BakeResult {
 }
 
 /**
- * Re-encode a source clip so the time-ramp (and optional music bed) is in the file.
- * Records a canvas of the video playing at the profile's playbackRate
- * (wall-clock MediaRecorder), then holds a freeze if the profile ends at 0.
- * When a music src is set, Web Audio loops the bed or custom song onto a
- * audio track. If the browser drops that track, the video still bakes and
- * `mixedAudio` is false (live overlay remains the fallback).
+ * Re-encode a source clip so the time-ramp, optional music bed, and look-pack
+ * frame are in the file. Records a canvas of the video playing at the profile's
+ * playbackRate (wall-clock MediaRecorder), then holds a freeze if the profile
+ * ends at 0. When a music src is set, Web Audio loops the bed or custom song
+ * onto an audio track. If the browser drops that track, the video still bakes
+ * and `mixedAudio` is false (live overlay remains the fallback).
  */
 export async function bakeTimeRamp(options: {
   source: Blob | string;
@@ -49,6 +56,9 @@ export async function bakeTimeRamp(options: {
   /** Blob URL or bundled path. Wins over musicBedLabel when set. */
   musicSrc?: string | null;
   applyRamp?: boolean;
+  frameStyle?: string | null;
+  frameNames?: string | null;
+  frameAccent?: string | null;
   onProgress?: (progress: number) => void;
 }): Promise<BakeResult> {
   if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
@@ -109,6 +119,12 @@ export async function bakeTimeRamp(options: {
     canvas.height = fitted.height;
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Canvas 2D unavailable");
+    const frame = await prepareFrameBurn({
+      style: options.frameStyle,
+      names: options.frameNames,
+      accentColor: options.frameAccent,
+    });
+    const paint = () => drawVideoWithFrame(ctx, video, frame, canvas.width, canvas.height);
 
     const canvasStream = canvas.captureStream(fitted.fps);
     const mixSrc = options.musicSrc ?? musicBedSrc(options.musicBedLabel);
@@ -148,13 +164,13 @@ export async function bakeTimeRamp(options: {
     let drawing = true;
     const draw = () => {
       if (!drawing) return;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      paint();
       requestAnimationFrame(draw);
     };
     draw();
 
     await video.play();
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    paint();
     recorder.start(200);
 
     const started = performance.now();
@@ -188,7 +204,7 @@ export async function bakeTimeRamp(options: {
     });
 
     drawing = false;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    paint();
     await wait(250);
     if (recorder.state !== "inactive") recorder.stop();
     mix.stream.getTracks().forEach((track) => track.stop());
