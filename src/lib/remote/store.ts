@@ -9,6 +9,8 @@ import {
   connectionFromSession,
   isEventId,
   remoteCommandPath,
+  remoteMusicMetaPath,
+  remoteMusicPath,
   remoteOperatorPath,
   remoteSessionPath,
   type RemoteAck,
@@ -20,10 +22,17 @@ import {
 
 const PAIR_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+type RemoteMusicFile = {
+  bytes: Buffer;
+  fileName: string;
+  contentType: string;
+};
+
 type MemoryBucket = {
   session: RemoteSession | null;
   commands: RemoteCommand[];
   operatorAt: number;
+  music: RemoteMusicFile | null;
 };
 
 const memory = globalThis as unknown as { __360showRemote?: Map<string, MemoryBucket> };
@@ -122,7 +131,7 @@ export async function writeSession(session: RemoteSession) {
     await writeJsonBlob(remoteSessionPath(session.eventId), session);
     return;
   }
-  const bucket = memoryMap().get(session.eventId) ?? { session: null, commands: [], operatorAt: 0 };
+  const bucket = memoryMap().get(session.eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
   bucket.session = session;
   memoryMap().set(session.eventId, bucket);
 }
@@ -159,7 +168,7 @@ async function persistCommands(eventId: string, commands: RemoteCommand[]) {
     await writeJsonBlob(remoteCommandPath(eventId), { commands });
     return;
   }
-  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0 };
+  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
   bucket.commands = commands;
   memoryMap().set(eventId, bucket);
 }
@@ -192,7 +201,7 @@ export async function touchOperatorPing(eventId: string, now = Date.now()) {
     await writeJsonBlob(remoteOperatorPath(eventId), { at: now });
     return now;
   }
-  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0 };
+  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
   bucket.operatorAt = now;
   memoryMap().set(eventId, bucket);
   return now;
@@ -205,6 +214,81 @@ export async function readOperatorPing(eventId: string): Promise<number> {
     return typeof data?.at === "number" ? data.at : 0;
   }
   return memoryMap().get(eventId)?.operatorAt ?? 0;
+}
+
+export async function writeRemoteMusicMeta(
+  eventId: string,
+  meta: { fileName: string; contentType: string; size?: number },
+) {
+  if (blobConfigured()) {
+    await writeJsonBlob(remoteMusicMetaPath(eventId), { ...meta, uploadedAt: Date.now() });
+    return;
+  }
+  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
+  if (bucket.music) {
+    bucket.music = { ...bucket.music, fileName: meta.fileName, contentType: meta.contentType };
+  }
+  memoryMap().set(eventId, bucket);
+}
+
+export async function writeRemoteMusic(
+  eventId: string,
+  bytes: Buffer,
+  meta: { fileName: string; contentType: string },
+) {
+  if (blobConfigured()) {
+    await putWithStoreAccess(remoteMusicPath(eventId, meta.fileName), bytes, {
+      contentType: meta.contentType || "application/octet-stream",
+    });
+    await writeRemoteMusicMeta(eventId, { ...meta, size: bytes.length });
+    return;
+  }
+  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
+  bucket.music = { bytes, fileName: meta.fileName, contentType: meta.contentType };
+  memoryMap().set(eventId, bucket);
+}
+
+async function streamToBuffer(stream: ReadableStream<Uint8Array> | null) {
+  if (!stream) return null;
+  const buf = Buffer.from(await new Response(stream).arrayBuffer());
+  return buf.length ? buf : null;
+}
+
+export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile | null> {
+  if (!isEventId(eventId)) return null;
+  if (!blobConfigured()) {
+    return memoryMap().get(eventId)?.music ?? null;
+  }
+
+  const meta = await readJsonBlob<{ fileName?: string; contentType?: string }>(remoteMusicMetaPath(eventId));
+  try {
+    const { blobs } = await list({ prefix: `remote/${eventId}/music`, limit: 12 });
+    const file = blobs.find((item) => /\/music\.(mp3|m4a|aac|wav|ogg|flac|opus|bin)$/i.test(item.pathname));
+    if (!file) return null;
+    const access = file.url.includes(".private.") ? "private" : await resolveBlobAccess();
+    if (!file.url.includes(".private.")) {
+      const res = await fetch(file.url, { cache: "no-store" });
+      if (res.ok) {
+        const bytes = Buffer.from(await res.arrayBuffer());
+        return {
+          bytes,
+          fileName: meta?.fileName || file.pathname.split("/").pop() || "song",
+          contentType: meta?.contentType || res.headers.get("content-type") || "application/octet-stream",
+        };
+      }
+    }
+    const result = await get(file.pathname, { access });
+    if (!result || result.statusCode !== 200) return null;
+    const bytes = await streamToBuffer(result.stream);
+    if (!bytes) return null;
+    return {
+      bytes,
+      fileName: meta?.fileName || file.pathname.split("/").pop() || "song",
+      contentType: meta?.contentType || result.blob.contentType || "application/octet-stream",
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function createPairSession(eventId: string, snapshot: RemoteEventSnapshot): Promise<RemoteSession> {

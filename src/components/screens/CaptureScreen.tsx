@@ -93,6 +93,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const pendingAcksRef = useRef<{ commandId: string; ok: boolean; message: string }[]>([]);
+  const remoteTokenRef = useRef<string | null>(null);
+  remoteTokenRef.current = remotePair?.token ?? null;
   const handledCommands = useRef(new Set<string>());
   const runSpinRef = useRef<() => Promise<void>>(async () => undefined);
   const cloudFlagsRef = useRef<RemoteCloudFlags>({
@@ -299,6 +301,38 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           ack(true, "Spin captured");
           return;
         }
+        if (cmd.type === "setCustomMusic") {
+          const token = remoteTokenRef.current;
+          const fileName = cmd.payload?.fileName?.trim();
+          if (!token || !fileName) {
+            ack(false, "Laptop song is missing pair data");
+            return;
+          }
+          setMessage("Loading song from laptop…");
+          const res = await fetch(
+            `/api/remote/music?eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}`,
+          );
+          if (!res.ok) {
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            ack(false, data.error || "Could not download the laptop song");
+            return;
+          }
+          const blob = await res.blob();
+          const file = new File([blob], fileName, {
+            type: cmd.payload?.contentType || blob.type || "application/octet-stream",
+          });
+          const next = { ...current, preferBundledBed: false, updatedAt: Date.now() };
+          await saveEvent(next, true, { file });
+          eventRef.current = {
+            ...next,
+            preferBundledBed: false,
+            customMusicName: file.name,
+            customMusicBlobId: current.customMusicBlobId || "pending",
+          };
+          setMessage(`Laptop song ready: ${file.name}`);
+          ack(true, `Playing ${file.name} on the booth`);
+          return;
+        }
         if (cmd.type === "setSpinLength") {
           const sec = cmd.payload?.captureDurationSec;
           if (!isCaptureDurationSec(sec)) {
@@ -425,7 +459,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         ack(false, error instanceof Error ? error.message : "Command failed on booth");
       }
     },
-    [refreshCloudFlags, saveEvent, saveSettings],
+    [eventId, refreshCloudFlags, saveEvent, saveSettings],
   );
 
   useEffect(() => {

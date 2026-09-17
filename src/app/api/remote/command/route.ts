@@ -11,6 +11,7 @@ import {
   storeUnavailableMessage,
   tokenMatches,
   touchOperatorPing,
+  writeRemoteMusicMeta,
 } from "@/lib/remote/store";
 import {
   clipText,
@@ -110,6 +111,21 @@ export async function POST(request: Request) {
     const folder = incoming.driveFolderName !== undefined ? clipText(incoming.driveFolderName, 64) : undefined;
     if (incoming.driveFolderName !== undefined && !folder) return invalid("Drive folder name cannot be empty.");
     if (folder) command.payload.driveFolderName = folder;
+  }
+  if (command.type === "setCustomMusic") {
+    const fileName = clipText(incoming.fileName, 180);
+    if (!fileName) return invalid("Missing song file name.");
+    if (typeof incoming.size === "number" && (incoming.size < 64 || incoming.size > 18 * 1024 * 1024)) {
+      return invalid("Song must be between 64 bytes and 18 MB.");
+    }
+    command.payload.fileName = fileName;
+    if (typeof incoming.contentType === "string") command.payload.contentType = incoming.contentType.slice(0, 80);
+    if (typeof incoming.size === "number") command.payload.size = incoming.size;
+    await writeRemoteMusicMeta(eventId, {
+      fileName,
+      contentType: command.payload.contentType || "application/octet-stream",
+      size: command.payload.size,
+    });
   }
 
   const existing = await readCommands(eventId);

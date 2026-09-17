@@ -6,6 +6,7 @@ import { Copy, Tv } from "lucide-react";
 import { FrameOverlay } from "@/components/FrameOverlay";
 import { FRAME_STYLES, getFrameStyle } from "@/lib/frames";
 import { MUSIC_BEDS, normalizeMusicBedLabel } from "@/lib/music/beds";
+import { formatMusicBytes, validateCustomMusicFile } from "@/lib/music/custom";
 import { crowdUrl } from "@/lib/crowd/channel";
 import {
   clearStoredPair,
@@ -13,6 +14,7 @@ import {
   readStoredPair,
   remoteStatus,
   sendRemoteCommand,
+  uploadRemoteMusic,
   writeStoredPair,
 } from "@/lib/remote/client";
 import {
@@ -36,6 +38,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [copiedCrowd, setCopiedCrowd] = useState(false);
+  const [musicUploading, setMusicUploading] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [namesDraft, setNamesDraft] = useState("");
 
@@ -124,12 +127,40 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     [eventId, patchSnapshot, token],
   );
 
+  async function onLaptopSong(file: File | null) {
+    if (!file || !token) return;
+    const invalid = validateCustomMusicFile(file);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setMusicUploading(true);
+    setError(null);
+    try {
+      const data = await uploadRemoteMusic(eventId, token, file, Boolean(snapshot?.blobConfigured));
+      setView({
+        ...data.view,
+        snapshot: {
+          ...data.view.snapshot,
+          hasCustomMusic: true,
+          usingCustomMusic: true,
+          preferBundledBed: false,
+          customMusicName: file.name,
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send the song to the booth.");
+    } finally {
+      setMusicUploading(false);
+    }
+  }
+
   const connection = view?.connection ?? (token ? "offline" : "waiting");
   const paired = connection === "paired";
   const boothBusy = view?.boothPhase && view.boothPhase !== "idle";
   const spinLabel = snapshot ? `${snapshot.captureDurationSec}s` : "10s";
   const crowdHref = crowdUrl(eventId, typeof window === "undefined" ? undefined : window.location.origin, view?.lastClipId);
-  const locked = sending || !paired;
+  const locked = sending || musicUploading || !paired;
 
   const statusLine = useMemo(() => {
     if (!view) return token ? "Connecting…" : "Not paired";
@@ -179,8 +210,8 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               {snapshot?.clientNames ? ` — ${snapshot.clientNames}` : ""}
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              Controls the show on the phone while Capture is open. Camera, custom songs, Drive login, and
-              logos stay on the booth device.
+              Commands run on the phone while Capture is open. Pick a song on this laptop to play on
+              the booth; phone library browse, Drive login, logos, and the camera stay on the phone.
             </p>
           </div>
           <ConnectionChip connection={connection} />
@@ -346,12 +377,32 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               ))}
             </select>
             <p className="mt-2 text-xs text-slate-500">
-              Bundled beds or None. A custom file from the phone library cannot be picked here
-              {snapshot?.hasCustomMusic
-                ? ` — still on the phone${snapshot.customMusicName ? `: ${snapshot.customMusicName}` : ""}${
-                    snapshot.usingCustomMusic ? " and currently winning until you pick a bed." : "."
-                  }`
-                : "."}
+              Bundled beds or None apply on the booth. A song picked here uploads over the pair channel
+              into the phone’s IndexedDB and wins until you pick a bed again.
+              {snapshot?.usingCustomMusic && snapshot.customMusicName
+                ? ` Now playing on the booth: ${snapshot.customMusicName}.`
+                : snapshot?.hasCustomMusic && snapshot.customMusicName
+                  ? ` A custom file is stored on the phone (${snapshot.customMusicName}) but a bundled bed is selected.`
+                  : ""}
+            </p>
+            <label className="relative mt-3 flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-500/15 px-4 text-center text-sm font-medium text-white">
+              {musicUploading ? "Uploading to booth…" : "Use song from this laptop"}
+              <input
+                type="file"
+                accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
+                disabled={locked}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  e.target.value = "";
+                  void onLaptopSong(file);
+                }}
+              />
+            </label>
+            <p className="mt-2 text-xs text-slate-500">
+              mp3 / m4a / wav / aac / ogg, max {formatMusicBytes(18 * 1024 * 1024)}. You cannot browse the
+              phone’s library from here — pick a file on this laptop. You are responsible for the rights
+              to play it.
             </p>
           </div>
 
@@ -527,10 +578,6 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
         <section className="mt-8">
           <h2 className="text-lg font-medium text-white">Phone-only</h2>
           <div className="mt-3 grid gap-2">
-            <DisabledReason
-              title="Custom song from phone library"
-              reason="The laptop cannot read the booth phone’s files. Pick a bundled bed here, or choose the song on Event setup on the phone."
-            />
             <DisabledReason
               title="Connect Google Drive"
               reason="Drive OAuth uses cookies on the booth browser. Open Settings on the phone to Connect."

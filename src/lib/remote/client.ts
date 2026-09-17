@@ -1,3 +1,8 @@
+"use client";
+
+import { upload } from "@vercel/blob/client";
+import { formatBlobWriteError, isBlobAccessMismatch, type BlobAccess } from "@/lib/share/access";
+import { validateCustomMusicFile } from "@/lib/music/custom";
 import { normalizeMusicBedLabel, type MusicBedLabel } from "@/lib/music/beds";
 import type { AppSettings, CaptureDurationSec, CloudDestination, FrameStyleId, VideoQuality } from "@/lib/types";
 import type {
@@ -7,7 +12,7 @@ import type {
   RemoteEventSnapshot,
   RemotePublicView,
 } from "./types";
-import { REMOTE_POLL_MS, remotePairStorageKey } from "./types";
+import { REMOTE_POLL_MS, remoteMusicPath, remotePairStorageKey } from "./types";
 
 export { REMOTE_POLL_MS, remotePairStorageKey };
 
@@ -154,6 +159,58 @@ export async function sendRemoteCommand(
     body: JSON.stringify({ eventId, token, type, payload }),
   });
   return parseJson<{ ok: boolean; commandId: string; view: RemotePublicView }>(res);
+}
+
+export async function uploadRemoteMusic(
+  eventId: string,
+  token: string,
+  file: File,
+  blobConfigured: boolean,
+) {
+  const invalid = validateCustomMusicFile(file);
+  if (invalid) throw new Error(invalid);
+
+  if (blobConfigured) {
+    const pathname = remoteMusicPath(eventId, file.name);
+    const order: BlobAccess[] = ["public", "private"];
+    let lastError: unknown;
+    let uploaded = false;
+    for (const access of order) {
+      try {
+        await upload(pathname, file, {
+          access,
+          handleUploadUrl: "/api/remote/music/upload",
+          clientPayload: JSON.stringify({ eventId, token }),
+          multipart: true,
+        });
+        uploaded = true;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!isBlobAccessMismatch(error)) {
+          throw new Error(
+            formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed"),
+          );
+        }
+      }
+    }
+    if (!uploaded) {
+      throw new Error(formatBlobWriteError(lastError) || "Could not upload the song.");
+    }
+  } else {
+    const form = new FormData();
+    form.set("eventId", eventId);
+    form.set("token", token);
+    form.set("file", file);
+    const res = await fetch("/api/remote/music", { method: "POST", body: form });
+    await parseJson<{ ok: boolean }>(res);
+  }
+
+  return sendRemoteCommand(eventId, token, "setCustomMusic", {
+    fileName: file.name,
+    contentType: file.type || "application/octet-stream",
+    size: file.size,
+  });
 }
 
 export function snapshotFromBooth(

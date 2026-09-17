@@ -215,7 +215,7 @@ A laptop (or second browser) controls the **booth phone** over the public HTTPS 
 1. On the **booth phone**, open the production site (e.g. `https://360show.vercel.app`) → tonight’s event → **Capture**.
 2. Tap **Enable remote control**. The phone shows a QR, HTTPS link, 6-character pair code, and pair status (waiting / paired).
 3. On the **laptop**, scan the QR or open `/e/[eventId]/remote` and type the code (or use the `?k=` token in the link). No separate account.
-4. Laptop **START SPIN** runs countdown + record **on the phone**. Spin length, frame, music bed, names, accent, slow-mo, quality, mute, and Blob vs Drive apply on the booth for the next spin (and on Capture chrome immediately).
+4. Laptop **START SPIN** runs countdown + record **on the phone**. Spin length, frame, bundled music bed, **song from this laptop**, names, accent, slow-mo, quality, mute, and Blob vs Drive apply on the booth for the next spin (and on Capture chrome immediately).
 5. Keep Capture open while remote is armed. Navigating away or **Disable remote** takes the laptop offline. Sessions expire after about 4 hours; Enable remote again to rotate the token.
 
 Production needs the same **Vercel Blob** token as guest Share (`BLOB_READ_WRITE_TOKEN`). Sessions are JSON at `remote/{eventId}/session.json` plus a pending command blob. Local `npm run dev` without Blob uses an in-memory channel in that Node process (two browsers on localhost work; a second machine will not).
@@ -227,13 +227,14 @@ Production needs the same **Vercel Blob** token as guest Share (`BLOB_READ_WRITE
 | START SPIN | Capture on the phone (only while remote is armed and idle) |
 | Spin length 10 / 15 / 20s | Event `captureDurationSec` |
 | Frame style (all look-packs) | Event `frameStyle` (+ pack default accent when set) |
-| Music bed / None | Event `musicBedLabel`. Custom phone file is **not deleted**; `preferBundledBed` makes the bed win |
+| Music bed / None | Event `musicBedLabel`. `preferBundledBed` makes the bed win over a stored custom file |
+| Song from this laptop | Uploads over the pair channel (Blob in production, in-memory in local `next dev`) into booth IndexedDB custom music |
 | Event name, couple names, accent | Event record |
 | Slow-mo, video quality, mute booth music | App settings on the phone |
 | Cloud destination Blob vs Drive (+ Drive folder name) | App settings. **Connect Google Drive** still runs on the phone (OAuth cookies) |
 | Open / copy crowd TV link | Same `/e/[eventId]/crowd` URL; no extra pairing |
 
-Phone-only (shown disabled on the laptop with a reason): custom song from the phone library, Drive OAuth connect, event logo file, camera hardware.
+Phone-only (shown disabled on the laptop with a reason): Drive OAuth connect, event logo file, camera hardware. The phone’s own music library still cannot be browsed from the laptop — pick a file on the laptop instead.
 
 Strangers cannot spin a random event: the booth creates a pair token (in the QR) and a short code bound to that `eventId`. Commands require the token. The phone executes them only while Capture has remote enabled.
 

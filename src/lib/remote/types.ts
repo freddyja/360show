@@ -10,9 +10,9 @@ import {
 import { MUSIC_BEDS, type MusicBedLabel } from "@/lib/music/beds";
 
 export const REMOTE_SESSION_TTL_MS = 4 * 60 * 60 * 1000;
-export const REMOTE_BOOTH_ONLINE_MS = 8_000;
+export const REMOTE_BOOTH_ONLINE_MS = 20_000;
 export const REMOTE_OPERATOR_ONLINE_MS = 12_000;
-export const REMOTE_COMMAND_TTL_MS = 45_000;
+export const REMOTE_COMMAND_TTL_MS = 180_000;
 export const REMOTE_POLL_MS = 1_500;
 
 export const REMOTE_COMMAND_TYPES = [
@@ -25,6 +25,7 @@ export const REMOTE_COMMAND_TYPES = [
   "setVideoQuality",
   "setBoothMusicMuted",
   "setCloudDestination",
+  "setCustomMusic",
 ] as const;
 
 export type RemoteCommandType = (typeof REMOTE_COMMAND_TYPES)[number];
@@ -66,6 +67,9 @@ export interface RemoteCommandPayload {
   boothMusicMuted?: boolean;
   cloudDestination?: CloudDestination;
   driveFolderName?: string;
+  fileName?: string;
+  contentType?: string;
+  size?: number;
 }
 
 export interface RemoteCommand {
@@ -158,6 +162,27 @@ export function remoteCommandPath(eventId: string) {
 
 export function remoteOperatorPath(eventId: string) {
   return `remote/${eventId}/operator.json`;
+}
+
+export function remoteMusicMetaPath(eventId: string) {
+  return `remote/${eventId}/music-meta.json`;
+}
+
+const MUSIC_EXT = /^(mp3|m4a|aac|wav|ogg|flac|opus|bin)$/;
+
+export function remoteMusicExt(fileName: string) {
+  const match = fileName.toLowerCase().match(/\.([a-z0-9]+)$/);
+  const ext = match?.[1] === "wave" ? "wav" : match?.[1] === "oga" ? "ogg" : match?.[1];
+  return ext && MUSIC_EXT.test(ext) && ext !== "bin" ? ext : "bin";
+}
+
+export function remoteMusicPath(eventId: string, fileNameOrExt = "bin") {
+  const ext = fileNameOrExt.includes(".") ? remoteMusicExt(fileNameOrExt) : MUSIC_EXT.test(fileNameOrExt) ? fileNameOrExt : "bin";
+  return `remote/${eventId}/music.${ext}`;
+}
+
+export function isRemoteMusicPath(pathname: string, eventId: string) {
+  return new RegExp(`^remote/${eventId}/music\\.(mp3|m4a|aac|wav|ogg|flac|opus|bin)$`).test(pathname);
 }
 
 export function remotePairStorageKey(eventId: string) {
