@@ -162,7 +162,7 @@ async function readShareVideoFromR2(clipId: string) {
       const file = await r2GetBytes(pathname);
       if (!file) continue;
       return {
-        stream: new Blob([file.bytes], { type: file.contentType }).stream(),
+        stream: new Blob([new Uint8Array(file.bytes)], { type: file.contentType }).stream(),
         contentType: file.contentType || meta?.videoContentType || "video/webm",
         size: file.bytes.length,
         contentDisposition: file.contentDisposition || "inline",

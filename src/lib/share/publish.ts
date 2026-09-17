@@ -205,7 +205,7 @@ async function uploadShareVideo(pathname: string, file: File, clipId: string, pr
   const config = await fetchShareConfig();
   if (config.blobConfigured) {
     try {
-      const uploaded = await uploadVideoToBlob(pathname, file, preferred ?? config.blobAccess);
+      const uploaded = await uploadVideoToBlob(pathname, file, preferred ?? config.blobAccess ?? null);
       return { url: playbackVideoUrl(clipId, uploaded.url) };
     } catch (error) {
       if (!isBlobUnusableError(error) && !(error instanceof Error && error.message === BLOB_CLOUD_UNAVAILABLE_MESSAGE)) {
