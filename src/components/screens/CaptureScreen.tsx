@@ -16,6 +16,7 @@ import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/captu
 import { bakeSourceForClip, ensureBakedClip, needsExportBake } from "@/lib/capture/ensureBaked";
 import { hasMusicBed, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { usesCustomMusic, musicCaption } from "@/lib/music/custom";
+import { formatCustomMusicError, materializeCustomMusicFile } from "@/lib/music/ingest";
 import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
 import { resolveEventMusic, useEventMusicSrc } from "@/lib/music/resolve";
 import { createStubMotor, probeCamera, type CameraStatus } from "@/lib/hardware";
@@ -309,28 +310,49 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             return;
           }
           setMessage("Loading song from laptop…");
-          const res = await fetch(
-            `/api/remote/music?eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}`,
-          );
-          if (!res.ok) {
-            const data = (await res.json().catch(() => ({}))) as { error?: string };
-            ack(false, data.error || "Could not download the laptop song");
-            return;
+          const ac = new AbortController();
+          const timer = window.setTimeout(() => ac.abort(), 45_000);
+          try {
+            const res = await fetch(
+              `/api/remote/music?eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}`,
+              { signal: ac.signal, cache: "no-store" },
+            );
+            if (!res.ok) {
+              const data = (await res.json().catch(() => ({}))) as { error?: string };
+              const fail = data.error || "Could not download the laptop song";
+              setMessage(fail);
+              ack(false, fail);
+              return;
+            }
+            const blob = await res.blob();
+            const raw = new File([blob], fileName, {
+              type: cmd.payload?.contentType || blob.type || "application/octet-stream",
+            });
+            const file = await materializeCustomMusicFile(raw, { signal: ac.signal });
+            window.clearTimeout(timer);
+            const next = { ...current, preferBundledBed: false, updatedAt: Date.now() };
+            await saveEvent(next, true, { file });
+            eventRef.current = {
+              ...next,
+              preferBundledBed: false,
+              customMusicName: file.name,
+              customMusicBlobId: current.customMusicBlobId || "pending",
+            };
+            setMessage(`Laptop song ready: ${file.name}`);
+            ack(true, `Playing ${file.name} on the booth`);
+          } catch (error) {
+            const fail = formatCustomMusicError(
+              ac.signal.aborted
+                ? Object.assign(new Error("The laptop song took too long to land on this phone."), {
+                    name: "TimeoutError",
+                  })
+                : error,
+            );
+            setMessage(fail);
+            ack(false, fail);
+          } finally {
+            window.clearTimeout(timer);
           }
-          const blob = await res.blob();
-          const file = new File([blob], fileName, {
-            type: cmd.payload?.contentType || blob.type || "application/octet-stream",
-          });
-          const next = { ...current, preferBundledBed: false, updatedAt: Date.now() };
-          await saveEvent(next, true, { file });
-          eventRef.current = {
-            ...next,
-            preferBundledBed: false,
-            customMusicName: file.name,
-            customMusicBlobId: current.customMusicBlobId || "pending",
-          };
-          setMessage(`Laptop song ready: ${file.name}`);
-          ack(true, `Playing ${file.name} on the booth`);
           return;
         }
         if (cmd.type === "setSpinLength") {

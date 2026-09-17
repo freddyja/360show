@@ -3,6 +3,7 @@
 import { upload } from "@vercel/blob/client";
 import { formatBlobWriteError, isBlobAccessMismatch, type BlobAccess } from "@/lib/share/access";
 import { validateCustomMusicFile } from "@/lib/music/custom";
+import { materializeCustomMusicFile } from "@/lib/music/ingest";
 import { normalizeMusicBedLabel, type MusicBedLabel } from "@/lib/music/beds";
 import type { AppSettings, CaptureDurationSec, CloudDestination, FrameStyleId, VideoQuality } from "@/lib/types";
 import type {
@@ -166,27 +167,41 @@ export async function uploadRemoteMusic(
   token: string,
   file: File,
   blobConfigured: boolean,
+  options?: { signal?: AbortSignal },
 ) {
   const invalid = validateCustomMusicFile(file);
   if (invalid) throw new Error(invalid);
 
+  const local = await materializeCustomMusicFile(file, { signal: options?.signal });
+  if (options?.signal?.aborted) {
+    const err = new Error("Stopped sending the song to the booth.");
+    err.name = "AbortError";
+    throw err;
+  }
+
   if (blobConfigured) {
-    const pathname = remoteMusicPath(eventId, file.name);
+    const pathname = remoteMusicPath(eventId, local.name);
     const order: BlobAccess[] = ["public", "private"];
     let lastError: unknown;
     let uploaded = false;
     for (const access of order) {
       try {
-        await upload(pathname, file, {
+        await upload(pathname, local, {
           access,
           handleUploadUrl: "/api/remote/music/upload",
           clientPayload: JSON.stringify({ eventId, token }),
           multipart: true,
+          abortSignal: options?.signal,
         });
         uploaded = true;
         break;
       } catch (error) {
         lastError = error;
+        if (options?.signal?.aborted) {
+          const err = new Error("Stopped sending the song to the booth.");
+          err.name = "AbortError";
+          throw err;
+        }
         if (!isBlobAccessMismatch(error)) {
           throw new Error(
             formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed"),
@@ -201,15 +216,19 @@ export async function uploadRemoteMusic(
     const form = new FormData();
     form.set("eventId", eventId);
     form.set("token", token);
-    form.set("file", file);
-    const res = await fetch("/api/remote/music", { method: "POST", body: form });
+    form.set("file", local);
+    const res = await fetch("/api/remote/music", {
+      method: "POST",
+      body: form,
+      signal: options?.signal,
+    });
     await parseJson<{ ok: boolean }>(res);
   }
 
   return sendRemoteCommand(eventId, token, "setCustomMusic", {
-    fileName: file.name,
-    contentType: file.type || "application/octet-stream",
-    size: file.size,
+    fileName: local.name,
+    contentType: local.type || "application/octet-stream",
+    size: local.size,
   });
 }
 

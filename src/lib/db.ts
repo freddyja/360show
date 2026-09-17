@@ -123,14 +123,75 @@ export async function putClip(clip: Clip, blob?: Blob | null) {
   await tx.done;
 }
 
+const BLOB_WRITE_MS = 15_000;
+
+function isQuotaExceededError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const name = "name" in error ? String(error.name) : "";
+  const message = "message" in error ? String((error as { message?: unknown }).message) : "";
+  const code = "code" in error ? Number((error as { code?: unknown }).code) : NaN;
+  return (
+    name === "QuotaExceededError" ||
+    name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    code === 22 ||
+    /quota/i.test(message)
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const err = new Error(timeoutMessage);
+      err.name = "TimeoutError";
+      reject(err);
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function mapBlobStoreError(error: unknown): Error {
+  if (isQuotaExceededError(error)) {
+    const err = new Error(
+      "This phone is out of storage for that song. Free some space, clear the current custom song, or pick a smaller file.",
+    );
+    err.name = "QuotaExceededError";
+    return err;
+  }
+  if (error instanceof Error && error.name === "AbortError") {
+    return error;
+  }
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return error;
+  }
+  if (error instanceof Error) return error;
+  return new Error("Could not save that file on this phone.");
+}
+
 export async function getNamedBlob(key: string) {
   const db = await getDb();
   return (await db.get("blobs", key)) ?? null;
 }
 
 export async function putNamedBlob(key: string, blob: Blob) {
-  const db = await getDb();
-  await db.put("blobs", blob, key);
+  try {
+    const db = await getDb();
+    await withTimeout(
+      db.put("blobs", blob, key),
+      BLOB_WRITE_MS,
+      "Saving the song on this phone timed out. Try a smaller file.",
+    );
+  } catch (error) {
+    throw mapBlobStoreError(error);
+  }
 }
 
 export async function deleteNamedBlob(key: string) {

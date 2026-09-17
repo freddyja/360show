@@ -47,7 +47,8 @@ export function validateCustomMusicFile(file: File): string | null {
   if (file.size > MAX_CUSTOM_MUSIC_BYTES) {
     return `That song is too large (${formatMusicBytes(file.size)}). Max is 18 MB so this phone’s storage stays healthy.`;
   }
-  if (file.size < 64) {
+  // size 0 is often a cloud placeholder (Drive / Samsung Cloud) — try reading bytes instead of rejecting.
+  if (file.size > 0 && file.size < 64) {
     return "That file looks empty. Pick another song.";
   }
   return null;

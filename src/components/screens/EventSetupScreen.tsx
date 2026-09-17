@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OperatorShell } from "@/components/OperatorShell";
 import { BootScreen } from "@/components/BootScreen";
@@ -11,7 +11,8 @@ import { capturePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
 import { MUSIC_BEDS, CAPTURE_DURATION_SECS, resolveCaptureDurationSec, type BoothEvent } from "@/lib/types";
 import { SOFT_MUSIC_BEDS, hasMusicBed, musicBedSrc, normalizeMusicBedLabel } from "@/lib/music/beds";
-import { hasCustomMusic, musicCaption, validateCustomMusicFile } from "@/lib/music/custom";
+import { hasCustomMusic, musicCaption } from "@/lib/music/custom";
+import { formatCustomMusicError, materializeCustomMusicFile } from "@/lib/music/ingest";
 import { nudgeBoothMusic, syncBoothMusic } from "@/lib/music/player";
 import { cn } from "@/lib/cn";
 
@@ -46,6 +47,18 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
   const [pendingMusic, setPendingMusic] = useState<File | null>(null);
   const [clearCustom, setClearCustom] = useState(false);
   const [musicError, setMusicError] = useState<string | null>(null);
+  const [musicBusy, setMusicBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const musicReadAbort = useRef<AbortController | null>(null);
+  const savingRef = useRef(false);
+  const musicBusyLabel = musicBusy
+    ? "Reading song on this phone…"
+    : saving && pendingMusic
+      ? "Saving song on this phone…"
+      : saving
+        ? "Saving event…"
+        : null;
+  const formLocked = musicBusy || saving;
 
   useEffect(() => {
     if (existing) {
@@ -68,7 +81,10 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
   }, [pendingMusic]);
 
   useEffect(() => {
-    return () => syncBoothMusic({ src: null, playing: false });
+    return () => {
+      musicReadAbort.current?.abort();
+      syncBoothMusic({ src: null, playing: false });
+    };
   }, []);
 
   if (!ready) return <BootScreen />;
@@ -98,15 +114,34 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
 
   async function onMusicFile(file: File | null) {
     if (!file) return;
-    const error = validateCustomMusicFile(file);
-    if (error) {
-      setMusicError(error);
-      return;
-    }
+    musicReadAbort.current?.abort();
+    const ac = new AbortController();
+    musicReadAbort.current = ac;
+    setMusicBusy(true);
     setMusicError(null);
-    setClearCustom(false);
-    setPendingMusic(file);
-    setSaved(false);
+    try {
+      const local = await materializeCustomMusicFile(file, { signal: ac.signal });
+      if (ac.signal.aborted) return;
+      setClearCustom(false);
+      setPendingMusic(local);
+      setSaved(false);
+    } catch (error) {
+      if (ac.signal.aborted) return;
+      setPendingMusic(null);
+      setMusicError(formatCustomMusicError(error));
+    } finally {
+      if (musicReadAbort.current === ac) {
+        musicReadAbort.current = null;
+        setMusicBusy(false);
+      }
+    }
+  }
+
+  function onCancelMusicRead() {
+    musicReadAbort.current?.abort();
+    musicReadAbort.current = null;
+    setMusicBusy(false);
+    setMusicError("Stopped reading the song. Pick it again if you still want it.");
   }
 
   function onClearCustomSong() {
@@ -124,6 +159,8 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
   }
 
   async function persist(andOpen: boolean) {
+    if (formLocked || savingRef.current) return;
+    savingRef.current = true;
     const next = {
       ...form,
       updatedAt: Date.now(),
@@ -132,15 +169,24 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
       captureDurationSec: resolveCaptureDurationSec(form.captureDurationSec),
       preferBundledBed: pendingMusic ? false : form.preferBundledBed,
     };
+    setSaving(true);
+    setMusicError(null);
     syncBoothMusic({ src: null, playing: false });
-    const music =
-      pendingMusic ? { file: pendingMusic } : clearCustom ? { clear: true as const } : undefined;
-    await saveEvent(next, true, music);
-    setPendingMusic(null);
-    setClearCustom(false);
-    setSaved(true);
-    if (andOpen) router.push(capturePath(next.id));
-    else if (isNew) router.replace(`/e/${next.id}`);
+    try {
+      const music =
+        pendingMusic ? { file: pendingMusic } : clearCustom ? { clear: true as const } : undefined;
+      await saveEvent(next, true, music);
+      setPendingMusic(null);
+      setClearCustom(false);
+      setSaved(true);
+      if (andOpen) router.push(capturePath(next.id));
+      else if (isNew) router.replace(`/e/${next.id}`);
+    } catch (error) {
+      setMusicError(formatCustomMusicError(error));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   const body = (
@@ -238,12 +284,19 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
               </option>
             ))}
           </select>
-          <label className="relative mt-3 flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-blue-400/40 bg-blue-500/15 px-4 text-center text-sm font-medium text-white">
-            Use song from this phone
+          <label
+            aria-disabled={formLocked}
+            className={cn(
+              "relative mt-3 flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-blue-400/40 bg-blue-500/15 px-4 text-center text-sm font-medium text-white",
+              formLocked && "cursor-wait opacity-60",
+            )}
+          >
+            {musicBusy ? "Reading song on this phone…" : "Use song from this phone"}
             <input
               type="file"
               accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              disabled={formLocked}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
               onChange={(e) => {
                 const file = e.target.files?.[0] ?? null;
                 e.target.value = "";
@@ -251,6 +304,20 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
               }}
             />
           </label>
+          {musicBusyLabel && (
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <p className="text-sm text-cyan-200">{musicBusyLabel}</p>
+              {musicBusy && (
+                <button
+                  type="button"
+                  className="shrink-0 rounded-full border border-white/15 px-3 py-1.5 text-xs text-slate-200"
+                  onClick={onCancelMusicRead}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          )}
           {(pendingMusic || (!clearCustom && (form.customMusicName || form.customMusicBlobId))) && (
             <div className="mt-3 flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
               <p className="min-w-0 text-sm text-slate-200">
@@ -269,7 +336,8 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
               </p>
               <button
                 type="button"
-                className="shrink-0 rounded-full border border-white/15 px-3 py-1.5 text-xs text-slate-200"
+                disabled={formLocked}
+                className="shrink-0 rounded-full border border-white/15 px-3 py-1.5 text-xs text-slate-200 disabled:opacity-40"
                 onClick={onClearCustomSong}
               >
                 Clear custom song
@@ -342,17 +410,19 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
       <div className="mt-8 flex flex-wrap gap-3">
         <button
           type="button"
+          disabled={formLocked}
           onClick={() => void persist(false)}
-          className="min-h-12 rounded-full border border-white/15 px-6 font-medium text-white"
+          className="min-h-12 rounded-full border border-white/15 px-6 font-medium text-white disabled:cursor-wait disabled:opacity-50"
         >
-          {saved ? "Saved" : "Save event"}
+          {saving && pendingMusic ? "Saving song…" : saved ? "Saved" : "Save event"}
         </button>
         <button
           type="button"
+          disabled={formLocked}
           onClick={() => void persist(true)}
-          className="min-h-12 rounded-full bg-blue-500 px-6 font-medium text-white"
+          className="min-h-12 rounded-full bg-blue-500 px-6 font-medium text-white disabled:cursor-wait disabled:opacity-50"
         >
-          Save & start spinning
+          {saving ? "Saving…" : "Save & start spinning"}
         </button>
         {!isNew && <CrowdOpenControls eventId={form.id} />}
       </div>
