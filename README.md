@@ -33,7 +33,8 @@ Copy `.env.example` to `.env.local` (never commit tokens):
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `BLOB_READ_WRITE_TOKEN` | For Blob sharing **and** remote operator in production | Vercel Blob read-write token. Create a Blob store in the Vercel project **Storage** tab. Include the **Development** environment if you want local uploads. Remote operator stores a short-lived session JSON at `remote/{eventId}/session.json`. |
+| `BLOB_READ_WRITE_TOKEN` | Optional | For **guest QR cloud share** via Blob and laptop **song upload** over remote. Token presence is not enough: if the store is suspended (Hobby Advanced Ops limit), the app treats Blob as unavailable and keeps the booth working locally. Remote operator pairing no longer requires Blob. |
+
 | `BLOB_ACCESS` | Optional | `public` or `private`. Must match the store. New Vercel Blob stores are often **private**; `put(..., { access: "public" })` against a private store fails. If unset, the app detects the mode. |
 | `NEXT_PUBLIC_APP_URL` | Recommended in production | Public site origin used in QR, copy-link, and SMS, e.g. `https://your-app.vercel.app` (no trailing slash). |
 | `GOOGLE_CLIENT_ID` | For Drive sharing | OAuth 2.0 Web client ID from Google Cloud Console. |
@@ -53,7 +54,7 @@ On Vercel, if `NEXT_PUBLIC_APP_URL` is unset, share links fall back to `https://
 5. Set `NEXT_PUBLIC_APP_URL` to the production domain (Project → Settings → Environment Variables).
 6. Deploy. Open the booth on the tablet **at that HTTPS URL**, capture a spin, tap **Share** — wait until the status reads “Live for guest phones” (Blob) or “Live on Google Drive”, then guests scan the QR.
 
-Without storage credentials, Share shows **Local-only share** (Blob) or asks you to connect Drive. `/s/[clipId]` on another device returns “clip not available” until an upload succeeds.
+Without storage credentials **or while Blob is suspended**, Share shows **Local-only share** (Blob destination) or asks you to connect Drive. Download / Save to gallery still work on the booth. `/s/[clipId]` on another device returns “clip not available” until an upload succeeds (Drive still works if connected).
 
 ### Vercel Blob (default)
 
@@ -66,7 +67,7 @@ Writes use the store’s access mode (`public` or `private`):
 - Private objects are not guest-fetchable by CDN URL. The app rewrites playback to `/api/share/[clipId]/file`, which streams with the server token.
 - If a Blob write still fails, the API returns the underlying Blob error string in JSON so the operator UI can show it.
 
-The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch the cloud clip get the baked file.
+If the Blob store is **suspended** (Hobby Advanced Ops / limits), Share does not retry uploads in a loop. Status becomes a single line: cloud share is temporarily unavailable; **Download still works on this tablet**.
 
 ### Google Drive
 
@@ -218,7 +219,11 @@ A laptop (or second browser) controls the **booth phone** over the public HTTPS 
 4. Laptop **START SPIN** runs countdown + record **on the phone**. Spin length, frame, bundled music bed, **song from this laptop**, names, accent, slow-mo, quality, mute, and Blob vs Drive apply on the booth for the next spin (and on Capture chrome immediately).
 5. Keep Capture open while remote is armed. Navigating away or **Disable remote** takes the laptop offline. Sessions expire after about 4 hours; Enable remote again to rotate the token.
 
-Production needs the same **Vercel Blob** token as guest Share (`BLOB_READ_WRITE_TOKEN`). Sessions are JSON at `remote/{eventId}/session.json` plus a pending command blob. Local `npm run dev` without Blob uses an in-memory channel in that Node process (two browsers on localhost work; a second machine will not).
+Production remote pairing uses **Vercel Runtime Cache** (small JSON session + commands, shared across serverless instances in a region). That avoids Blob `list`/`put` on every heartbeat — those Advanced Ops are what suspend Hobby Blob stores.
+
+Laptop **song upload** still needs a working Blob store (files are larger than the Runtime Cache 2 MB item limit). While Blob is unavailable, the laptop hides that control and tells you to pick a song on the booth phone (IndexedDB). If Runtime Cache is not available **and** Blob is unusable, **Enable remote control** is disabled with a clear reason — it will not offer a half-broken in-memory channel on production.
+
+Local `npm run dev` without Blob uses Runtime Cache when it works, otherwise an in-memory channel in that Node process (two browsers on localhost work; a second machine will not).
 
 ### What the laptop can change
 
@@ -228,7 +233,7 @@ Production needs the same **Vercel Blob** token as guest Share (`BLOB_READ_WRITE
 | Spin length 10 / 15 / 20s | Event `captureDurationSec` |
 | Frame style (all look-packs) | Event `frameStyle` (+ pack default accent when set) |
 | Music bed / None | Event `musicBedLabel`. `preferBundledBed` makes the bed win over a stored custom file |
-| Song from this laptop | Uploads over the pair channel (Blob in production, in-memory in local `next dev`) into booth IndexedDB custom music |
+| Song from this laptop | Uploads over the pair channel into booth IndexedDB custom music. **Paused while Vercel Blob is unavailable** — pick the song on the phone instead. |
 | Event name, couple names, accent | Event record |
 | Slow-mo, video quality, mute booth music | App settings on the phone |
 | Cloud destination Blob vs Drive (+ Drive folder name) | App settings. **Connect Google Drive** still runs on the phone (OAuth cookies) |

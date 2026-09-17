@@ -77,6 +77,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const [remotePair, setRemotePair] = useState<StoredRemotePair | null>(null);
   const [remoteView, setRemoteView] = useState<RemotePublicView | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [remoteAvailable, setRemoteAvailable] = useState(true);
+  const [remoteUnavailableReason, setRemoteUnavailableReason] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const motor = useMemo(() => createStubMotor(), []);
   const lastSrc = useClipSrc(latestClip?.id, latestClip?.demoAssetPath);
@@ -100,6 +102,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const runSpinRef = useRef<() => Promise<void>>(async () => undefined);
   const cloudFlagsRef = useRef<RemoteCloudFlags>({
     blobConfigured: false,
+    remoteMusicAvailable: false,
     driveConfigured: false,
     driveConnected: false,
   });
@@ -274,11 +277,16 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       }
       cloudFlagsRef.current = {
         blobConfigured: Boolean(config.blobConfigured),
+        remoteMusicAvailable: Boolean(config.remoteMusicAvailable),
         driveConfigured: Boolean(config.driveConfigured),
         driveConnected,
       };
+      const available = config.remoteAvailable !== false;
+      setRemoteAvailable(available);
+      setRemoteUnavailableReason(config.remoteUnavailableReason ?? null);
+      return { available, reason: config.remoteUnavailableReason ?? null };
     } catch {
-      // snapshot still has settings; cloud flags stay previous
+      return { available: true, reason: null as string | null };
     }
   }, []);
 
@@ -518,8 +526,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   );
 
   useEffect(() => {
-    if (!remoteEnabled) return;
     void refreshCloudFlags();
+    if (!remoteEnabled) return;
     const id = window.setInterval(() => void refreshCloudFlags(), 15_000);
     return () => window.clearInterval(id);
   }, [refreshCloudFlags, remoteEnabled]);
@@ -590,7 +598,15 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     if (!event) return;
     setRemoteError(null);
     try {
-      await refreshCloudFlags();
+      const next = await refreshCloudFlags();
+      if (!next.available) {
+        setRemoteError(
+          next.reason ||
+            "Laptop remote is paused while cloud storage is unavailable. Use this phone for capture, look, and songs.",
+        );
+        setRemoteEnabled(false);
+        return;
+      }
       const data = await pairRemote(event.id, snapshotFromBooth(event, settings, cloudFlagsRef.current));
       setRemotePair({ token: data.token, pairCode: data.pairCode, remoteUrl: data.remoteUrl });
       setRemoteView(data.view);
@@ -646,6 +662,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             view={remoteView}
             error={remoteError}
             busy={busy}
+            available={remoteAvailable}
+            unavailableReason={remoteUnavailableReason}
             onEnable={() => void onEnableRemote()}
             onDisable={() => void onDisableRemote()}
           />

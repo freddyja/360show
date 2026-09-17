@@ -17,7 +17,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   if (!blobConfigured()) {
     return NextResponse.json(
-      { error: "Use POST /api/remote/music for local uploads when Blob is not configured." },
+      { error: "Laptop song upload needs Vercel Blob, which is temporarily unavailable. Pick a song on the booth phone in Event setup." },
       { status: 503 },
     );
   }

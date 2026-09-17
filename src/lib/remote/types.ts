@@ -53,6 +53,7 @@ export interface RemoteEventSnapshot {
   driveConnected: boolean;
   driveConfigured: boolean;
   blobConfigured: boolean;
+  remoteMusicAvailable?: boolean;
 }
 
 export interface RemoteCommandPayload {

@@ -6,6 +6,7 @@ import {
   publicViewNow,
   readCommands,
   readSession,
+  remoteMusicAvailable,
   remoteStoreReady,
   sessionIsLive,
   storeUnavailableMessage,
@@ -34,7 +35,7 @@ function invalid(message: string) {
 }
 
 export async function POST(request: Request) {
-  if (!remoteStoreReady()) {
+  if (!(await remoteStoreReady())) {
     return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
   }
 
@@ -113,6 +114,12 @@ export async function POST(request: Request) {
     if (folder) command.payload.driveFolderName = folder;
   }
   if (command.type === "setCustomMusic") {
+    if (!(await remoteMusicAvailable())) {
+      return NextResponse.json(
+        { error: "Laptop song upload needs Vercel Blob, which is temporarily unavailable. Pick a song on the booth phone in Event setup." },
+        { status: 503 },
+      );
+    }
     const fileName = clipText(incoming.fileName, 180);
     if (!fileName) return invalid("Missing song file name.");
     if (typeof incoming.size === "number" && (incoming.size < 64 || incoming.size > 18 * 1024 * 1024)) {

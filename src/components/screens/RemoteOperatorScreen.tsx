@@ -431,36 +431,45 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                   ? ` A custom file is stored on the phone (${snapshot.customMusicName}) but a bundled bed is selected.`
                   : ""}
             </p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-500/15 px-4 text-center text-sm font-medium text-white">
-                {musicUploading ? "Uploading to booth…" : "Use song from this laptop"}
-                <input
-                  type="file"
-                  accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
-                  disabled={locked}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    e.target.value = "";
-                    void onLaptopSong(file);
-                  }}
-                />
-              </label>
-              {musicUploading && (
-                <button
-                  type="button"
-                  className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-xs text-slate-200"
-                  onClick={onCancelLaptopSong}
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              mp3 / m4a / wav / aac / ogg, max {formatMusicBytes(18 * 1024 * 1024)}. You cannot browse the
-              phone’s library from here — pick a file on this laptop. You are responsible for the rights
-              to play it.
-            </p>
+            {snapshot?.remoteMusicAvailable === false ? (
+              <p className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                Laptop song upload is paused while Vercel Blob is unavailable. Pick a song on the booth
+                phone in Event setup instead.
+              </p>
+            ) : (
+              <>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <label className="relative flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-500/15 px-4 text-center text-sm font-medium text-white">
+                    {musicUploading ? "Uploading to booth…" : "Use song from this laptop"}
+                    <input
+                      type="file"
+                      accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
+                      disabled={locked}
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        e.target.value = "";
+                        void onLaptopSong(file);
+                      }}
+                    />
+                  </label>
+                  {musicUploading && (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-xs text-slate-200"
+                      onClick={onCancelLaptopSong}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  mp3 / m4a / wav / aac / ogg, max {formatMusicBytes(18 * 1024 * 1024)}. You cannot browse the
+                  phone’s library from here — pick a file on this laptop. You are responsible for the rights
+                  to play it.
+                </p>
+              </>
+            )}
           </div>
 
           <div className="mt-5">
@@ -584,7 +593,9 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               >
                 <span className="block text-white">Vercel Blob</span>
                 <span className="mt-1 block text-sm text-slate-400">
-                  {snapshot?.blobConfigured ? "Token is set on this deploy." : "Needs BLOB_READ_WRITE_TOKEN on Vercel."}
+                  {snapshot?.blobConfigured
+                    ? "Guest QR uploads work on this deploy."
+                    : "Temporarily unavailable — use Drive or local download."}
                 </span>
               </button>
               <button

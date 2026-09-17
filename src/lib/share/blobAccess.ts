@@ -2,8 +2,10 @@ import { BlobAccessError, list, put } from "@vercel/blob";
 import {
   formatBlobWriteError,
   isBlobAccessMismatch as isMismatchMessage,
+  isBlobUnusableError,
   type BlobAccess,
 } from "@/lib/share/access";
+import { blobCircuitOpen, noteBlobFailure } from "@/lib/share/blobStatus";
 
 export {
   blobFileProxyPath,
@@ -49,9 +51,12 @@ export async function resolveBlobAccess(): Promise<BlobAccess> {
     return fromEnv;
   }
   if (cachedAccess) return cachedAccess;
+  if (blobCircuitOpen()) {
+    throw new Error(formatBlobWriteError(new Error("This store has been suspended.")));
+  }
 
   try {
-    const { blobs } = await list({ limit: 8 });
+    const { blobs } = await list({ limit: 8, abortSignal: AbortSignal.timeout(4_000) });
     for (const item of blobs) {
       const inferred = accessFromBlobUrl(item.url);
       if (inferred) {
@@ -59,7 +64,11 @@ export async function resolveBlobAccess(): Promise<BlobAccess> {
         return inferred;
       }
     }
-  } catch {
+  } catch (error) {
+    noteBlobFailure(error);
+    if (isBlobUnusableError(error) || blobCircuitOpen()) {
+      throw error instanceof Error ? error : new Error(formatBlobWriteError(error));
+    }
     // Empty or unlistable store — probe with a tiny put.
   }
 
@@ -78,7 +87,8 @@ export async function resolveBlobAccess(): Promise<BlobAccess> {
       return access;
     } catch (error) {
       lastError = error;
-      if (!isMismatch(error)) throw error;
+      noteBlobFailure(error);
+      if (isBlobUnusableError(error) || !isMismatch(error)) throw error;
     }
   }
 
@@ -93,6 +103,9 @@ export async function putWithStoreAccess(
   body: string | Buffer | Blob,
   extra: { contentType?: string } = {},
 ) {
+  if (blobCircuitOpen()) {
+    throw new Error(formatBlobWriteError(new Error("This store has been suspended.")));
+  }
   const preferred = await resolveBlobAccess().catch(() => blobAccessFromEnv() || cachedAccess || "public");
   const order: BlobAccess[] = preferred === "private" ? ["private", "public"] : ["public", "private"];
   let lastError: unknown;
@@ -108,7 +121,8 @@ export async function putWithStoreAccess(
       return { blob, access };
     } catch (error) {
       lastError = error;
-      if (!isMismatch(error)) throw error;
+      noteBlobFailure(error);
+      if (isBlobUnusableError(error) || !isMismatch(error)) throw error;
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatBlobWriteError(lastError));

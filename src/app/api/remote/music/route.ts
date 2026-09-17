@@ -3,6 +3,7 @@ import { MAX_CUSTOM_MUSIC_BYTES, isLikelyAudioFile } from "@/lib/music/custom";
 import {
   readRemoteMusic,
   readSession,
+  remoteMusicAvailable,
   remoteStoreReady,
   sessionIsLive,
   storeUnavailableMessage,
@@ -16,8 +17,14 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
-  if (!remoteStoreReady()) {
+  if (!(await remoteStoreReady())) {
     return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
+  }
+  if (!(await remoteMusicAvailable())) {
+    return NextResponse.json(
+      { error: "Laptop song upload needs Vercel Blob, which is temporarily unavailable. Pick a song on the booth phone in Event setup." },
+      { status: 503 },
+    );
   }
   const url = new URL(request.url);
   const eventId = url.searchParams.get("eventId")?.trim() || "";
@@ -52,8 +59,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!remoteStoreReady()) {
+  if (!(await remoteStoreReady())) {
     return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
+  }
+  if (!(await remoteMusicAvailable())) {
+    return NextResponse.json(
+      { error: "Laptop song upload needs Vercel Blob, which is temporarily unavailable. Pick a song on the booth phone in Event setup." },
+      { status: 503 },
+    );
   }
 
   const form = await request.formData().catch(() => null);

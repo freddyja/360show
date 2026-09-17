@@ -226,7 +226,10 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
               ? config.blobAccess
                 ? `Blob token is set (${config.blobAccess} store). Share uploads clips to Vercel Blob.`
                 : "Blob token is set. Share will upload clips to Vercel Blob."
-              : "Blob is not configured on this deploy. Local preview still works; guest phones need a token or Drive."}
+              : config?.blobTokenPresent || config?.blobUnavailableReason
+                ? config.blobUnavailableReason ||
+                  "Vercel Blob is temporarily unavailable (store suspended or over Hobby limits). Booth capture still works; guest cloud share via Blob is paused. Download stays on this tablet."
+                : "Blob is not configured on this deploy. Local preview still works; guest phones need a token or Drive."}
           </p>
         )}
 

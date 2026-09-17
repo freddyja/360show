@@ -14,6 +14,7 @@ import { useClipSrc } from "@/lib/useClipSrc";
 import { cn } from "@/lib/cn";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudShare, fetchShareConfig, publishClipToCloud, publishClipToDrive } from "@/lib/share/publish";
+import { BLOB_CLOUD_UNAVAILABLE_MESSAGE, isBlobUnusableError } from "@/lib/share/access";
 import { bakeSourceForClip, ensureBakedClip, needsExportBake, extensionForBlob, triggerBlobDownload } from "@/lib/capture/ensureBaked";
 import { isWebmContainer } from "@/lib/capture/quality";
 import { publishCrowd } from "@/lib/crowd/channel";
@@ -172,7 +173,11 @@ export function GuestShareScreen({
           return;
         }
         if (destination === "blob" && !config.blobConfigured) {
-          setPublishState("Local-only share — add BLOB_READ_WRITE_TOKEN to upload for guest phones");
+          setPublishState(
+            config.blobTokenPresent || config.blobUnavailableReason
+              ? BLOB_CLOUD_UNAVAILABLE_MESSAGE
+              : "Local-only share — add BLOB_READ_WRITE_TOKEN to upload for guest phones",
+          );
           return;
         }
         if (destination === "drive" && !config.driveConfigured) {
@@ -247,9 +252,16 @@ export function GuestShareScreen({
           setPublishState("Live for guest phones");
         }
       } catch (error) {
-        publishOnce.current = null;
+        const fatal = isBlobUnusableError(error);
+        if (!fatal) publishOnce.current = null;
         if (!cancelled) {
-          setPublishState(error instanceof Error ? error.message : "Cloud upload failed");
+          setPublishState(
+            fatal
+              ? BLOB_CLOUD_UNAVAILABLE_MESSAGE
+              : error instanceof Error
+                ? error.message
+                : "Cloud upload failed",
+          );
         }
       }
     })();
@@ -291,7 +303,9 @@ export function GuestShareScreen({
             {destination === "drive"
               ? "This clip is not in cloud storage yet. On the booth, connect Google Drive in Settings, then open Share."
               : config && !config.blobConfigured
-                ? "This clip lives on the booth tablet. Deploy with Vercel Blob (BLOB_READ_WRITE_TOKEN) or connect Google Drive in Settings so guest phones can load it."
+                ? config.blobTokenPresent || config.blobUnavailableReason
+                  ? "Vercel Blob is temporarily unavailable, so this guest link has no cloud clip yet. Download still works on the booth tablet."
+                  : "This clip lives on the booth tablet. Deploy with Vercel Blob (BLOB_READ_WRITE_TOKEN) or connect Google Drive in Settings so guest phones can load it."
                 : "This share link has no cloud clip yet. Open Share on the booth after connecting storage, or scan again after upload."}
           </p>
         </div>

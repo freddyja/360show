@@ -13,6 +13,8 @@ export function RemoteEnablePanel({
   view,
   error,
   busy,
+  available = true,
+  unavailableReason = null,
   onEnable,
   onDisable,
 }: {
@@ -22,6 +24,8 @@ export function RemoteEnablePanel({
   view: RemotePublicView | null;
   error: string | null;
   busy?: boolean;
+  available?: boolean;
+  unavailableReason?: string | null;
   onEnable: () => void;
   onDisable: () => void;
 }) {
@@ -53,7 +57,7 @@ export function RemoteEnablePanel({
         ) : (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !available}
             className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 disabled:opacity-40"
             onClick={onEnable}
           >
@@ -62,6 +66,12 @@ export function RemoteEnablePanel({
         )}
       </div>
 
+      {!available && !enabled && (
+        <p className="mt-3 text-sm text-amber-200">
+          {unavailableReason ||
+            "Laptop remote is paused while cloud storage is unavailable. Use this phone for capture, look, and songs."}
+        </p>
+      )}
       {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
 
       {enabled && (
