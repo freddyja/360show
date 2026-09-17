@@ -319,7 +319,10 @@ export function EventSetupScreen({ eventId }: { eventId?: string }) {
                 <img
                   src={style.assetSrc}
                   alt=""
-                  className="mb-3 h-16 w-full rounded-lg object-cover object-bottom"
+                  className={cn(
+                    "mb-3 h-16 w-full rounded-lg object-cover",
+                    style.thumbAlign === "bottom" ? "object-bottom" : "object-center",
+                  )}
                 />
               )}
               <span className="block font-medium text-white">{style.name}</span>

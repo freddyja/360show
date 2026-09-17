@@ -1,7 +1,7 @@
 "use client";
 
 import type { FrameStyleId } from "@/lib/types";
-import { getFrameStyle } from "@/lib/frames";
+import { frameCaptionLayout, getFrameStyle } from "@/lib/frames";
 import { cn } from "@/lib/cn";
 
 export function frameMediaClass(style: FrameStyleId) {
@@ -20,15 +20,31 @@ export function FrameOverlay({
   names: string;
   accentColor: string;
 }) {
-  if (style === "christian-fellowship") {
-    const pack = getFrameStyle("christian-fellowship");
+  const pack = getFrameStyle(style);
+  if (pack.assetSrc) {
+    const caption = frameCaptionLayout(style);
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={pack.assetSrc ?? "/frames/christian-fellowship.png"}
-        alt={pack.caption ?? pack.name}
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-      />
+      <div className="pointer-events-none absolute inset-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={pack.assetSrc}
+          alt={pack.caption ?? pack.name}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        {caption && (
+          <p
+            className="absolute left-1/2 max-w-[78%] -translate-x-1/2 -translate-y-1/2 truncate text-center text-sm font-semibold uppercase sm:text-lg"
+            style={{
+              top: `${caption.y * 100}%`,
+              color: caption.color,
+              letterSpacing: caption.tracking,
+              transform: `translate(-50%, -50%)${caption.rotateDeg ? ` rotate(${caption.rotateDeg}deg)` : ""}`,
+            }}
+          >
+            {names}
+          </p>
+        )}
+      </div>
     );
   }
 

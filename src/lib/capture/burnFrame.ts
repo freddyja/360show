@@ -1,4 +1,4 @@
-import { getFrameStyle, isBurnableFrame } from "../frames";
+import { frameCaptionLayout, getFrameStyle, isBurnableFrame } from "../frames";
 import type { FrameStyleId } from "../types";
 
 export interface FrameBurnOptions {
@@ -205,10 +205,34 @@ function drawClassicPlaque(
   ctx.fillText(label, w / 2, y + boxH / 2);
 }
 
-/**
- * Draw the current video frame, then the look-pack overlay, into `ctx`.
- * Minimal / unknown styles copy the video with no decoration.
- */
+function drawFrameCaption(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  names: string,
+  y: number,
+  color: string,
+  rotateDeg = 0,
+) {
+  ctx.save();
+  ctx.translate(w / 2, h * y);
+  if (rotateDeg) ctx.rotate((rotateDeg * Math.PI) / 180);
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  let size = Math.max(18, Math.round(h * 0.038));
+  ctx.font = `600 ${size}px ui-sans-serif, system-ui, sans-serif`;
+  const label = names.toUpperCase();
+  const maxWidth = w * 0.72;
+  while (size > 12 && ctx.measureText(label).width > maxWidth) {
+    size -= 1;
+    ctx.font = `600 ${size}px ui-sans-serif, system-ui, sans-serif`;
+  }
+  ctx.fillText(label, 0, 0);
+  ctx.restore();
+}
+
+/** Draw the current video frame, then the look-pack overlay, into `ctx`. */
 export function drawVideoWithFrame(
   ctx: CanvasRenderingContext2D,
   video: CanvasImageSource,
@@ -225,8 +249,12 @@ export function drawVideoWithFrame(
 
   if (frame.style === "none") return;
 
-  if (frame.style === "christian-fellowship" && frame.image) {
+  if (frame.image) {
     coverImage(ctx, frame.image, width, height);
+    const caption = frameCaptionLayout(frame.style);
+    if (caption) {
+      drawFrameCaption(ctx, width, height, frame.names, caption.y, caption.color, caption.rotateDeg ?? 0);
+    }
     return;
   }
 

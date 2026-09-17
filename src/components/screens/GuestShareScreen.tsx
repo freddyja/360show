@@ -9,7 +9,7 @@ import { RampPlayer } from "@/components/RampPlayer";
 import { ShareActions } from "@/components/ShareActions";
 import { BootScreen } from "@/components/BootScreen";
 import { useBooth, useEvent } from "@/lib/store";
-import { rampProfileForFrame } from "@/lib/frames";
+import { frameHudTop, rampProfileForFrame } from "@/lib/frames";
 import { useClipSrc } from "@/lib/useClipSrc";
 import { cn } from "@/lib/cn";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -72,7 +72,7 @@ export function GuestShareScreen({
     [clipId, config, resolvedCloud, event],
   );
   const year = event?.date?.slice(0, 4) ?? "2026";
-  const hudTop = event?.frameStyle === "christian-fellowship";
+  const hudTop = frameHudTop(event?.frameStyle);
   const rampProfile = event ? rampProfileForFrame(event.frameStyle) : "time-ramp-v1";
   const liveRamp = isDrivePlaybackUrl(src)
     ? false

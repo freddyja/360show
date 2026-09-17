@@ -7,7 +7,8 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "music:generate": "node scripts/generate-music-beds.mjs"
+    "music:generate": "node scripts/generate-music-beds.mjs",
+    "frames:generate": "python3 scripts/generate-frame-packs.py"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

@@ -5,6 +5,9 @@ export const FRAME_STYLE_IDS = [
   "classic-plaque",
   "minimal",
   "christian-fellowship",
+  "polaroid-stack",
+  "disco-chrome",
+  "black-tie-bar",
 ] as const;
 
 export type FrameStyleId = (typeof FRAME_STYLE_IDS)[number];

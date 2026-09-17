@@ -6,7 +6,7 @@ import type { RampProfileId } from "../types";
  * Preview uses RampPlayer playbackRate keyframes live (normal → slow-mo → freeze).
  * Download / Save / cloud share bake the same keyframes into a new file via
  * canvas + MediaRecorder (`ensureBakedClip`). Per-frame packs pick a profile
- * (gentle for Christian Fellowship).
+ * (gentle for Christian Fellowship, Polaroid, Black-tie; freeze ramp for Disco).
  */
 
 export interface RampKeyframe {
