@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+:root {
+  /* Fallback if a browser drops background-image — must not be near-black. */
+  --background: #c026d3;
+  --foreground: #f8fafc;
+  --booth-blue: #22d3ee;
+  --booth-magenta: #ff2d95;
+  --booth-violet: #a855f7;
+  --booth-gold: #facc15;
+  --booth-party:
+    radial-gradient(120% 80% at 0% -10%, #ff2d95 0%, transparent 52%),
+    radial-gradient(90% 70% at 110% 0%, #22d3ee 0%, transparent 48%),
+    radial-gradient(80% 70% at 100% 110%, #a855f7 0%, transparent 52%),
+    radial-gradient(70% 60% at -10% 110%, rgba(250, 204, 21, 0.55) 0%, transparent 50%),
+    linear-gradient(145deg, #db2777 0%, #7c3aed 36%, #0891b2 68%, #ec4899 100%);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  color: var(--foreground);
+  min-height: 100%;
+  min-height: 100dvh;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  overscroll-behavior: none;
+}
+
+html.booth-root,
+html.booth-root body {
+  background-color: #db2777;
+  background-image: var(--booth-party);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-attachment: scroll;
+  background-position: center;
+}
+
+html.booth-root body {
+  position: relative;
+}
+
+html.booth-root body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.7;
+  background-image:
+    radial-gradient(2px 2px at 8% 18%, rgba(255, 255, 255, 0.95), transparent),
+    radial-gradient(1.6px 1.6px at 22% 42%, rgba(250, 204, 21, 0.9), transparent),
+    radial-gradient(2px 2px at 36% 12%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1.5px 1.5px at 48% 64%, rgba(34, 211, 238, 0.9), transparent),
+    radial-gradient(2px 2px at 61% 28%, rgba(255, 182, 255, 0.95), transparent),
+    radial-gradient(1.6px 1.6px at 73% 76%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(2.2px 2.2px at 84% 16%, rgba(250, 204, 21, 0.85), transparent),
+    radial-gradient(1.6px 1.6px at 91% 48%, rgba(255, 45, 149, 0.9), transparent),
+    radial-gradient(1.8px 1.8px at 14% 82%, rgba(34, 211, 238, 0.85), transparent),
+    radial-gradient(2px 2px at 96% 88%, rgba(255, 255, 255, 0.75), transparent);
+}
+
+button,
+a,
+input,
+select {
+  touch-action: manipulation;
+}
+
+::selection {
+  background: rgba(255, 45, 149, 0.45);
+}
+
+@layer components {
+  .booth-page {
+    min-height: 100dvh;
+    background-color: #db2777;
+    background-image: var(--booth-party);
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-attachment: scroll;
+    background-position: center;
+  }
+
+  .booth-frame {
+    background: linear-gradient(
+      165deg,
+      rgba(18, 0, 28, 0.22) 0%,
+      rgba(255, 45, 149, 0.18) 42%,
+      rgba(8, 24, 56, 0.26) 100%
+    );
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 28px;
+    box-shadow:
+      0 0 0 1px rgba(255, 45, 149, 0.28),
+      0 12px 48px rgba(168, 85, 247, 0.28),
+      0 0 80px rgba(34, 211, 238, 0.18);
+  }
+
+  .booth-card {
+    background: rgba(12, 0, 28, 0.28);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-color: rgba(255, 182, 255, 0.32);
+  }
+
+  .booth-stage {
+    background:
+      radial-gradient(120% 80% at 95% 38%, rgba(34, 211, 238, 0.62), transparent 55%),
+      radial-gradient(95% 80% at 4% 92%, rgba(255, 45, 149, 0.62), transparent 52%),
+      radial-gradient(40% 40% at 50% 50%, rgba(250, 204, 21, 0.18), transparent 70%),
+      rgba(20, 0, 40, 0.22);
+  }
+}
