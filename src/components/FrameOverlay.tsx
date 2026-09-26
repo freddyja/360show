@@ -38,6 +38,7 @@ export function FrameOverlay({
               top: `${caption.y * 100}%`,
               color: caption.color,
               letterSpacing: caption.tracking,
+              maxWidth: caption.maxWidth ? `${caption.maxWidth * 100}%` : undefined,
               transform: `translate(-50%, -50%)${caption.rotateDeg ? ` rotate(${caption.rotateDeg}deg)` : ""}`,
             }}
           >

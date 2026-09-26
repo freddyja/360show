@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 W, H = 1920, 1080
 OUT = Path(__file__).resolve().parent.parent / "public" / "frames"
@@ -213,12 +213,104 @@ def black_tie_bar() -> Image.Image:
     return Image.fromarray(arr, "RGBA")
 
 
+NEON_FONT = "/usr/share/fonts/truetype/macos/Inter-Bold.ttf"
+PINK = np.array([255.0, 20.0, 160.0])
+PURPLE = np.array([176.0, 24.0, 255.0])
+CYAN = np.array([0.0, 236.0, 255.0])
+
+
+def neon_mark(img: Image.Image, text: str, x: int, y: int, size: int) -> None:
+    """White lettering with a hot-pink / cyan offset so it reads as neon."""
+    font = ImageFont.truetype(NEON_FONT, size)
+    glow = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    pen = ImageDraw.Draw(glow)
+    pen.text((x - 7, y - 1), text, font=font, fill=(255, 45, 149, 255))
+    pen.text((x + 7, y + 3), text, font=font, fill=(0, 236, 255, 255))
+    img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(7)))
+    ImageDraw.Draw(img).text((x, y), text, font=font, fill=(255, 255, 255, 255))
+
+
+def neon_80s() -> Image.Image:
+    """Saturated synthwave bezel. Photo well stays clear; 80 and S sit on the name bar."""
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    win_l, win_t, win_r, win_b = 78.0, 42.0, 1842.0, 868.0
+    cx = (win_l + win_r) / 2
+    cy = (win_t + win_b) / 2
+    hw = (win_r - win_l) / 2
+    hh = (win_b - win_t) / 2
+    radius = 26.0
+    outer = rounded_rect_sdf(xx, yy, cx, cy, hw, hh, radius)
+    inner = rounded_rect_sdf(xx, yy, cx, cy, hw - 36, hh - 36, max(8.0, radius - 14))
+
+    u = xx / (W - 1)
+    v = yy / (H - 1)
+    # Pure hues: hot pink on the left, electric purple on the right, cyan along the top edge.
+    rgb = np.broadcast_to(PINK, (H, W, 3)).copy()
+    right = np.clip((u - 0.38) / 0.28, 0, 1)
+    rgb = lerp(rgb, PURPLE, right[..., None])
+    top_band = np.clip((0.16 - v) / 0.07, 0, 1)
+    rgb = lerp(rgb, CYAN, top_band[..., None])
+
+    outside = outer > 14
+    horizon = np.clip((yy - H * 0.45) / (H * 0.4), 0, 1)
+    h_line = outside & (np.mod(yy, 32.0) < 1.6)
+    v_line = outside & (yy > H * 0.62) & (np.mod(xx, 70.0) < 1.5)
+    rgb = np.where(h_line[..., None], lerp(rgb, CYAN, (0.85 * np.maximum(horizon, 0.35))[..., None]), rgb)
+    rgb = np.where(v_line[..., None], lerp(rgb, PINK, (0.8 * horizon)[..., None]), rgb)
+
+    bezel = (outer < 4) & (inner > -4)
+    # Pure neon around the well: cyan along the top, pink on the sides, purple along the bottom.
+    side = np.abs(xx - cx) / hw
+    topness = np.clip(-(yy - cy) / hh, 0, 1)
+    bottomness = np.clip((yy - cy) / hh, 0, 1)
+    metal = np.broadcast_to(PINK, rgb.shape).copy()
+    metal = lerp(metal, CYAN, topness[..., None])
+    metal = lerp(metal, PURPLE, (bottomness * (1 - topness))[..., None])
+    metal = lerp(metal, PINK, np.clip(side - 0.35, 0, 1)[..., None])
+    rgb = np.where(bezel[..., None], metal, rgb)
+
+    glow = np.exp(-np.clip(outer, 0, 40) * 0.055) * (outer > 2)
+    rgb = lerp(rgb, PINK, (glow * 0.82)[..., None])
+    outer_hair = (np.abs(outer) < 8) & (outer > -2)
+    inner_hair = (np.abs(inner) < 7) & (inner > -2)
+    rgb = np.where(outer_hair[..., None], PINK, rgb)
+    rgb = np.where(inner_hair[..., None], CYAN, rgb)
+    streak = bezel & (yy < win_t + 22) & (np.abs(xx - cx) < hw * 0.72)
+    rgb = np.where(streak[..., None], lerp(rgb, np.array([245.0, 255.0, 255.0]), 0.55), rgb)
+
+    alpha = np.full((H, W), 255, dtype=np.float32)
+    alpha = np.where(inner < -2.0, 0.0, alpha)
+    img = Image.fromarray(np.dstack([np.clip(rgb, 0, 255), alpha]).astype(np.uint8), "RGBA")
+    draw = ImageDraw.Draw(img)
+
+    plaque = [48, 892, 1872, 1056]
+    draw.rounded_rectangle(plaque, radius=18, fill=(109, 18, 214, 255), outline=(255, 20, 160, 255), width=8)
+    draw.rounded_rectangle(
+        [plaque[0] + 12, plaque[1] + 12, plaque[2] - 12, plaque[3] - 12],
+        radius=12,
+        outline=(0, 236, 255, 255),
+        width=4,
+    )
+
+    word = "80S"
+    size = 112
+    font = ImageFont.truetype(NEON_FONT, size)
+    box = font.getbbox(word)
+    bar_mid = (plaque[1] + plaque[3]) / 2
+    word_y = int(bar_mid - (box[3] - box[1]) / 2 - box[1])
+    word_w = box[2] - box[0]
+    neon_mark(img, word, 78 - box[0], word_y, size)
+    neon_mark(img, word, 1920 - 78 - word_w - box[0], word_y, size)
+    return img
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     packs = {
         "polaroid-stack.png": polaroid_stack,
         "disco-chrome.png": disco_chrome,
         "black-tie-bar.png": black_tie_bar,
+        "neon-80s.png": neon_80s,
     }
     for name, fn in packs.items():
         img = fn()

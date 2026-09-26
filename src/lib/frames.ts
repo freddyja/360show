@@ -6,6 +6,8 @@ export interface FrameCaptionLayout {
   color: string;
   tracking: string;
   rotateDeg?: number;
+  /** Max name width as a fraction of the frame, so it stays off corner marks. */
+  maxWidth?: number;
 }
 
 export interface FrameStyleMeta {
@@ -90,6 +92,15 @@ export const FRAME_STYLES: FrameStyleMeta[] = [
     rampProfile: "time-ramp-gentle",
     thumbAlign: "bottom",
   },
+  {
+    id: "neon-80s",
+    name: "Neon 80s",
+    description: "Hot neon pink, purple, and cyan, with 80 and S on the bar",
+    assetSrc: "/frames/neon-80s.png",
+    defaultAccent: "#FF2D95",
+    rampProfile: "time-ramp-v1",
+    thumbAlign: "center",
+  },
 ];
 
 export function getFrameStyle(id: FrameStyleId | string) {
@@ -119,10 +130,13 @@ export function frameCaptionLayout(id?: FrameStyleId | string | null): FrameCapt
   if (id === "black-tie-bar") {
     return { y: 0.9, color: "#F4EFE4", tracking: "0.32em" };
   }
+  if (id === "neon-80s") {
+    return { y: 0.902, color: "#F7FEFF", tracking: "0.16em", maxWidth: 0.4 };
+  }
   return null;
 }
 
-/** Keep HUD chips off bottom plaques (CF, polaroid, black-tie). */
+/** Keep HUD chips off bottom plaques (CF, polaroid, black-tie, neon 80s). */
 export function frameHudTop(id?: FrameStyleId | string | null) {
-  return id === "christian-fellowship" || id === "polaroid-stack" || id === "black-tie-bar";
+  return id === "christian-fellowship" || id === "polaroid-stack" || id === "black-tie-bar" || id === "neon-80s";
 }

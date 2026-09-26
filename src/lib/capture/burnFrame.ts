@@ -213,6 +213,7 @@ function drawFrameCaption(
   y: number,
   color: string,
   rotateDeg = 0,
+  maxWidthFrac = 0.72,
 ) {
   ctx.save();
   ctx.translate(w / 2, h * y);
@@ -223,7 +224,7 @@ function drawFrameCaption(
   let size = Math.max(18, Math.round(h * 0.038));
   ctx.font = `600 ${size}px ui-sans-serif, system-ui, sans-serif`;
   const label = names.toUpperCase();
-  const maxWidth = w * 0.72;
+  const maxWidth = w * maxWidthFrac;
   while (size > 12 && ctx.measureText(label).width > maxWidth) {
     size -= 1;
     ctx.font = `600 ${size}px ui-sans-serif, system-ui, sans-serif`;
@@ -253,7 +254,16 @@ export function drawVideoWithFrame(
     coverImage(ctx, frame.image, width, height);
     const caption = frameCaptionLayout(frame.style);
     if (caption) {
-      drawFrameCaption(ctx, width, height, frame.names, caption.y, caption.color, caption.rotateDeg ?? 0);
+      drawFrameCaption(
+        ctx,
+        width,
+        height,
+        frame.names,
+        caption.y,
+        caption.color,
+        caption.rotateDeg ?? 0,
+        caption.maxWidth ?? 0.72,
+      );
     }
     return;
   }

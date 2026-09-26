@@ -191,13 +191,14 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - **Live time-ramp preview**: `playbackRate` keyframes when **Slow-mo / time ramp** is on (Settings)
 - **Baked slow-mo export**: same ramp re-encoded for Download / Share when slow-mo is on; skipped when off
 - **Music beds**: original CC0 instrumentals under `/music/`. Looping playback on spin / preview / share; best-effort mix into Download / Share via Web Audio + MediaRecorder. **Song from this phone** stores an operator-picked audio file in IndexedDB (not uploaded except inside a mixed export).
-- Event frames overlaid on **web preview** and **burned into Download / Share / Blob / Drive** (gold oval, neon ring, midnight arch, classic plaque, **Christian Fellowship**, **Polaroid stack**, **Disco chrome**, **Black-tie bar**). **Minimal** stays a thin web border only — the file has no extra decoration.
+- Event frames overlaid on **web preview** and **burned into Download / Share / Blob / Drive** (gold oval, neon ring, midnight arch, classic plaque, **Christian Fellowship**, **Polaroid stack**, **Disco chrome**, **Black-tie bar**, **Neon 80s**). **Minimal** stays a thin web border only — the file has no extra decoration.
 - **Crowd / TV screen** at `/e/[eventId]/crowd` — full-bleed looping latest spin, idle “next spin” branding, optional guest QR. Open from Capture, Event setup, or the laptop remote page.
 - **Remote operator** at `/e/[eventId]/remote` — a laptop on the public HTTPS site pairs to the booth phone (Capture armed) and START SPINs plus look/settings. Pair token + short code; no extra accounts.
 - **Christian Fellowship** look-pack: navy/gold plaque overlay (`/frames/christian-fellowship.png`), default accent `#C9A227`, gentle slow-mo ramp (no freeze-flash)
 - **Polaroid stack**: warm instant-film border + stacked print (`/frames/polaroid-stack.png`), caption strip for couple names, accent `#F5F0E8`, gentle ramp
 - **Disco chrome**: silver bezel with specular highlights (`/frames/disco-chrome.png`), accent `#67E8F9`, livelier freeze ramp
 - **Black-tie bar**: matte black frame + ivory name plaque (`/frames/black-tie-bar.png`), accent `#0A0A0A`, gentle ramp
+- **Neon 80s**: saturated hot-pink, electric-purple, and cyan bezel with **80** and **S** on the name bar (`/frames/neon-80s.png`), accent `#FF2D95` (same party magenta as the booth chrome), livelier freeze ramp
 - Force-offline chip, mock battery, Camera OK / demo status
 
 **Simulated / stubbed (extension points)**

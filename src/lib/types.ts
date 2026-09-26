@@ -8,6 +8,7 @@ export const FRAME_STYLE_IDS = [
   "polaroid-stack",
   "disco-chrome",
   "black-tie-bar",
+  "neon-80s",
 ] as const;
 
 export type FrameStyleId = (typeof FRAME_STYLE_IDS)[number];
