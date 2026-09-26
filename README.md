@@ -198,7 +198,7 @@ The original capture stays in IndexedDB. Guests who **Save to gallery** or fetch
 - **Polaroid stack**: warm instant-film border + stacked print (`/frames/polaroid-stack.png`), caption strip for couple names, accent `#F5F0E8`, gentle ramp
 - **Disco chrome**: silver bezel with specular highlights (`/frames/disco-chrome.png`), accent `#67E8F9`, livelier freeze ramp
 - **Black-tie bar**: matte black frame + ivory name plaque (`/frames/black-tie-bar.png`), accent `#0A0A0A`, gentle ramp
-- **Neon 80s**: synthwave bezel in hot pink, electric purple, and cyan with a chrome name bar (`/frames/neon-80s.png`), accent `#FF2D95` (same party magenta as the booth chrome), livelier freeze ramp
+- **Neon 80s**: saturated hot-pink, electric-purple, and cyan bezel with **80** and **S** on the name bar (`/frames/neon-80s.png`), accent `#FF2D95` (same party magenta as the booth chrome), livelier freeze ramp
 - Force-offline chip, mock battery, Camera OK / demo status
 
 **Simulated / stubbed (extension points)**

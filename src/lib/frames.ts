@@ -6,6 +6,8 @@ export interface FrameCaptionLayout {
   color: string;
   tracking: string;
   rotateDeg?: number;
+  /** Max name width as a fraction of the frame, so it stays off corner marks. */
+  maxWidth?: number;
 }
 
 export interface FrameStyleMeta {
@@ -93,7 +95,7 @@ export const FRAME_STYLES: FrameStyleMeta[] = [
   {
     id: "neon-80s",
     name: "Neon 80s",
-    description: "Synthwave bezel in hot pink, electric purple, and cyan",
+    description: "Hot neon pink, purple, and cyan, with 80 and S on the bar",
     assetSrc: "/frames/neon-80s.png",
     defaultAccent: "#FF2D95",
     rampProfile: "time-ramp-v1",
@@ -129,7 +131,7 @@ export function frameCaptionLayout(id?: FrameStyleId | string | null): FrameCapt
     return { y: 0.9, color: "#F4EFE4", tracking: "0.32em" };
   }
   if (id === "neon-80s") {
-    return { y: 0.91, color: "#F7FEFF", tracking: "0.22em" };
+    return { y: 0.902, color: "#F7FEFF", tracking: "0.16em", maxWidth: 0.4 };
   }
   return null;
 }
