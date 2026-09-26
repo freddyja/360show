@@ -213,12 +213,116 @@ def black_tie_bar() -> Image.Image:
     return Image.fromarray(arr, "RGBA")
 
 
+def neon_80s() -> Image.Image:
+    """Synthwave bezel. Photo well stays clear; grid and motifs stay in the margin."""
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    win_l, win_t, win_r, win_b = 96.0, 56.0, 1824.0, 888.0
+    cx = (win_l + win_r) / 2
+    cy = (win_t + win_b) / 2
+    hw = (win_r - win_l) / 2
+    hh = (win_b - win_t) / 2
+    radius = 30.0
+    outer = rounded_rect_sdf(xx, yy, cx, cy, hw, hh, radius)
+    inner = rounded_rect_sdf(xx, yy, cx, cy, hw - 28, hh - 28, max(8.0, radius - 12))
+
+    nx = (xx - W / 2) / (W * 0.62)
+    ny = (yy - H * 0.42) / (H * 0.72)
+    rad = np.sqrt(nx * nx + ny * ny)
+    t = np.clip(rad, 0, 1)
+    rgb = np.zeros((H, W, 3), dtype=np.float32)
+    rgb[..., 0] = lerp(18, 72, t)
+    rgb[..., 1] = lerp(0, 6, t)
+    rgb[..., 2] = lerp(40, 78, t)
+    corner = np.clip(rad - 0.45, 0, 1) ** 1.2
+    rgb[..., 0] = np.clip(rgb[..., 0] + corner * 110, 0, 255)
+    rgb[..., 2] = np.clip(rgb[..., 2] + corner * 36, 0, 255)
+
+    # Horizon grid only outside the bezel, stronger toward the lower margin.
+    outside = outer > 12
+    horizon = np.clip((yy - H * 0.58) / (H * 0.36), 0, 1)
+    h_line = outside & (np.mod(yy, 36.0) < 1.35) & (horizon > 0.05)
+    v_line = outside & (yy > H * 0.7) & (np.mod(xx, 78.0) < 1.25)
+    cyan = np.array([34.0, 211.0, 238.0])
+    pink = np.array([255.0, 45.0, 149.0])
+    purple = np.array([168.0, 85.0, 247.0])
+    rgb = np.where(h_line[..., None], lerp(rgb, cyan, (0.42 * horizon)[..., None]), rgb)
+    rgb = np.where(v_line[..., None], lerp(rgb, pink, (0.34 * horizon)[..., None]), rgb)
+
+    bezel = (outer < 3) & (inner > -3)
+    topness = np.clip(-(yy - cy) / hh, 0, 1)
+    metal = lerp(pink, purple, 0.42)
+    metal = lerp(metal, cyan, (topness * 0.62)[..., None])
+    spec = np.clip(0.08 + topness * 0.95 - np.abs((xx - cx) / hw) * 0.35, 0, 1) ** 1.35
+    chrome = np.array([248.0, 252.0, 255.0])
+    metal = lerp(metal, chrome, (spec * 0.62)[..., None])
+    rgb = np.where(bezel[..., None], metal, rgb)
+
+    glow = np.exp(-np.clip(outer, 0, 48) * 0.075) * (outer > 1)
+    rgb = lerp(rgb, pink, (glow * 0.5)[..., None])
+
+    hair = (np.abs(inner) < 2.4) & (inner > -1.2)
+    rgb = np.where(hair[..., None], lerp(rgb, cyan, 0.92), rgb)
+    outer_hair = (np.abs(outer) < 2.6) & (outer > -1.2)
+    rgb = np.where(outer_hair[..., None], lerp(rgb, pink, 0.95), rgb)
+    streak = bezel & (yy < cy - hh * 0.55) & (spec > 0.55)
+    rgb = np.where(streak[..., None], lerp(rgb, chrome, 0.72), rgb)
+
+    alpha = np.full((H, W), 255, dtype=np.float32)
+    alpha = np.where(inner < -1.4, 0.0, alpha)
+    img = Image.fromarray(np.dstack([np.clip(rgb, 0, 255), alpha]).astype(np.uint8), "RGBA")
+    draw = ImageDraw.Draw(img)
+
+    def sunset(sx, sy, rads):
+        bands = (
+            (rads, (255, 45, 149, 235)),
+            (rads * 0.72, (168, 85, 247, 230)),
+            (rads * 0.46, (34, 211, 238, 220)),
+            (rads * 0.24, (250, 204, 21, 210)),
+        )
+        for band_r, color in bands:
+            draw.arc(
+                [sx - band_r, sy - band_r, sx + band_r, sy + band_r],
+                start=205,
+                end=335,
+                fill=color,
+                width=max(2, int(band_r * 0.09)),
+            )
+
+    sunset(44, 36, 30)
+    sunset(W - 44, 36, 30)
+
+    plaque = [156, 916, 1764, 1046]
+    draw.rounded_rectangle(plaque, radius=12, fill=(12, 0, 24, 242), outline=(255, 45, 149, 255), width=3)
+    draw.rounded_rectangle(
+        [plaque[0] + 8, plaque[1] + 8, plaque[2] - 8, plaque[3] - 8],
+        radius=8,
+        outline=(34, 211, 238, 190),
+        width=2,
+    )
+    draw.line(
+        [(plaque[0] + 36, plaque[1] + 16), (plaque[2] - 36, plaque[1] + 16)],
+        fill=(248, 252, 255, 110),
+        width=2,
+    )
+
+    def cassette(x, y):
+        draw.rounded_rectangle([x, y, x + 52, y + 34], radius=4, outline=(168, 85, 247, 230), width=2)
+        draw.ellipse([x + 7, y + 8, x + 21, y + 22], outline=(34, 211, 238, 230), width=2)
+        draw.ellipse([x + 31, y + 8, x + 45, y + 22], outline=(255, 45, 149, 230), width=2)
+        draw.rectangle([x + 23, y + 13, x + 29, y + 18], fill=(250, 204, 21, 200))
+
+    cassette(184, 960)
+    cassette(1684, 960)
+    return img
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     packs = {
         "polaroid-stack.png": polaroid_stack,
         "disco-chrome.png": disco_chrome,
         "black-tie-bar.png": black_tie_bar,
+        "neon-80s.png": neon_80s,
     }
     for name, fn in packs.items():
         img = fn()
