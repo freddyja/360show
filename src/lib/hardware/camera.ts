@@ -1,3 +1,4 @@
+import { assertBoothRole } from "@/lib/deviceRole";
 import type { VideoQuality } from "../capture/quality";
 import { resolveVideoQuality, videoQualityProfile } from "../capture/quality";
 
@@ -26,6 +27,7 @@ async function applyQualityConstraints(stream: MediaStream, quality: VideoQualit
 }
 
 export async function getCameraStream(quality: VideoQuality = "high"): Promise<MediaStream> {
+  assertBoothRole("getCameraStream");
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
     throw new Error("Camera API unavailable");
   }
@@ -69,6 +71,7 @@ export async function getCameraStream(quality: VideoQuality = "high"): Promise<M
 }
 
 export async function probeCamera(quality: VideoQuality = "high"): Promise<CameraStatus> {
+  assertBoothRole("probeCamera");
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
     return "unavailable";
   }

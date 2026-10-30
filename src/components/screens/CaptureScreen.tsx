@@ -42,6 +42,8 @@ import {
 } from "@/lib/remote/client";
 import {
   REMOTE_POLL_MS,
+  SETTINGS_LOCKED_MESSAGE,
+  isRemoteSettingCommand,
   boothStatusForPhase,
   isAccentColor,
   isCaptureDurationSec,
@@ -94,6 +96,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   messageRef.current = message;
   const latestClipRef = useRef(latestClip);
   latestClipRef.current = latestClip;
+  /** True from the moment a remote START is taken until runSpin returns (covers music load before countdown). */
+  const remoteSpinBusyRef = useRef(false);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const pendingAcksRef = useRef<{ commandId: string; ok: boolean; message: string }[]>([]);
@@ -364,7 +368,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             ack(false, "Booth is busy");
             return;
           }
-          await runSpinRef.current();
+          remoteSpinBusyRef.current = true;
+          try {
+            await runSpinRef.current();
+          } finally {
+            remoteSpinBusyRef.current = false;
+          }
           ack(true, "Spin captured");
           void flushRemoteAcks();
           return;
@@ -382,6 +391,11 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           spinAbortRef.current?.abort();
           ack(true, phaseNow === "countdown" ? "Countdown cancelled" : "Recording stopped");
           void flushRemoteAcks();
+          return;
+        }
+        // Settings lock: never change look, music, or length mid-spin.
+        if (isRemoteSettingCommand(cmd.type) && (phaseRef.current !== "idle" || remoteSpinBusyRef.current)) {
+          ack(false, SETTINGS_LOCKED_MESSAGE);
           return;
         }
         if (cmd.type === "setCustomMusic") {

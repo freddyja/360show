@@ -1,3 +1,4 @@
+import { assertBoothRole } from "@/lib/deviceRole";
 import { DEMO_ASSET_PATH } from "../types";
 import { getCameraStream, stopStream } from "../hardware/camera";
 import { createDemoScene } from "./demoScene";
@@ -75,6 +76,7 @@ export async function beginLivePreview(
   source: "camera" | "demo";
   stop: () => void;
 }> {
+  assertBoothRole("beginLivePreview");
   const resolved = resolveVideoQuality(quality);
   if (preferCamera) {
     try {
@@ -108,6 +110,7 @@ export async function recordCapture(
   quality: VideoQuality = "high",
   signal?: AbortSignal,
 ): Promise<Omit<RecordResult, "previewStream" | "stopPreview">> {
+  assertBoothRole("recordCapture");
   let blob = await recordStream(live.stream, durationMs, resolveVideoQuality(quality), signal);
   if (!blob || blob.size < 1000) {
     blob = await blobFromDemoAsset();

@@ -55,7 +55,37 @@ export interface RemoteEventSnapshot {
   driveConfigured: boolean;
   blobConfigured: boolean;
   remoteMusicAvailable?: boolean;
+  /** Choices the phone (booth controller) accepts, so remotes never hard-code them. */
+  options?: RemoteBoothOptions;
 }
+
+export interface RemoteBoothOptions {
+  frames: { id: FrameStyleId; name: string }[];
+  musicBeds: MusicBedLabel[];
+  spinLengths: CaptureDurationSec[];
+  videoQualities: VideoQuality[];
+  /** Fixed on the booth today; reported read-only. */
+  countdownSec: number;
+}
+
+/** Setting changes the tablet may send. The phone rejects them unless idle. */
+export const REMOTE_SETTING_COMMANDS = [
+  "setSpinLength",
+  "setMusicBed",
+  "setFrameStyle",
+  "setEventBranding",
+  "setSlowMo",
+  "setVideoQuality",
+  "setBoothMusicMuted",
+  "setCloudDestination",
+  "setCustomMusic",
+] as const satisfies readonly RemoteCommandType[];
+
+export function isRemoteSettingCommand(type: RemoteCommandType) {
+  return (REMOTE_SETTING_COMMANDS as readonly string[]).includes(type);
+}
+
+export const SETTINGS_LOCKED_MESSAGE = "Settings are locked while the booth is busy. Try again when it is idle.";
 
 export interface RemoteCommandPayload {
   captureDurationSec?: CaptureDurationSec;

@@ -1,6 +1,6 @@
 "use client";
 
-import type { RemotePublicView } from "./types";
+import type { RemoteCommandPayload, RemoteCommandType, RemotePublicView } from "./types";
 
 /** Tablet pairing survives reloads and add-to-home-screen launches (localStorage, not sessionStorage). */
 const TABLET_PAIR_KEY = "360show.tablet.pair";
@@ -85,11 +85,16 @@ function newClientId() {
 }
 
 /**
- * Send START / STOP with a stable clientId and retry on network errors / 5xx,
+ * Send START / STOP / a setting with a stable clientId and retry on network errors / 5xx,
  * so a flaky Wi-Fi tap lands exactly once. A 409 on START means a START is
  * already queued on the booth, which is the outcome the operator wanted.
  */
-export async function tabletCommand(eventId: string, token: string, type: "startSpin" | "stopSpin") {
+export async function tabletCommand(
+  eventId: string,
+  token: string,
+  type: RemoteCommandType,
+  payload: RemoteCommandPayload = {},
+) {
   const clientId = newClientId();
   let lastError: unknown;
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -98,14 +103,14 @@ export async function tabletCommand(eventId: string, token: string, type: "start
       const res = await fetch("/api/remote/command", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ eventId, token, type, payload: {}, clientId }),
+        body: JSON.stringify({ eventId, token, type, payload, clientId }),
         signal: t.signal,
       });
       if (res.status === 409 && type === "startSpin") {
         return { ok: true, alreadyQueued: true as const, view: null };
       }
-      const data = await json<{ ok: boolean; commandId: string; view: RemotePublicView }>(res);
-      return { ok: true, alreadyQueued: false as const, view: data.view, commandId: data.commandId };
+      const data = await json<{ ok: boolean; commandId: string; duplicate?: boolean; superseded?: string[]; view: RemotePublicView }>(res);
+      return { ok: true, alreadyQueued: false as const, view: data.view, commandId: data.commandId, superseded: data.superseded?.length ?? 0 };
     } catch (error) {
       lastError = error;
       if (error instanceof RemoteHttpError && error.status < 500) throw error;

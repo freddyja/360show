@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Play, Square, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { setDeviceRole } from "@/lib/deviceRole";
+import { TabletSettingsPanel } from "@/components/TabletSettingsPanel";
 import {
   RemoteHttpError,
   clearTabletPair,
@@ -14,7 +16,14 @@ import {
   writeTabletPair,
   type TabletPair,
 } from "@/lib/remote/tabletClient";
-import { REMOTE_BOOTH_ONLINE_MS, REMOTE_POLL_MS, isEventId, type RemotePublicView } from "@/lib/remote/types";
+import {
+  REMOTE_BOOTH_ONLINE_MS,
+  REMOTE_POLL_MS,
+  isEventId,
+  type RemoteCommandPayload,
+  type RemoteCommandType,
+  type RemotePublicView,
+} from "@/lib/remote/types";
 
 const MAX_BACKOFF_MS = 10_000;
 
@@ -27,6 +36,11 @@ const PHASE_LABEL: Record<string, string> = {
   processing: "PROCESSING",
 };
 
+/**
+ * Tablet = remote surface only. The PHONE wired to the booth runs Capture,
+ * camera, recording, frames, and music; this screen only sends commands via
+ * /api/remote/* and renders the phone's reported state. See src/lib/deviceRole.ts.
+ */
 export function TabletOperatorScreen() {
   const search = useSearchParams();
   const [pair, setPair] = useState<TabletPair | null>(null);
@@ -41,6 +55,10 @@ export function TabletOperatorScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const failuresRef = useRef(0);
+
+  useEffect(() => {
+    setDeviceRole("tablet");
+  }, []);
 
   // Pairing source: QR link (?e=&k=), then ?code=, then the saved pair.
   useEffect(() => {
@@ -181,6 +199,23 @@ export function TabletOperatorScreen() {
     }
   }
 
+  async function sendSetting(type: RemoteCommandType, payload: RemoteCommandPayload) {
+    if (!pair) return false;
+    try {
+      const result = await tabletCommand(pair.eventId, pair.token, type, payload);
+      if (result.view) setView(result.view);
+      setNotice(result.superseded ? "Setting updated (replaced an earlier change still waiting)." : "Setting sent — waiting for the booth…");
+      return true;
+    } catch (err) {
+      if (err instanceof RemoteHttpError && err.status === 401) {
+        unpair("The booth ended this remote session. Enter the new code from the booth screen.");
+      } else {
+        setNotice(err instanceof Error ? `Setting not applied: ${err.message}` : "Setting not sent. Check Wi-Fi.");
+      }
+      return false;
+    }
+  }
+
   if (!loaded) return <div className="min-h-dvh bg-[#07101c]" />;
 
   if (!pair) {
@@ -270,12 +305,12 @@ export function TabletOperatorScreen() {
         </p>
       </section>
 
-      <div className="grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => void send("startSpin")}
           disabled={Boolean(sending) || busy || pending?.type === "startSpin"}
-          className="flex min-h-[38vh] select-none flex-col items-center justify-center gap-3 rounded-3xl bg-emerald-500 text-5xl font-black text-slate-950 shadow-lg active:scale-[0.98] disabled:opacity-35"
+          className="flex min-h-[26vh] select-none flex-col items-center justify-center gap-3 rounded-3xl bg-emerald-500 text-5xl font-black text-slate-950 shadow-lg active:scale-[0.98] disabled:opacity-35"
         >
           <Play className="h-20 w-20" />
           {sending === "startSpin" ? "SENDING…" : "START"}
@@ -284,12 +319,19 @@ export function TabletOperatorScreen() {
           type="button"
           onClick={() => void send("stopSpin")}
           disabled={Boolean(sending) || (!busy && pending?.type !== "startSpin")}
-          className="flex min-h-[38vh] select-none flex-col items-center justify-center gap-3 rounded-3xl bg-red-500 text-5xl font-black text-white shadow-lg active:scale-[0.98] disabled:opacity-35"
+          className="flex min-h-[26vh] select-none flex-col items-center justify-center gap-3 rounded-3xl bg-red-500 text-5xl font-black text-white shadow-lg active:scale-[0.98] disabled:opacity-35"
         >
           <Square className="h-20 w-20" />
           {sending === "stopSpin" ? "SENDING…" : "STOP"}
         </button>
       </div>
+
+      <TabletSettingsPanel
+        snapshot={view?.snapshot}
+        locked={busy || stale || pending?.type === "startSpin"}
+        lockReason={busy || pending?.type === "startSpin" ? "Locked during the spin" : "Booth offline"}
+        onSend={sendSetting}
+      />
 
       <footer className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
         <div className="space-y-1">

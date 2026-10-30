@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint && node scripts/check-tablet-split.mjs",
+    "check:tablet": "node scripts/check-tablet-split.mjs",
     "music:generate": "node scripts/generate-music-beds.mjs",
     "frames:generate": "python3 scripts/generate-frame-packs.py"
   },

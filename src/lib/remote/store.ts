@@ -261,6 +261,22 @@ export async function enqueueCommand(eventId: string, command: RemoteCommand) {
   await persistCommands(eventId, [...existing, command].slice(-24));
 }
 
+/**
+ * Coalesce a setting change: drop any still-pending command of the same type
+ * (last value wins; branding fields merge) and queue the new one. Returns the
+ * ids that were superseded.
+ */
+export async function enqueueSettingCommand(eventId: string, command: RemoteCommand) {
+  const existing = await readCommands(eventId);
+  const superseded = existing.filter((cmd) => cmd.type === command.type);
+  if (command.type === "setEventBranding") {
+    command.payload = Object.assign({}, ...superseded.map((cmd) => cmd.payload), command.payload);
+  }
+  const kept = existing.filter((cmd) => cmd.type !== command.type);
+  await persistCommands(eventId, [...kept, command].slice(-24));
+  return superseded.map((cmd) => cmd.id);
+}
+
 export async function removeCommands(eventId: string, ids: string[]) {
   if (!ids.length) return;
   const idSet = new Set(ids);

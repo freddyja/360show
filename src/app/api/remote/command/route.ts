@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isFrameStyleId } from "@/lib/share/types";
 import {
   enqueueCommand,
+  enqueueSettingCommand,
   musicUnavailableMessage,
   newCommandId,
   publicViewNow,
@@ -24,6 +25,8 @@ import {
   isEventId,
   isMusicBedLabel,
   isRemoteCommandType,
+  isRemoteSettingCommand,
+  SETTINGS_LOCKED_MESSAGE,
   isVideoQuality,
   type RemoteCommand,
   type RemoteCommandPayload,
@@ -89,6 +92,11 @@ export async function POST(request: Request) {
         view: await publicViewNow(session, pendingNow[0] ?? null, now0),
       });
     }
+  }
+  // Settings lock: the phone also enforces this, but answering here gives the
+  // remote an immediate, clear reply instead of a queued command that fails.
+  if (isRemoteSettingCommand(body.type) && session.boothPhase !== "idle") {
+    return NextResponse.json({ error: SETTINGS_LOCKED_MESSAGE, locked: true }, { status: 423 });
   }
   const command: RemoteCommand = {
     id: fixedId || newCommandId(),
@@ -175,8 +183,13 @@ export async function POST(request: Request) {
 
   const now = Date.now();
   await touchOperatorPing(eventId, now);
+  let superseded: string[] = [];
   try {
-    await enqueueCommand(eventId, command);
+    if (isRemoteSettingCommand(command.type) && command.type !== "setCustomMusic") {
+      superseded = await enqueueSettingCommand(eventId, command);
+    } else {
+      await enqueueCommand(eventId, command);
+    }
   } catch (error) {
     if (error instanceof Error && error.message === "START_SPIN_PENDING") {
       return NextResponse.json({ error: "A START SPIN is already waiting on the booth." }, { status: 409 });
@@ -188,6 +201,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     commandId: command.id,
+    ...(superseded.length ? { superseded } : {}),
     view: await publicViewNow(session, pending[0] ?? null, now),
   });
 }

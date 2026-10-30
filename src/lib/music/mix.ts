@@ -1,5 +1,6 @@
 "use client";
 
+import { assertBoothRole } from "@/lib/deviceRole";
 export const MIX_GAIN = 0.36;
 
 export interface MusicMixHandle {
@@ -18,6 +19,7 @@ export async function mixMusicIntoStream(
   videoStream: MediaStream,
   musicSrc: string | null | undefined,
 ): Promise<MusicMixHandle> {
+  assertBoothRole("mixMusicIntoStream");
   if (!musicSrc) {
     return { stream: videoStream, mixedAudio: false, stop: () => undefined };
   }
