@@ -4,7 +4,13 @@ import { mixMusicIntoStream } from "../music/mix";
 import { frameBakeId } from "../frames";
 import { drawVideoWithFrame, prepareFrameBurn } from "./burnFrame";
 import { playbackRateAt, rampKeyframes } from "./ramp";
-import { createVideoRecorder, fitWithinQuality, resolveVideoQuality, typedVideoBlob, type VideoQuality } from "./quality";
+import {
+  createVideoRecorder,
+  fitWithinQuality,
+  resolveVideoQuality,
+  typedVideoBlob,
+  type VideoQuality,
+} from "./quality";
 
 const FREEZE_HOLD_MS = 1200;
 const MAX_BAKE_MS = 120_000;
@@ -65,13 +71,18 @@ export async function bakeTimeRamp(options: {
     throw new Error("Baking slow-mo needs a browser with MediaRecorder");
   }
 
-  const src = typeof options.source === "string" ? options.source : URL.createObjectURL(options.source);
+  const src =
+    typeof options.source === "string"
+      ? options.source
+      : URL.createObjectURL(options.source);
   const revoke = typeof options.source !== "string";
   const applyRamp = options.applyRamp !== false;
-  const keyframes = applyRamp ? rampKeyframes(options.profile) : [
-    { at: 0, rate: 1 },
-    { at: 1, rate: 1 },
-  ];
+  const keyframes = applyRamp
+    ? rampKeyframes(options.profile)
+    : [
+        { at: 0, rate: 1 },
+        { at: 1, rate: 1 },
+      ];
 
   const video = document.createElement("video");
   video.muted = true;
@@ -84,7 +95,8 @@ export async function bakeTimeRamp(options: {
   const canvas = document.createElement("canvas");
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
-  host.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;";
+  host.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;";
   host.append(video, canvas);
   document.body.appendChild(host);
 
@@ -92,7 +104,10 @@ export async function bakeTimeRamp(options: {
 
   try {
     await new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error("Timed out loading clip")), 20_000);
+      const timer = window.setTimeout(
+        () => reject(new Error("Timed out loading clip")),
+        20_000,
+      );
       video.onloadeddata = () => {
         window.clearTimeout(timer);
         resolve();
@@ -114,7 +129,11 @@ export async function bakeTimeRamp(options: {
     }
 
     const quality = resolveVideoQuality(options.quality);
-    const fitted = fitWithinQuality(video.videoWidth, video.videoHeight, quality);
+    const fitted = fitWithinQuality(
+      video.videoWidth,
+      video.videoHeight,
+      quality,
+    );
     canvas.width = fitted.width;
     canvas.height = fitted.height;
     const ctx = canvas.getContext("2d", { alpha: false });
@@ -124,7 +143,8 @@ export async function bakeTimeRamp(options: {
       names: options.frameNames,
       accentColor: options.frameAccent,
     });
-    const paint = () => drawVideoWithFrame(ctx, video, frame, canvas.width, canvas.height);
+    const paint = () =>
+      drawVideoWithFrame(ctx, video, frame, canvas.width, canvas.height);
 
     const canvasStream = canvas.captureStream(fitted.fps);
     const mixSrc = options.musicSrc ?? musicBedSrc(options.musicBedLabel);
@@ -142,7 +162,11 @@ export async function bakeTimeRamp(options: {
       recorder = createVideoRecorder(canvasStream, fitted.bitrate);
     }
 
-    if (mixedAudio && recorder.stream && recorder.stream.getAudioTracks().length === 0) {
+    if (
+      mixedAudio &&
+      recorder.stream &&
+      recorder.stream.getAudioTracks().length === 0
+    ) {
       mixedAudio = false;
     }
 

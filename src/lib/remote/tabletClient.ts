@@ -1,6 +1,10 @@
 "use client";
 
-import type { RemoteCommandPayload, RemoteCommandType, RemotePublicView } from "./types";
+import type {
+  RemoteCommandPayload,
+  RemoteCommandType,
+  RemotePublicView,
+} from "./types";
 
 /** Tablet pairing survives reloads and add-to-home-screen launches (localStorage, not sessionStorage). */
 const TABLET_PAIR_KEY = "360show.tablet.pair";
@@ -14,7 +18,9 @@ export interface TabletPair {
 export function readTabletPair(): TabletPair | null {
   if (typeof window === "undefined") return null;
   try {
-    const data = JSON.parse(localStorage.getItem(TABLET_PAIR_KEY) || "null") as TabletPair | null;
+    const data = JSON.parse(
+      localStorage.getItem(TABLET_PAIR_KEY) || "null",
+    ) as TabletPair | null;
     return data?.eventId && data.token ? data : null;
   } catch {
     return null;
@@ -40,7 +46,11 @@ export class RemoteHttpError extends Error {
 
 async function json<T>(res: Response): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new RemoteHttpError(data.error || `Request failed (${res.status})`, res.status);
+  if (!res.ok)
+    throw new RemoteHttpError(
+      data.error || `Request failed (${res.status})`,
+      res.status,
+    );
   return data;
 }
 
@@ -60,7 +70,12 @@ export async function tabletJoin(pairCode: string, eventId?: string) {
       body: JSON.stringify({ pairCode, ...(eventId ? { eventId } : {}) }),
       signal: t.signal,
     });
-    return await json<{ eventId: string; token: string; pairCode: string; view: RemotePublicView }>(res);
+    return await json<{
+      eventId: string;
+      token: string;
+      pairCode: string;
+      view: RemotePublicView;
+    }>(res);
   } finally {
     t.done();
   }
@@ -109,8 +124,20 @@ export async function tabletCommand(
       if (res.status === 409 && type === "startSpin") {
         return { ok: true, alreadyQueued: true as const, view: null };
       }
-      const data = await json<{ ok: boolean; commandId: string; duplicate?: boolean; superseded?: string[]; view: RemotePublicView }>(res);
-      return { ok: true, alreadyQueued: false as const, view: data.view, commandId: data.commandId, superseded: data.superseded?.length ?? 0 };
+      const data = await json<{
+        ok: boolean;
+        commandId: string;
+        duplicate?: boolean;
+        superseded?: string[];
+        view: RemotePublicView;
+      }>(res);
+      return {
+        ok: true,
+        alreadyQueued: false as const,
+        view: data.view,
+        commandId: data.commandId,
+        superseded: data.superseded?.length ?? 0,
+      };
     } catch (error) {
       lastError = error;
       if (error instanceof RemoteHttpError && error.status < 500) throw error;
@@ -119,5 +146,7 @@ export async function tabletCommand(
       t.done();
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("Could not reach the booth.");
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Could not reach the booth.");
 }

@@ -13,12 +13,28 @@ import { CrowdOpenControls } from "@/components/CrowdOpenControls";
 import { RemoteEnablePanel } from "@/components/RemoteEnablePanel";
 import { OperatorShell } from "@/components/OperatorShell";
 import { publishCrowd } from "@/lib/crowd/channel";
-import { beginLivePreview, recordCapture, thumbnailFromVideo, waitOrAbort } from "@/lib/capture/record";
-import { bakeSourceForClip, ensureBakedClip, needsExportBake } from "@/lib/capture/ensureBaked";
+import {
+  beginLivePreview,
+  recordCapture,
+  thumbnailFromVideo,
+  waitOrAbort,
+} from "@/lib/capture/record";
+import {
+  bakeSourceForClip,
+  ensureBakedClip,
+  needsExportBake,
+} from "@/lib/capture/ensureBaked";
 import { hasMusicBed, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { usesCustomMusic, musicCaption } from "@/lib/music/custom";
-import { formatCustomMusicError, materializeCustomMusicFile } from "@/lib/music/ingest";
-import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
+import {
+  formatCustomMusicError,
+  materializeCustomMusicFile,
+} from "@/lib/music/ingest";
+import {
+  nudgeBoothMusic,
+  syncBoothMusic,
+  useBoothMusic,
+} from "@/lib/music/player";
 import { resolveEventMusic, useEventMusicSrc } from "@/lib/music/resolve";
 import {
   createStubMotor,
@@ -34,7 +50,12 @@ import { createId } from "@/lib/ids";
 import { getFrameStyle, rampProfileForFrame } from "@/lib/frames";
 import { operatorSharePath } from "@/lib/shareUrl";
 import { useBooth, useEvent } from "@/lib/store";
-import { COUNTDOWN_SECONDS, DEMO_ASSET_PATH, captureDurationMs, resolveCaptureDurationSec } from "@/lib/types";
+import {
+  COUNTDOWN_SECONDS,
+  DEMO_ASSET_PATH,
+  captureDurationMs,
+  resolveCaptureDurationSec,
+} from "@/lib/types";
 import type { Clip } from "@/lib/types";
 import { useClipSrc } from "@/lib/useClipSrc";
 import { fetchShareConfig } from "@/lib/share/publish";
@@ -77,7 +98,8 @@ type PendingRemoteCommand = {
 
 export function CaptureScreen({ eventId }: { eventId: string }) {
   const router = useRouter();
-  const { ready, settings, saveClip, patchClip, saveEvent, saveSettings } = useBooth();
+  const { ready, settings, saveClip, patchClip, saveEvent, saveSettings } =
+    useBooth();
   const { event, latestClip } = useEvent(eventId);
   const [camera, setCamera] = useState<CameraStatus>("unavailable");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -91,7 +113,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const [remoteView, setRemoteView] = useState<RemotePublicView | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [remoteAvailable, setRemoteAvailable] = useState(false);
-  const [remoteUnavailableReason, setRemoteUnavailableReason] = useState<string | null>(null);
+  const [remoteUnavailableReason, setRemoteUnavailableReason] = useState<
+    string | null
+  >(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const motor = useMemo(() => createStubMotor(), []);
   const lastSrc = useClipSrc(latestClip?.id, latestClip?.demoAssetPath);
@@ -114,7 +138,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const remoteSpinBusyRef = useRef(false);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
-  const pendingAcksRef = useRef<{ commandId: string; ok: boolean; message: string }[]>([]);
+  const pendingAcksRef = useRef<
+    { commandId: string; ok: boolean; message: string }[]
+  >([]);
   const remoteTokenRef = useRef<string | null>(null);
   remoteTokenRef.current = remotePair?.token ?? null;
   const handledCommands = useRef(new Set<string>());
@@ -155,31 +181,37 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   }, [event, latestClip, phase, count]);
 
   /** Open the chosen camera briefly to learn status, real facing, and fallback (phone only). */
-  const refreshCamera = useCallback(async (facing: CameraFacing): Promise<RemoteCameraInfo> => {
-    const r = await probeCameraFacing(settingsRef.current.videoQuality, facing);
-    const want = facing === "user" ? "Front" : "Back";
-    const note =
-      r.status === "denied"
-        ? "Camera permission denied on this phone."
-        : r.status === "unavailable"
-          ? "No camera could be opened; spins will use the demo scene."
-          : r.fellBack
-            ? `${want} camera not available — using the ${r.actual === "user" ? "front" : "back"} camera.`
-            : null;
-    const info: RemoteCameraInfo = {
-      facing,
-      actual: r.actual,
-      fellBack: r.fellBack,
-      front: r.availability.front,
-      back: r.availability.back,
-      count: r.availability.count,
-      note,
-    };
-    setCamera(r.status);
-    cameraInfoRef.current = info;
-    setCameraInfo(info);
-    return info;
-  }, []);
+  const refreshCamera = useCallback(
+    async (facing: CameraFacing): Promise<RemoteCameraInfo> => {
+      const r = await probeCameraFacing(
+        settingsRef.current.videoQuality,
+        facing,
+      );
+      const want = facing === "user" ? "Front" : "Back";
+      const note =
+        r.status === "denied"
+          ? "Camera permission denied on this phone."
+          : r.status === "unavailable"
+            ? "No camera could be opened; spins will use the demo scene."
+            : r.fellBack
+              ? `${want} camera not available — using the ${r.actual === "user" ? "front" : "back"} camera.`
+              : null;
+      const info: RemoteCameraInfo = {
+        facing,
+        actual: r.actual,
+        fellBack: r.fellBack,
+        front: r.availability.front,
+        back: r.availability.back,
+        count: r.availability.count,
+        note,
+      };
+      setCamera(r.status);
+      cameraInfoRef.current = info;
+      setCameraInfo(info);
+      return info;
+    },
+    [],
+  );
 
   const chooseCameraFacing = useCallback(
     async (facing: CameraFacing) => {
@@ -261,9 +293,21 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     setUpdateBlocker("capture", true);
     setLivePreview(true);
 
-    const live = await beginLivePreview(true, boothSettings.videoQuality, cameraFacingRef.current);
-    if (live.source === "camera" && cameraInfoRef.current && live.facing !== undefined) {
-      const info = { ...cameraInfoRef.current, actual: live.facing ?? null, fellBack: Boolean(live.fellBack) };
+    const live = await beginLivePreview(
+      true,
+      boothSettings.videoQuality,
+      cameraFacingRef.current,
+    );
+    if (
+      live.source === "camera" &&
+      cameraInfoRef.current &&
+      live.facing !== undefined
+    ) {
+      const info = {
+        ...cameraInfoRef.current,
+        actual: live.facing ?? null,
+        fellBack: Boolean(live.fellBack),
+      };
       cameraInfoRef.current = info;
       setCameraInfo(info);
     }
@@ -300,9 +344,16 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     }, 80);
 
     void motor.spin(spinMs);
-    const recorded = await recordCapture(spinMs, live, boothSettings.videoQuality, abort.signal);
+    const recorded = await recordCapture(
+      spinMs,
+      live,
+      boothSettings.videoQuality,
+      abort.signal,
+    );
     const stoppedEarly = abort.signal.aborted;
-    const recordedMs = stoppedEarly ? Math.max(1000, Date.now() - started) : spinMs;
+    const recordedMs = stoppedEarly
+      ? Math.max(1000, Date.now() - started)
+      : spinMs;
     spinAbortRef.current = null;
     window.clearInterval(tick);
     setProgress(1);
@@ -328,11 +379,20 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       rampProfile: rampProfileForFrame(current.frameStyle),
     };
     await saveClip(clip, blob);
-    if (needsExportBake(boothSettings.slowMoEnabled !== false, current.musicBedLabel, usesCustomMusic(current), current.frameStyle)) {
+    if (
+      needsExportBake(
+        boothSettings.slowMoEnabled !== false,
+        current.musicBedLabel,
+        usesCustomMusic(current),
+        current.frameStyle,
+      )
+    ) {
       // Background bake also blocks auto-update until it finishes.
       const bakeKey = `bake-${clip.id}`;
       setUpdateBlocker(bakeKey, true);
-      void bakeExportInBackground(clip, blob).finally(() => setUpdateBlocker(bakeKey, false));
+      void bakeExportInBackground(clip, blob).finally(() =>
+        setUpdateBlocker(bakeKey, false),
+      );
     }
     await wait(600);
     phaseRef.current = "idle";
@@ -341,16 +401,16 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       stoppedEarly
         ? "Spin stopped early from the remote and saved."
         : recorded.source === "demo"
-        ? boothSettings.slowMoEnabled !== false
-          ? "Demo spin saved — camera was unavailable. Baking export in the background."
-          : hasMusicBed(current.musicBedLabel) || usesCustomMusic(current)
-            ? "Demo spin saved — camera was unavailable. Mixing music into the export."
-            : "Demo spin saved — camera was unavailable. Slow-mo is off; the look-pack frame still burns on Download / Share."
-        : boothSettings.slowMoEnabled !== false
-          ? "Spin saved. Baking export in the background."
-          : hasMusicBed(current.musicBedLabel) || usesCustomMusic(current)
-            ? "Spin saved. Mixing music into the export."
-            : "Spin saved at normal speed. Download / Share still burn the look-pack frame.",
+          ? boothSettings.slowMoEnabled !== false
+            ? "Demo spin saved — camera was unavailable. Baking export in the background."
+            : hasMusicBed(current.musicBedLabel) || usesCustomMusic(current)
+              ? "Demo spin saved — camera was unavailable. Mixing music into the export."
+              : "Demo spin saved — camera was unavailable. Slow-mo is off; the look-pack frame still burns on Download / Share."
+          : boothSettings.slowMoEnabled !== false
+            ? "Spin saved. Baking export in the background."
+            : hasMusicBed(current.musicBedLabel) || usesCustomMusic(current)
+              ? "Spin saved. Mixing music into the export."
+              : "Spin saved at normal speed. Download / Share still burn the look-pack frame.",
     );
   }, [bakeExportInBackground, motor, saveClip]);
 
@@ -359,7 +419,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const boothSnapshot = useCallback(() => {
     const current = eventRef.current;
     if (!current) return null;
-    return snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current, cameraInfoRef.current);
+    return snapshotFromBooth(
+      current,
+      settingsRef.current,
+      cloudFlagsRef.current,
+      cameraInfoRef.current,
+    );
   }, []);
 
   const refreshCloudFlags = useCallback(async () => {
@@ -367,7 +432,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       const config = await fetchShareConfig();
       let driveConnected = Boolean(config.driveConnected);
       try {
-        const statusRes = await fetch("/api/drive/status", { cache: "no-store" });
+        const statusRes = await fetch("/api/drive/status", {
+          cache: "no-store",
+        });
         const status = (await statusRes.json()) as { connected?: boolean };
         driveConnected = Boolean(status.connected);
       } catch {
@@ -380,7 +447,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         driveConnected,
       };
       const available = config.remoteAvailable === true;
-      const reason = available ? null : config.remoteUnavailableReason || REMOTE_UNAVAILABLE_MESSAGE;
+      const reason = available
+        ? null
+        : config.remoteUnavailableReason || REMOTE_UNAVAILABLE_MESSAGE;
       setRemoteAvailable(available);
       setRemoteUnavailableReason(reason);
       if (!available) {
@@ -411,12 +480,23 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         boothPhase: phaseRef.current,
         boothStatus: boothStatusForPhase(phaseRef.current, messageRef.current),
         lastClipId: latestClipRef.current?.id ?? null,
-        snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current, cameraInfoRef.current),
+        snapshot:
+          boothSnapshot() ||
+          snapshotFromBooth(
+            current,
+            settingsRef.current,
+            cloudFlagsRef.current,
+            cameraInfoRef.current,
+          ),
         acks,
       });
-      const remaining = new Set((result.pendingCommands || []).map((item) => item.id));
+      const remaining = new Set(
+        (result.pendingCommands || []).map((item) => item.id),
+      );
       if (result.pendingCommand?.id) remaining.add(result.pendingCommand.id);
-      pendingAcksRef.current = pendingAcksRef.current.filter((item) => remaining.has(item.commandId));
+      pendingAcksRef.current = pendingAcksRef.current.filter((item) =>
+        remaining.has(item.commandId),
+      );
     } catch {
       // The next heartbeat interval retries.
     }
@@ -459,12 +539,20 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             return;
           }
           spinAbortRef.current?.abort();
-          ack(true, phaseNow === "countdown" ? "Countdown cancelled" : "Recording stopped");
+          ack(
+            true,
+            phaseNow === "countdown"
+              ? "Countdown cancelled"
+              : "Recording stopped",
+          );
           void flushRemoteAcks();
           return;
         }
         // Settings lock: never change look, music, or length mid-spin.
-        if (isRemoteSettingCommand(cmd.type) && (phaseRef.current !== "idle" || remoteSpinBusyRef.current)) {
+        if (
+          isRemoteSettingCommand(cmd.type) &&
+          (phaseRef.current !== "idle" || remoteSpinBusyRef.current)
+        ) {
           ack(false, SETTINGS_LOCKED_MESSAGE);
           return;
         }
@@ -475,7 +563,10 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             return;
           }
           const info = await chooseCameraFacing(facing);
-          ack(!info.note || info.fellBack, info.note || `Camera: ${facing === "user" ? "front" : "back"}`);
+          ack(
+            !info.note || info.fellBack,
+            info.note || `Camera: ${facing === "user" ? "front" : "back"}`,
+          );
           return;
         }
         if (cmd.type === "setCustomMusic") {
@@ -494,11 +585,21 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             let fail = "Could not download the laptop song";
             for (let attempt = 0; attempt < 8; attempt += 1) {
               if (ac.signal.aborted) break;
-              res = await fetch(musicUrl, { signal: ac.signal, cache: "no-store" });
+              res = await fetch(musicUrl, {
+                signal: ac.signal,
+                cache: "no-store",
+              });
               if (res.ok) break;
-              const data = (await res.json().catch(() => ({}))) as { error?: string };
+              const data = (await res.json().catch(() => ({}))) as {
+                error?: string;
+              };
               fail = data.error || fail;
-              if (res.status !== 404 && res.status !== 503 && res.status !== 504) break;
+              if (
+                res.status !== 404 &&
+                res.status !== 503 &&
+                res.status !== 504
+              )
+                break;
               await new Promise((resolve) => window.setTimeout(resolve, 600));
               res = null;
             }
@@ -509,11 +610,20 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             }
             const blob = await res.blob();
             const raw = new File([blob], fileName, {
-              type: cmd.payload?.contentType || blob.type || "application/octet-stream",
+              type:
+                cmd.payload?.contentType ||
+                blob.type ||
+                "application/octet-stream",
             });
-            const file = await materializeCustomMusicFile(raw, { signal: ac.signal });
+            const file = await materializeCustomMusicFile(raw, {
+              signal: ac.signal,
+            });
             window.clearTimeout(timer);
-            const next = { ...current, preferBundledBed: false, updatedAt: Date.now() };
+            const next = {
+              ...current,
+              preferBundledBed: false,
+              updatedAt: Date.now(),
+            };
             await saveEvent(next, true, { file });
             eventRef.current = {
               ...next,
@@ -526,9 +636,14 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           } catch (error) {
             const fail = formatCustomMusicError(
               ac.signal.aborted
-                ? Object.assign(new Error("The laptop song took too long to land on this phone."), {
-                    name: "TimeoutError",
-                  })
+                ? Object.assign(
+                    new Error(
+                      "The laptop song took too long to land on this phone.",
+                    ),
+                    {
+                      name: "TimeoutError",
+                    },
+                  )
                 : error,
             );
             setMessage(fail);
@@ -545,7 +660,11 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             ack(false, "Invalid spin length");
             return;
           }
-          const next = { ...current, captureDurationSec: sec, updatedAt: Date.now() };
+          const next = {
+            ...current,
+            captureDurationSec: sec,
+            updatedAt: Date.now(),
+          };
           await saveEvent(next);
           eventRef.current = next;
           ack(true, `Spin length ${sec}s`);
@@ -565,7 +684,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           };
           await saveEvent(next);
           eventRef.current = next;
-          ack(true, label === "None" ? "Music cleared for next spin" : `Music bed: ${label}`);
+          ack(
+            true,
+            label === "None"
+              ? "Music cleared for next spin"
+              : `Music bed: ${label}`,
+          );
           return;
         }
         if (cmd.type === "setFrameStyle") {
@@ -597,13 +721,19 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             next.clientNames = cmd.payload.clientNames;
             bits.push("names");
           }
-          if (cmd.payload?.accentColor && isAccentColor(cmd.payload.accentColor)) {
+          if (
+            cmd.payload?.accentColor &&
+            isAccentColor(cmd.payload.accentColor)
+          ) {
             next.accentColor = cmd.payload.accentColor;
             bits.push("accent");
           }
           await saveEvent(next);
           eventRef.current = next;
-          ack(true, bits.length ? `Updated ${bits.join(", ")}` : "Branding unchanged");
+          ack(
+            true,
+            bits.length ? `Updated ${bits.join(", ")}` : "Branding unchanged",
+          );
           return;
         }
         if (cmd.type === "setSlowMo") {
@@ -611,7 +741,10 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             ack(false, "Invalid slow-mo value");
             return;
           }
-          const next = { ...settingsRef.current, slowMoEnabled: cmd.payload.slowMoEnabled };
+          const next = {
+            ...settingsRef.current,
+            slowMoEnabled: cmd.payload.slowMoEnabled,
+          };
           await saveSettings(next);
           settingsRef.current = next;
           ack(true, cmd.payload.slowMoEnabled ? "Slow-mo on" : "Slow-mo off");
@@ -622,10 +755,18 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             ack(false, "Invalid video quality");
             return;
           }
-          const next = { ...settingsRef.current, videoQuality: cmd.payload.videoQuality };
+          const next = {
+            ...settingsRef.current,
+            videoQuality: cmd.payload.videoQuality,
+          };
           await saveSettings(next);
           settingsRef.current = next;
-          ack(true, cmd.payload.videoQuality === "standard" ? "Quality: Standard 720p" : "Quality: High 1080p");
+          ack(
+            true,
+            cmd.payload.videoQuality === "standard"
+              ? "Quality: Standard 720p"
+              : "Quality: High 1080p",
+          );
           return;
         }
         if (cmd.type === "setBoothMusicMuted") {
@@ -633,10 +774,18 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
             ack(false, "Invalid mute value");
             return;
           }
-          const next = { ...settingsRef.current, boothMusicMuted: cmd.payload.boothMusicMuted };
+          const next = {
+            ...settingsRef.current,
+            boothMusicMuted: cmd.payload.boothMusicMuted,
+          };
           await saveSettings(next);
           settingsRef.current = next;
-          ack(true, cmd.payload.boothMusicMuted ? "Booth music muted" : "Booth music on");
+          ack(
+            true,
+            cmd.payload.boothMusicMuted
+              ? "Booth music muted"
+              : "Booth music on",
+          );
           return;
         }
         if (cmd.type === "setCloudDestination") {
@@ -647,7 +796,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           const next = {
             ...settingsRef.current,
             cloudDestination: cmd.payload.cloudDestination,
-            driveFolderName: cmd.payload.driveFolderName || settingsRef.current.driveFolderName,
+            driveFolderName:
+              cmd.payload.driveFolderName ||
+              settingsRef.current.driveFolderName,
           };
           await saveSettings(next);
           settingsRef.current = next;
@@ -662,10 +813,20 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         }
         ack(false, "Unknown command");
       } catch (error) {
-        ack(false, error instanceof Error ? error.message : "Command failed on booth");
+        ack(
+          false,
+          error instanceof Error ? error.message : "Command failed on booth",
+        );
       }
     },
-    [chooseCameraFacing, eventId, flushRemoteAcks, refreshCloudFlags, saveEvent, saveSettings],
+    [
+      chooseCameraFacing,
+      eventId,
+      flushRemoteAcks,
+      refreshCloudFlags,
+      saveEvent,
+      saveSettings,
+    ],
   );
 
   useEffect(() => {
@@ -693,25 +854,48 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           token,
           boothArmed: true,
           boothPhase: phaseRef.current,
-          boothStatus: boothStatusForPhase(phaseRef.current, messageRef.current),
+          boothStatus: boothStatusForPhase(
+            phaseRef.current,
+            messageRef.current,
+          ),
           lastClipId: latestClipRef.current?.id ?? null,
-          snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current, cameraInfoRef.current),
+          snapshot:
+            boothSnapshot() ||
+            snapshotFromBooth(
+              current,
+              settingsRef.current,
+              cloudFlagsRef.current,
+              cameraInfoRef.current,
+            ),
           acks,
         });
         if (cancelled) return;
-        const remaining = new Set((result.pendingCommands || []).map((item) => item.id));
+        const remaining = new Set(
+          (result.pendingCommands || []).map((item) => item.id),
+        );
         if (result.pendingCommand?.id) remaining.add(result.pendingCommand.id);
-        pendingAcksRef.current = pendingAcksRef.current.filter((item) => remaining.has(item.commandId));
+        pendingAcksRef.current = pendingAcksRef.current.filter((item) =>
+          remaining.has(item.commandId),
+        );
         setRemoteView(result.view);
         setRemoteError(null);
-        const cmds = (result.pendingCommands || (result.pendingCommand ? [result.pendingCommand] : [])) as PendingRemoteCommand[];
-        const lastStopIndex = cmds.map((item) => item?.type).lastIndexOf("stopSpin");
+        const cmds = (result.pendingCommands ||
+          (result.pendingCommand
+            ? [result.pendingCommand]
+            : [])) as PendingRemoteCommand[];
+        const lastStopIndex = cmds
+          .map((item) => item?.type)
+          .lastIndexOf("stopSpin");
         for (const [index, cmd] of cmds.entries()) {
           if (!cmd?.id || handledCommands.current.has(cmd.id)) continue;
           handledCommands.current.add(cmd.id);
           if (cmd.type === "startSpin" && index < lastStopIndex) {
             // START and STOP both queued while the booth was unreachable: STOP wins.
-            pendingAcksRef.current.push({ commandId: cmd.id, ok: false, message: "Cancelled by STOP" });
+            pendingAcksRef.current.push({
+              commandId: cmd.id,
+              ok: false,
+              message: "Cancelled by STOP",
+            });
             continue;
           }
           if (cmd.type === "startSpin") void applyRemoteCommand(cmd);
@@ -719,7 +903,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         }
       } catch (error) {
         if (!cancelled) {
-          setRemoteError(error instanceof Error ? error.message : "Remote heartbeat failed");
+          setRemoteError(
+            error instanceof Error ? error.message : "Remote heartbeat failed",
+          );
         }
       } finally {
         inFlight = false;
@@ -738,10 +924,24 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         boothPhase: "idle",
         boothStatus: "Capture closed",
         lastClipId: latestClipRef.current?.id ?? null,
-        snapshot: boothSnapshot() || snapshotFromBooth(eventRef.current || event, settingsRef.current, cloudFlagsRef.current, cameraInfoRef.current),
+        snapshot:
+          boothSnapshot() ||
+          snapshotFromBooth(
+            eventRef.current || event,
+            settingsRef.current,
+            cloudFlagsRef.current,
+            cameraInfoRef.current,
+          ),
       }).catch(() => undefined);
     };
-  }, [applyRemoteCommand, boothSnapshot, event, eventId, remoteEnabled, remotePair]);
+  }, [
+    applyRemoteCommand,
+    boothSnapshot,
+    event,
+    eventId,
+    remoteEnabled,
+    remotePair,
+  ]);
 
   useEffect(() => {
     if (!remoteAvailable) return;
@@ -758,12 +958,26 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         setRemoteEnabled(false);
         return;
       }
-      const data = await pairRemote(event.id, snapshotFromBooth(event, settings, cloudFlagsRef.current, cameraInfoRef.current));
-      setRemotePair({ token: data.token, pairCode: data.pairCode, remoteUrl: data.remoteUrl });
+      const data = await pairRemote(
+        event.id,
+        snapshotFromBooth(
+          event,
+          settings,
+          cloudFlagsRef.current,
+          cameraInfoRef.current,
+        ),
+      );
+      setRemotePair({
+        token: data.token,
+        pairCode: data.pairCode,
+        remoteUrl: data.remoteUrl,
+      });
       setRemoteView(data.view);
       setRemoteEnabled(true);
     } catch (error) {
-      setRemoteError(error instanceof Error ? error.message : "Could not enable remote");
+      setRemoteError(
+        error instanceof Error ? error.message : "Could not enable remote",
+      );
       setRemoteEnabled(false);
     }
   }
@@ -788,7 +1002,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     );
   }
 
-  const offline = settings.forceOffline || (typeof navigator !== "undefined" && !navigator.onLine);
+  const offline =
+    settings.forceOffline ||
+    (typeof navigator !== "undefined" && !navigator.onLine);
   const busy = phase !== "idle";
   const hasClip = Boolean(latestClip);
   const spinSec = resolveCaptureDurationSec(event.captureDurationSec);
@@ -797,167 +1013,216 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   return (
     <OperatorShell eventId={eventId}>
       <div className="flex min-h-0 flex-1 flex-col">
-      <StatusBar camera={camera} settings={settings} offline={offline} />
+        <StatusBar camera={camera} settings={settings} offline={offline} />
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Camera">
-        <span className="text-slate-400">Camera</span>
-        {(["user", "environment"] as const).map((f) => (
-          <button
-            key={f}
-            type="button"
-            aria-pressed={cameraFacing === f}
-            disabled={phase !== "idle" || (f === "user" ? cameraInfo?.front === false : cameraInfo?.back === false) && cameraFacing !== f}
-            onClick={() => void chooseCameraFacing(f)}
+        <div
+          className="mt-3 flex flex-wrap items-center gap-2 text-sm"
+          role="group"
+          aria-label="Camera"
+        >
+          <span className="text-slate-400">Camera</span>
+          {(["user", "environment"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={cameraFacing === f}
+              disabled={
+                phase !== "idle" ||
+                ((f === "user"
+                  ? cameraInfo?.front === false
+                  : cameraInfo?.back === false) &&
+                  cameraFacing !== f)
+              }
+              onClick={() => void chooseCameraFacing(f)}
+              className={cn(
+                "rounded-full border px-4 py-1.5 font-medium disabled:opacity-40",
+                cameraFacing === f
+                  ? "border-cyan-300 bg-cyan-400/20 text-white"
+                  : "border-white/15 text-slate-300",
+              )}
+            >
+              {f === "user" ? "Front" : "Back"}
+            </button>
+          ))}
+          {cameraInfo?.note && (
+            <span className="text-amber-200">{cameraInfo.note}</span>
+          )}
+        </div>
+
+        <div className="mt-6">
+          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            {event.name} — {event.clientNames}
+          </h1>
+          <div
+            className="mt-1 h-1 w-24 rounded-full"
+            style={{ backgroundColor: event.accentColor }}
+          />
+          <CrowdOpenControls
+            eventId={event.id}
+            clipId={latestClip?.id}
+            className="mt-4"
+          />
+          <div className="mt-3">
+            <RemoteEnablePanel
+              enabled={remoteEnabled}
+              remoteUrl={remotePair?.remoteUrl ?? null}
+              pairCode={remotePair?.pairCode ?? remoteView?.pairCode ?? null}
+              view={remoteView}
+              error={remoteError}
+              busy={busy}
+              available={remoteAvailable}
+              unavailableReason={remoteUnavailableReason}
+              onEnable={() => void onEnableRemote()}
+              onDisable={() => void onDisableRemote()}
+            />
+          </div>
+        </div>
+
+        <div className="relative mt-6 flex min-h-[240px] flex-1 flex-col">
+          <video
+            ref={videoRef}
             className={cn(
-              "rounded-full border px-4 py-1.5 font-medium disabled:opacity-40",
-              cameraFacing === f ? "border-cyan-300 bg-cyan-400/20 text-white" : "border-white/15 text-slate-300",
+              "absolute inset-0 h-full w-full rounded-[28px] object-cover",
+              livePreview ? "opacity-100" : "opacity-0",
+              // Preview-only selfie mirror; the recorded stream is never flipped.
+              (cameraInfo?.actual ?? cameraFacing) === "user" && "-scale-x-100",
+            )}
+            muted
+            playsInline
+          />
+
+          <button
+            type="button"
+            onClick={() => void runSpin()}
+            disabled={busy}
+            className={cn(
+              "group relative flex min-h-[240px] w-full flex-1 items-center justify-center overflow-hidden rounded-[28px] border border-white/10 px-6 text-left disabled:cursor-wait",
+              livePreview ? "bg-black/50" : "booth-stage",
             )}
           >
-            {f === "user" ? "Front" : "Back"}
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_8%_90%,rgba(255,45,149,0.45),transparent_52%),radial-gradient(80%_60%_at_95%_20%,rgba(34,211,238,0.35),transparent_50%)]" />
+            <div className="relative flex w-full max-w-3xl items-center gap-6 sm:gap-10">
+              <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-cyan-300/60 bg-cyan-400/20 shadow-[0_0_36px_rgba(34,211,238,0.55)] sm:h-24 sm:w-24">
+                <SpinIcon
+                  className={cn(
+                    "h-10 w-10 text-blue-400 sm:h-12 sm:w-12",
+                    busy && "animate-spin",
+                  )}
+                />
+              </span>
+              <span>
+                <span className="block text-4xl font-semibold tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)] sm:text-6xl">
+                  {phase === "countdown" && count}
+                  {phase === "recording" && "SPINNING"}
+                  {phase === "processing" && "RAMP"}
+                  {phase === "idle" && "START SPIN"}
+                </span>
+                <span className="mt-1 block text-base text-slate-300 sm:text-xl">
+                  {phase === "countdown" && "Hold still — capture starting"}
+                  {phase === "recording" &&
+                    `Recording ${Math.min(spinSec, Math.round(progress * spinSec))}s / ${spinSec}s`}
+                  {phase === "processing" && "Saving spin"}
+                  {phase === "idle" &&
+                    `Launch ${spinSec}s 360° photo booth spin`}
+                </span>
+              </span>
+            </div>
+            {phase === "recording" && (
+              <span
+                className="absolute bottom-0 left-0 h-1 bg-blue-500"
+                style={{ width: `${progress * 100}%` }}
+              />
+            )}
           </button>
-        ))}
-        {cameraInfo?.note && <span className="text-amber-200">{cameraInfo.note}</span>}
-      </div>
+        </div>
 
-      <div className="mt-6">
-        <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-          {event.name} — {event.clientNames}
-        </h1>
-        <div className="mt-1 h-1 w-24 rounded-full" style={{ backgroundColor: event.accentColor }} />
-        <CrowdOpenControls eventId={event.id} clipId={latestClip?.id} className="mt-4" />
-        <div className="mt-3">
-          <RemoteEnablePanel
-            enabled={remoteEnabled}
-            remoteUrl={remotePair?.remoteUrl ?? null}
-            pairCode={remotePair?.pairCode ?? remoteView?.pairCode ?? null}
-            view={remoteView}
-            error={remoteError}
-            busy={busy}
-            available={remoteAvailable}
-            unavailableReason={remoteUnavailableReason}
-            onEnable={() => void onEnableRemote()}
-            onDisable={() => void onDisableRemote()}
+        {message && <p className="mt-3 text-sm text-slate-400">{message}</p>}
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <ActionCard
+            icon={Camera}
+            title="Recapture"
+            subtitle="Retake this spin"
+            onClick={() => void runSpin()}
+            disabled={busy}
+          />
+          <ActionCard
+            icon={Eye}
+            title="Preview"
+            subtitle="Review 360 view"
+            onClick={() => {
+              if (event) {
+                syncBoothMusic({
+                  src: musicSrc,
+                  playing: Boolean(musicSrc),
+                  muted: settings.boothMusicMuted,
+                });
+                nudgeBoothMusic();
+              }
+              setPreviewOpen(true);
+            }}
+            disabled={!hasClip || busy}
+          />
+          <ActionCard
+            icon={Share2}
+            title="Share"
+            subtitle="Share this spin"
+            onClick={() =>
+              latestClip &&
+              router.push(operatorSharePath(event.id, latestClip.id))
+            }
+            disabled={!hasClip || busy}
           />
         </div>
-      </div>
 
-      <div className="relative mt-6 flex min-h-[240px] flex-1 flex-col">
-        <video
-          ref={videoRef}
-          className={cn(
-            "absolute inset-0 h-full w-full rounded-[28px] object-cover",
-            livePreview ? "opacity-100" : "opacity-0",
-            // Preview-only selfie mirror; the recorded stream is never flipped.
-            (cameraInfo?.actual ?? cameraFacing) === "user" && "-scale-x-100",
-          )}
-          muted
-          playsInline
-        />
-
-        <button
-          type="button"
-          onClick={() => void runSpin()}
-          disabled={busy}
-          className={cn(
-            "group relative flex min-h-[240px] w-full flex-1 items-center justify-center overflow-hidden rounded-[28px] border border-white/10 px-6 text-left disabled:cursor-wait",
-            livePreview ? "bg-black/50" : "booth-stage",
-          )}
-        >
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_8%_90%,rgba(255,45,149,0.45),transparent_52%),radial-gradient(80%_60%_at_95%_20%,rgba(34,211,238,0.35),transparent_50%)]" />
-          <div className="relative flex w-full max-w-3xl items-center gap-6 sm:gap-10">
-            <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-cyan-300/60 bg-cyan-400/20 shadow-[0_0_36px_rgba(34,211,238,0.55)] sm:h-24 sm:w-24">
-              <SpinIcon
-                className={cn("h-10 w-10 text-blue-400 sm:h-12 sm:w-12", busy && "animate-spin")}
-              />
-            </span>
-            <span>
-              <span className="block text-4xl font-semibold tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)] sm:text-6xl">
-                {phase === "countdown" && count}
-                {phase === "recording" && "SPINNING"}
-                {phase === "processing" && "RAMP"}
-                {phase === "idle" && "START SPIN"}
-              </span>
-              <span className="mt-1 block text-base text-slate-300 sm:text-xl">
-                {phase === "countdown" && "Hold still — capture starting"}
-                {phase === "recording" && `Recording ${Math.min(spinSec, Math.round(progress * spinSec))}s / ${spinSec}s`}
-                {phase === "processing" && "Saving spin"}
-                {phase === "idle" && `Launch ${spinSec}s 360° photo booth spin`}
-              </span>
-            </span>
-          </div>
-          {phase === "recording" && (
-            <span className="absolute bottom-0 left-0 h-1 bg-blue-500" style={{ width: `${progress * 100}%` }} />
-          )}
-        </button>
-      </div>
-
-      {message && <p className="mt-3 text-sm text-slate-400">{message}</p>}
-
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <ActionCard
-          icon={Camera}
-          title="Recapture"
-          subtitle="Retake this spin"
-          onClick={() => void runSpin()}
-          disabled={busy}
-        />
-        <ActionCard
-          icon={Eye}
-          title="Preview"
-          subtitle="Review 360 view"
-          onClick={() => {
-            if (event) {
-              syncBoothMusic({
-                src: musicSrc,
-                playing: Boolean(musicSrc),
-                muted: settings.boothMusicMuted,
-              });
-              nudgeBoothMusic();
-            }
-            setPreviewOpen(true);
-          }}
-          disabled={!hasClip || busy}
-        />
-        <ActionCard
-          icon={Share2}
-          title="Share"
-          subtitle="Share this spin"
-          onClick={() => latestClip && router.push(operatorSharePath(event.id, latestClip.id))}
-          disabled={!hasClip || busy}
-        />
-      </div>
-
-      {previewOpen && latestClip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setPreviewOpen(false)}>
-          <div className="booth-frame relative w-full max-w-4xl overflow-hidden rounded-3xl" onClick={(e) => e.stopPropagation()}>
-            <div className="relative aspect-video">
-              <RampPlayer
-                src={lastSrc}
-                poster={latestClip.thumbnailDataUrl}
-                className={cn("h-full w-full object-cover", frameMediaClass(event.frameStyle))}
-                rampProfile={rampProfileForFrame(event.frameStyle)}
-                liveRamp={settings.slowMoEnabled !== false}
-              />
-              <FrameOverlay style={event.frameStyle} names={event.clientNames} accentColor={event.accentColor} />
-            </div>
-            <div className="flex items-center justify-between px-5 py-4">
-              <p className="text-slate-300">
-                {settings.slowMoEnabled !== false
-                  ? "Live playback ramp · Download / Share bake slow-mo and the look-pack frame"
-                  : "Normal speed · Download / Share still burn the frame into the file"}
-                {hasMusicBed(event.musicBedLabel) || customActive
-                  ? settings.boothMusicMuted
-                    ? " · booth music muted"
-                    : ` · ${musicCaption(event, normalizeMusicBedLabel(event.musicBedLabel))}`
-                  : ""}
-              </p>
-              <button type="button" className="rounded-full bg-blue-500 px-4 py-2 text-sm font-medium text-white" onClick={() => setPreviewOpen(false)}>
-                Close
-              </button>
+        {previewOpen && latestClip && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            onClick={() => setPreviewOpen(false)}
+          >
+            <div
+              className="booth-frame relative w-full max-w-4xl overflow-hidden rounded-3xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="relative aspect-video">
+                <RampPlayer
+                  src={lastSrc}
+                  poster={latestClip.thumbnailDataUrl}
+                  className={cn(
+                    "h-full w-full object-cover",
+                    frameMediaClass(event.frameStyle),
+                  )}
+                  rampProfile={rampProfileForFrame(event.frameStyle)}
+                  liveRamp={settings.slowMoEnabled !== false}
+                />
+                <FrameOverlay
+                  style={event.frameStyle}
+                  names={event.clientNames}
+                  accentColor={event.accentColor}
+                />
+              </div>
+              <div className="flex items-center justify-between px-5 py-4">
+                <p className="text-slate-300">
+                  {settings.slowMoEnabled !== false
+                    ? "Live playback ramp · Download / Share bake slow-mo and the look-pack frame"
+                    : "Normal speed · Download / Share still burn the frame into the file"}
+                  {hasMusicBed(event.musicBedLabel) || customActive
+                    ? settings.boothMusicMuted
+                      ? " · booth music muted"
+                      : ` · ${musicCaption(event, normalizeMusicBedLabel(event.musicBedLabel))}`
+                    : ""}
+                </p>
+                <button
+                  type="button"
+                  className="rounded-full bg-blue-500 px-4 py-2 text-sm font-medium text-white"
+                  onClick={() => setPreviewOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </OperatorShell>
   );

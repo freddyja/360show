@@ -8,22 +8,30 @@ const LABEL: Record<string, string> = {
   ok: "Synced",
   off: "Not set up on the server (events stay on this device)",
   "needs-key": "Enter the owner key to sync events and settings across devices",
-  "bad-key": "Owner key was rejected",
+  "bad-key": "Key not accepted — enter the owner key again",
   offline: "Offline — changes stay on this device and sync when back online",
 };
 
 /** Booth Settings: one-time owner key entry + cloud event/settings sync status. */
+export const RESULT_NOTE = {
+  rejected: "Key not accepted",
+  off: "Cloud sync isn't set up on the server",
+  offline: "Couldn't reach the server — try again when online",
+} as const;
+
 export function CloudSyncPanel() {
   const { cloudStatus, cloudSyncedAt, setOwnerKey, syncNow } = useBooth();
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const hasKey = typeof window !== "undefined" && Boolean(readOwnerKey());
 
   async function save(key: string) {
     setBusy(true);
     try {
-      await setOwnerKey(key);
-      setDraft("");
+      const result = await setOwnerKey(key);
+      setNote(result === "ok" ? null : RESULT_NOTE[result]);
+      if (result === "ok") setDraft("");
     } finally {
       setBusy(false);
     }
@@ -90,6 +98,11 @@ export function CloudSyncPanel() {
             </button>
           )}
         </div>
+      )}
+      {note && (
+        <p className="mt-1 text-xs text-amber-200" data-testid="owner-key-note">
+          {note}
+        </p>
       )}
     </section>
   );

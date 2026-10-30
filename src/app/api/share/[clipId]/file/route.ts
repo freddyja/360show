@@ -5,14 +5,20 @@ import { isClipId } from "@/lib/share/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ clipId: string }> }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ clipId: string }> },
+) {
   const { clipId } = await params;
   if (!isClipId(clipId)) {
     return NextResponse.json({ error: "Invalid clip id" }, { status: 400 });
   }
   const blob = await getBlobAvailability();
   if (!blob.usable) {
-    return NextResponse.json({ error: blob.message || BLOB_STORE_UNAVAILABLE_MESSAGE }, { status: 503 });
+    return NextResponse.json(
+      { error: blob.message || BLOB_STORE_UNAVAILABLE_MESSAGE },
+      { status: 503 },
+    );
   }
 
   try {
@@ -29,7 +35,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cli
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not read video";
+    const message =
+      error instanceof Error ? error.message : "Could not read video";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

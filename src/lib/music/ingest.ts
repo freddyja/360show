@@ -20,8 +20,10 @@ export function isMaterializedCustomMusic(blob: Blob) {
 export function isQuotaExceededError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const name = "name" in error ? String(error.name) : "";
-  const message = "message" in error ? String((error as { message?: unknown }).message) : "";
-  const code = "code" in error ? Number((error as { code?: unknown }).code) : NaN;
+  const message =
+    "message" in error ? String((error as { message?: unknown }).message) : "";
+  const code =
+    "code" in error ? Number((error as { code?: unknown }).code) : NaN;
   return (
     name === "QuotaExceededError" ||
     name === "NS_ERROR_DOM_QUOTA_REACHED" ||
@@ -51,7 +53,10 @@ export function formatCustomMusicError(error: unknown): string {
   }
   if (isAbortError(error)) {
     const message = error instanceof Error ? error.message : "";
-    if (/timed? out|too long/i.test(message) || (error instanceof Error && error.name === "TimeoutError")) {
+    if (
+      /timed? out|too long/i.test(message) ||
+      (error instanceof Error && error.name === "TimeoutError")
+    ) {
       return "That song took too long to read. If it lives in Drive or Samsung Cloud, download it to this phone first, then pick it again.";
     }
     return "Stopped reading the song. Pick it again if you still want it.";
@@ -60,7 +65,11 @@ export function formatCustomMusicError(error: unknown): string {
   return "Could not save that song on this phone. Try another file.";
 }
 
-export function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> {
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  timeoutMessage: string,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       const err = new Error(timeoutMessage);
@@ -214,7 +223,13 @@ function readWithFileReader(
     reader.onload = () => {
       const result = reader.result;
       if (!(result instanceof ArrayBuffer)) {
-        finish(() => reject(new Error("Could not read that song on this phone. Try another file.")));
+        finish(() =>
+          reject(
+            new Error(
+              "Could not read that song on this phone. Try another file.",
+            ),
+          ),
+        );
         return;
       }
       finish(() => resolve(result));
@@ -234,7 +249,9 @@ function readWithFileReader(
     };
 
     reader.onabort = () => {
-      finish(() => reject(options.signal?.aborted ? abortError() : timeoutError()));
+      finish(() =>
+        reject(options.signal?.aborted ? abortError() : timeoutError()),
+      );
     };
 
     try {
@@ -244,7 +261,9 @@ function readWithFileReader(
         reject(
           error instanceof Error
             ? error
-            : new Error("Could not read that song on this phone. Try another file."),
+            : new Error(
+                "Could not read that song on this phone. Try another file.",
+              ),
         ),
       );
     }

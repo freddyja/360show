@@ -1,6 +1,7 @@
 import { clientShareOrigin } from "@/lib/share/origin";
 
-export type CrowdPhase = "idle" | "countdown" | "recording" | "processing" | "ready";
+export type CrowdPhase =
+  "idle" | "countdown" | "recording" | "processing" | "ready";
 
 export interface CrowdNowPlaying {
   eventId: string;
@@ -22,7 +23,11 @@ export function crowdPath(eventId: string, clipId?: string | null) {
   return clipId ? `${base}?c=${encodeURIComponent(clipId)}` : base;
 }
 
-export function crowdUrl(eventId: string, origin?: string, clipId?: string | null) {
+export function crowdUrl(
+  eventId: string,
+  origin?: string,
+  clipId?: string | null,
+) {
   return `${clientShareOrigin(origin)}${crowdPath(eventId, clipId)}`;
 }
 
@@ -42,7 +47,10 @@ export function readCrowd(eventId: string): CrowdNowPlaying | null {
 export function publishCrowd(state: CrowdNowPlaying) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(crowdStorageKey(state.eventId), JSON.stringify(state));
+    window.localStorage.setItem(
+      crowdStorageKey(state.eventId),
+      JSON.stringify(state),
+    );
   } catch {
     // quota / private mode
   }
@@ -55,7 +63,10 @@ export function publishCrowd(state: CrowdNowPlaying) {
   }
 }
 
-export function subscribeCrowd(eventId: string, onState: (state: CrowdNowPlaying) => void) {
+export function subscribeCrowd(
+  eventId: string,
+  onState: (state: CrowdNowPlaying) => void,
+) {
   if (typeof window === "undefined") return () => undefined;
 
   const fromStorage = (raw: string | null) => {

@@ -3,7 +3,9 @@ export function stripTrailingSlash(url: string) {
 }
 
 function isLoopbackHost(hostname: string) {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  return (
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+  );
 }
 
 function originFromRequest(request: Request) {
@@ -13,7 +15,10 @@ function originFromRequest(request: Request) {
   let host = forwardedHost || hostHeader || url.host;
   if (host.startsWith("0.0.0.0")) host = host.replace("0.0.0.0", "localhost");
   if (host.startsWith("[::]")) host = host.replace("[::]", "localhost");
-  const proto = request.headers.get("x-forwarded-proto") || url.protocol.replace(":", "") || "http";
+  const proto =
+    request.headers.get("x-forwarded-proto") ||
+    url.protocol.replace(":", "") ||
+    "http";
   return `${proto}://${host}`;
 }
 
@@ -21,7 +26,8 @@ function originFromRequest(request: Request) {
 export function serverPublicOrigin(request?: Request) {
   const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
   if (explicit) return stripTrailingSlash(explicit);
-  if (process.env.VERCEL_URL) return `https://${stripTrailingSlash(process.env.VERCEL_URL)}`;
+  if (process.env.VERCEL_URL)
+    return `https://${stripTrailingSlash(process.env.VERCEL_URL)}`;
   if (request) return originFromRequest(request);
   return "http://localhost:3000";
 }

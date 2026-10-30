@@ -16,11 +16,15 @@ export function EventsListScreen() {
   return (
     <div className="booth-page p-3 sm:p-4 md:p-5">
       <div className="booth-frame mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-[1400px] flex-col p-6 sm:p-10 md:min-h-[calc(100dvh-2.5rem)]">
-        <p className="text-sm tracking-[0.28em] text-slate-400 uppercase">360show</p>
-        <h1 className="mt-2 text-4xl font-semibold text-white">Tonight’s events</h1>
+        <p className="text-sm tracking-[0.28em] text-slate-400 uppercase">
+          360show
+        </p>
+        <h1 className="mt-2 text-4xl font-semibold text-white">
+          Tonight’s events
+        </h1>
         <p className="mt-2 max-w-2xl text-slate-400">
-          Pick a booth event, then start spinning. Everything stays on this tablet until you deploy a
-          public share host.
+          Pick a booth event, then start spinning. Everything stays on this
+          tablet until you deploy a public share host.
         </p>
 
         <div className="mt-8 grid gap-4">
@@ -32,13 +36,18 @@ export function EventsListScreen() {
               <div className="flex items-start gap-4">
                 <div
                   className="flex h-14 w-14 items-center justify-center rounded-2xl"
-                  style={{ backgroundColor: `${event.accentColor}22`, color: event.accentColor }}
+                  style={{
+                    backgroundColor: `${event.accentColor}22`,
+                    color: event.accentColor,
+                  }}
                 >
                   <CalendarDays className="h-7 w-7" />
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-2xl font-medium text-white">{event.clientNames}</h2>
+                    <h2 className="text-2xl font-medium text-white">
+                      {event.clientNames}
+                    </h2>
                     {event.isSample && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-blue-400/30 px-2 py-0.5 text-xs text-blue-200">
                         <Sparkles className="h-3 w-3" /> Sample
@@ -46,7 +55,8 @@ export function EventsListScreen() {
                     )}
                   </div>
                   <p className="text-slate-400">
-                    {event.name} · {event.date} · {event.frameStyle.replaceAll("-", " ")}
+                    {event.name} · {event.date} ·{" "}
+                    {event.frameStyle.replaceAll("-", " ")}
                   </p>
                 </div>
               </div>

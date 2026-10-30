@@ -48,7 +48,8 @@ interface BoothStore {
   /** Cloud event/settings sync state (off when BOOTH_OWNER_KEY / Blob aren't set up). */
   cloudStatus: cloud.CloudSyncStatus;
   cloudSyncedAt: number | null;
-  setOwnerKey: (key: string) => Promise<void>;
+  /** Verifies against the server first; stores only an accepted key ("" forgets it). */
+  setOwnerKey: (key: string) => Promise<cloud.VerifyResult>;
   syncNow: () => Promise<void>;
 }
 
@@ -62,17 +63,20 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
 
-  const [cloudStatus, setCloudStatus] = useState<cloud.CloudSyncStatus>("needs-key");
+  const [cloudStatus, setCloudStatus] =
+    useState<cloud.CloudSyncStatus>("needs-key");
   const [cloudSyncedAt, setCloudSyncedAt] = useState<number | null>(null);
   const syncing = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextEvents, nextClips, nextSettings, nextActive] = await Promise.all([
-      db.listEvents(),
-      db.listClips(),
-      db.getSettings(),
-      db.getActiveEventId(),
-    ]);
+    const [nextEvents, nextClips, nextSettings, nextActive] = await Promise.all(
+      [
+        db.listEvents(),
+        db.listClips(),
+        db.getSettings(),
+        db.getActiveEventId(),
+      ],
+    );
     setEvents(nextEvents);
     setClips(nextClips);
     setSettings(nextSettings);
@@ -91,11 +95,16 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
       setCloudStatus(listed.status);
       if (listed.status !== "ok" || !listed.data) return;
       const local = await db.listEvents();
-      const plan = cloud.planEventMerge(local, cloud.localTombstones(), listed.data.events);
+      const plan = cloud.planEventMerge(
+        local,
+        cloud.localTombstones(),
+        listed.data.events,
+      );
       for (const e of plan.applyLocal) await db.putEvent(e);
       for (const id of plan.deleteLocal) {
         await db.deleteEvent(id);
-        if ((await db.getActiveEventId()) === id) await db.setActiveEventId(null);
+        if ((await db.getActiveEventId()) === id)
+          await db.setActiveEventId(null);
       }
       if (plan.push.length) await cloud.cloudPutEvents(plan.push);
 
@@ -109,7 +118,10 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
           cloud.markLocalSettings(merged, remote.data.updatedAt);
         } else if (localAt > remote.data.updatedAt || !remote.data.updatedAt) {
           const at = localAt || Date.now();
-          await cloud.cloudPutSettings({ updatedAt: at, settings: cloud.pickSynced(localSettings) });
+          await cloud.cloudPutSettings({
+            updatedAt: at,
+            settings: cloud.pickSynced(localSettings),
+          });
           cloud.markLocalSettings(localSettings, at);
         }
       }
@@ -123,9 +135,18 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const setOwnerKey = useCallback(
-    async (key: string) => {
-      cloud.writeOwnerKey(key);
-      await syncNow();
+    async (key: string): Promise<cloud.VerifyResult> => {
+      if (!key.trim()) {
+        cloud.writeOwnerKey("");
+        await syncNow();
+        return "ok";
+      }
+      const result = await cloud.verifyOwnerKey(key);
+      if (result === "ok") {
+        cloud.writeOwnerKey(key);
+        await syncNow();
+      }
+      return result;
     },
     [syncNow],
   );
@@ -163,7 +184,9 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to open local storage");
+          setError(
+            err instanceof Error ? err.message : "Failed to open local storage",
+          );
           setReady(true);
         }
       }
@@ -174,7 +197,11 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const saveEvent = useCallback(
-    async (event: BoothEvent, makeActive = false, music?: { file: File } | { clear: true }) => {
+    async (
+      event: BoothEvent,
+      makeActive = false,
+      music?: { file: File } | { clear: true },
+    ) => {
       let next = event;
       if (music && "file" in music) {
         const blobId = customMusicBlobId(event.id);
@@ -184,7 +211,11 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
         try {
           await db.putNamedBlob(blobId, local);
         } catch (error) {
-          if (isQuotaExceededError(error) && event.customMusicBlobId && event.customMusicBlobId !== blobId) {
+          if (
+            isQuotaExceededError(error) &&
+            event.customMusicBlobId &&
+            event.customMusicBlobId !== blobId
+          ) {
             forgetCustomMusicSrc(event.customMusicBlobId);
             await db.deleteNamedBlob(event.customMusicBlobId);
             try {
@@ -213,50 +244,75 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
         }
         next = { ...event, customMusicBlobId: null, customMusicName: null };
       }
-      next = { ...next, updatedAt: Math.max(Date.now(), (next.updatedAt || 0) + 1) };
+      next = {
+        ...next,
+        updatedAt: Math.max(Date.now(), (next.updatedAt || 0) + 1),
+      };
       await db.putEvent(next);
       cloud.setLocalTombstone(next.id, null);
       if (makeActive) await db.setActiveEventId(next.id);
       await refresh();
-      void cloud.cloudPutEvent(cloud.toCloudEvent(next)).then((r) => setCloudStatus(r.status));
+      void cloud
+        .cloudPutEvent(cloud.toCloudEvent(next))
+        .then((r) => setCloudStatus(r.status));
     },
     [refresh],
   );
 
-  const removeEvent = useCallback(async (id: string) => {
-    await db.deleteEvent(id);
-    const at = Date.now();
-    cloud.setLocalTombstone(id, at);
-    void cloud.cloudDeleteEvent(id, at).then((r) => setCloudStatus(r.status));
-    const active = await db.getActiveEventId();
-    if (active === id) await db.setActiveEventId(null);
-    await refresh();
-  }, [refresh]);
+  const removeEvent = useCallback(
+    async (id: string) => {
+      await db.deleteEvent(id);
+      const at = Date.now();
+      cloud.setLocalTombstone(id, at);
+      void cloud.cloudDeleteEvent(id, at).then((r) => setCloudStatus(r.status));
+      const active = await db.getActiveEventId();
+      if (active === id) await db.setActiveEventId(null);
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const saveClip = useCallback(async (clip: Clip, blob?: Blob | null) => {
-    await db.putClip(clip, blob);
-    await refresh();
-  }, [refresh]);
+  const saveClip = useCallback(
+    async (clip: Clip, blob?: Blob | null) => {
+      await db.putClip(clip, blob);
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const patchClip = useCallback(async (clipId: string, patch: Partial<Clip>) => {
-    const current = await db.getClip(clipId);
-    if (!current) return;
-    await db.putClip({ ...current, ...patch });
-    await refresh();
-  }, [refresh]);
+  const patchClip = useCallback(
+    async (clipId: string, patch: Partial<Clip>) => {
+      const current = await db.getClip(clipId);
+      if (!current) return;
+      await db.putClip({ ...current, ...patch });
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const getBlob = useCallback(async (clipId: string) => db.getClipBlob(clipId), []);
+  const getBlob = useCallback(
+    async (clipId: string) => db.getClipBlob(clipId),
+    [],
+  );
 
-  const getMusicBlob = useCallback(async (blobId: string) => db.getNamedBlob(blobId), []);
+  const getMusicBlob = useCallback(
+    async (blobId: string) => db.getNamedBlob(blobId),
+    [],
+  );
 
-  const getBakedBlob = useCallback(async (clipId: string) => db.getBakedBlob(clipId), []);
+  const getBakedBlob = useCallback(
+    async (clipId: string) => db.getBakedBlob(clipId),
+    [],
+  );
 
   const saveSettings = useCallback(async (next: AppSettings) => {
     await db.putSettings(next);
     setSettings(next);
     const at = Date.now();
     cloud.markLocalSettings(next, at);
-    void cloud.cloudPutSettings({ updatedAt: at, settings: cloud.pickSynced(next) }).then((r) => setCloudStatus(r.status));
+    void cloud
+      .cloudPutSettings({ updatedAt: at, settings: cloud.pickSynced(next) })
+      .then((r) => setCloudStatus(r.status));
   }, []);
 
   const setActive = useCallback(async (id: string | null) => {

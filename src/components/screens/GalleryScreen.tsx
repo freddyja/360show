@@ -19,7 +19,8 @@ export function GalleryScreen({ eventId }: { eventId: string }) {
         <div>
           <h1 className="text-3xl font-semibold text-white">Gallery</h1>
           <p className="mt-1 text-slate-400">
-            {event ? `${event.name} — ${event.clientNames}` : "Event"} · {eventClips.length} spin
+            {event ? `${event.name} — ${event.clientNames}` : "Event"} ·{" "}
+            {eventClips.length} spin
             {eventClips.length === 1 ? "" : "s"}
           </p>
         </div>
@@ -32,8 +33,13 @@ export function GalleryScreen({ eventId }: { eventId: string }) {
       {eventClips.length === 0 ? (
         <div className="mt-10 flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 text-center">
           <p className="text-xl text-white">No spins yet</p>
-          <p className="mt-1 text-slate-400">Start a spin on Capture and it will land here.</p>
-          <Link href={`/e/${eventId}/capture`} className="mt-5 rounded-full bg-blue-500 px-5 py-2 text-sm text-white">
+          <p className="mt-1 text-slate-400">
+            Start a spin on Capture and it will land here.
+          </p>
+          <Link
+            href={`/e/${eventId}/capture`}
+            className="mt-5 rounded-full bg-blue-500 px-5 py-2 text-sm text-white"
+          >
             Go to Capture
           </Link>
         </div>
@@ -62,7 +68,10 @@ export function GalleryScreen({ eventId }: { eventId: string }) {
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
                   <p className="text-white">
-                    {new Date(clip.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    {new Date(clip.createdAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
                   </p>
                   <p className="text-xs text-slate-400">
                     {clip.hasBakedBlob

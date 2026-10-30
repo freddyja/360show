@@ -93,8 +93,11 @@ export async function deleteEvent(id: string) {
   }
   for (const key of blobKeys) {
     const k = String(key);
-    const clipHit = clips.some((clip) => k === clip.id || k.startsWith(`${clip.id}__`));
-    const musicHit = k === event?.customMusicBlobId || k.startsWith(`music:${id}`);
+    const clipHit = clips.some(
+      (clip) => k === clip.id || k.startsWith(`${clip.id}__`),
+    );
+    const musicHit =
+      k === event?.customMusicBlobId || k.startsWith(`music:${id}`);
     if (clipHit || musicHit) await tx.objectStore("blobs").delete(key);
   }
   await tx.done;
@@ -128,8 +131,10 @@ const BLOB_WRITE_MS = 15_000;
 function isQuotaExceededError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const name = "name" in error ? String(error.name) : "";
-  const message = "message" in error ? String((error as { message?: unknown }).message) : "";
-  const code = "code" in error ? Number((error as { code?: unknown }).code) : NaN;
+  const message =
+    "message" in error ? String((error as { message?: unknown }).message) : "";
+  const code =
+    "code" in error ? Number((error as { code?: unknown }).code) : NaN;
   return (
     name === "QuotaExceededError" ||
     name === "NS_ERROR_DOM_QUOTA_REACHED" ||
@@ -138,7 +143,11 @@ function isQuotaExceededError(error: unknown) {
   );
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  timeoutMessage: string,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       const err = new Error(timeoutMessage);
@@ -221,7 +230,8 @@ export async function getSettings(): Promise<AppSettings> {
     ...DEFAULT_SETTINGS,
     ...stored,
     cloudDestination: stored?.cloudDestination === "drive" ? "drive" : "blob",
-    driveFolderName: stored?.driveFolderName?.trim() || DEFAULT_SETTINGS.driveFolderName,
+    driveFolderName:
+      stored?.driveFolderName?.trim() || DEFAULT_SETTINGS.driveFolderName,
     slowMoEnabled: stored?.slowMoEnabled !== false,
     videoQuality: stored?.videoQuality === "standard" ? "standard" : "high",
     boothMusicMuted: stored?.boothMusicMuted === true,
@@ -235,7 +245,9 @@ export async function putSettings(settings: AppSettings) {
 
 export async function getActiveEventId() {
   const db = await getDb();
-  return ((await db.get("kv", "activeEventId")) as string | null | undefined) ?? null;
+  return (
+    ((await db.get("kv", "activeEventId")) as string | null | undefined) ?? null
+  );
 }
 
 export async function setActiveEventId(id: string | null) {

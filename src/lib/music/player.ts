@@ -70,7 +70,8 @@ export function useBoothMusic(options: {
   active: boolean;
   muted?: boolean;
 }) {
-  const src = options.src === undefined ? musicBedSrc(options.label) : options.src;
+  const src =
+    options.src === undefined ? musicBedSrc(options.label) : options.src;
   const playing = options.active;
   const muted = Boolean(options.muted);
 

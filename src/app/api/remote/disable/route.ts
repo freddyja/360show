@@ -13,13 +13,22 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   if (!(await remoteStoreReady())) {
-    return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
+    return NextResponse.json(
+      { error: storeUnavailableMessage() },
+      { status: 503 },
+    );
   }
 
-  const body = (await request.json().catch(() => null)) as { eventId?: string; token?: string } | null;
+  const body = (await request.json().catch(() => null)) as {
+    eventId?: string;
+    token?: string;
+  } | null;
   const eventId = body?.eventId?.trim() || "";
   if (!isEventId(eventId) || !body?.token) {
-    return NextResponse.json({ error: "Missing booth credentials." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing booth credentials." },
+      { status: 400 },
+    );
   }
 
   const session = await readSession(eventId);

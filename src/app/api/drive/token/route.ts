@@ -11,7 +11,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   if (!driveConfigured()) {
     return NextResponse.json(
-      { error: "Google Drive is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET." },
+      {
+        error:
+          "Google Drive is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
+      },
       { status: 503 },
     );
   }
@@ -19,7 +22,9 @@ export async function GET() {
   const { refreshToken } = await readDriveCookies();
   if (!refreshToken) {
     return NextResponse.json(
-      { error: "Google Drive is not connected. Open Settings and tap Connect." },
+      {
+        error: "Google Drive is not connected. Open Settings and tap Connect.",
+      },
       { status: 401 },
     );
   }

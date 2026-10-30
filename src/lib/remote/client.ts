@@ -2,13 +2,32 @@
 
 import { BUILD_ID } from "@/lib/version";
 import { upload } from "@vercel/blob/client";
-import { formatBlobWriteError, isBlobAccessMismatch, isBlobUnusableError, type BlobAccess } from "@/lib/share/access";
+import {
+  formatBlobWriteError,
+  isBlobAccessMismatch,
+  isBlobUnusableError,
+  type BlobAccess,
+} from "@/lib/share/access";
 import { validateCustomMusicFile } from "@/lib/music/custom";
 import { materializeCustomMusicFile } from "@/lib/music/ingest";
-import { MUSIC_BEDS, normalizeMusicBedLabel, type MusicBedLabel } from "@/lib/music/beds";
+import {
+  MUSIC_BEDS,
+  normalizeMusicBedLabel,
+  type MusicBedLabel,
+} from "@/lib/music/beds";
 import { FRAME_STYLES } from "@/lib/frames";
-import { CAPTURE_DURATION_SECS, COUNTDOWN_SECONDS, VIDEO_QUALITIES } from "@/lib/types";
-import type { AppSettings, CaptureDurationSec, CloudDestination, FrameStyleId, VideoQuality } from "@/lib/types";
+import {
+  CAPTURE_DURATION_SECS,
+  COUNTDOWN_SECONDS,
+  VIDEO_QUALITIES,
+} from "@/lib/types";
+import type {
+  AppSettings,
+  CaptureDurationSec,
+  CloudDestination,
+  FrameStyleId,
+  VideoQuality,
+} from "@/lib/types";
 import type {
   RemoteBoothPhase,
   RemoteCameraInfo,
@@ -63,7 +82,10 @@ async function parseJson<T>(res: Response): Promise<T> {
   return data;
 }
 
-export async function pairRemote(eventId: string, snapshot: RemoteEventSnapshot) {
+export async function pairRemote(
+  eventId: string,
+  snapshot: RemoteEventSnapshot,
+) {
   const res = await fetch("/api/remote/pair", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -101,7 +123,11 @@ export async function joinRemote(eventId: string, pairCode: string) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ eventId, pairCode }),
   });
-  const data = await parseJson<{ token: string; pairCode: string; view: RemotePublicView }>(res);
+  const data = await parseJson<{
+    token: string;
+    pairCode: string;
+    view: RemotePublicView;
+  }>(res);
   writeStoredPair(eventId, {
     token: data.token,
     pairCode: data.pairCode,
@@ -164,7 +190,9 @@ export async function sendRemoteCommand(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ eventId, token, type, payload }),
   });
-  return parseJson<{ ok: boolean; commandId: string; view: RemotePublicView }>(res);
+  return parseJson<{ ok: boolean; commandId: string; view: RemotePublicView }>(
+    res,
+  );
 }
 
 function abortSending() {
@@ -173,12 +201,21 @@ function abortSending() {
   return err;
 }
 
-async function postRemoteMusicFile(eventId: string, token: string, file: File, signal?: AbortSignal) {
+async function postRemoteMusicFile(
+  eventId: string,
+  token: string,
+  file: File,
+  signal?: AbortSignal,
+) {
   const form = new FormData();
   form.set("eventId", eventId);
   form.set("token", token);
   form.set("file", file);
-  const res = await fetch("/api/remote/music", { method: "POST", body: form, signal });
+  const res = await fetch("/api/remote/music", {
+    method: "POST",
+    body: form,
+    signal,
+  });
   return parseJson<{ ok: boolean }>(res);
 }
 
@@ -211,12 +248,15 @@ async function uploadRemoteMusicViaBlobClient(
       }
       if (!isBlobAccessMismatch(error)) {
         throw new Error(
-          formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed"),
+          formatBlobWriteError(error) ||
+            (error instanceof Error ? error.message : "Upload failed"),
         );
       }
     }
   }
-  throw new Error(formatBlobWriteError(lastError) || "Could not upload the song.");
+  throw new Error(
+    formatBlobWriteError(lastError) || "Could not upload the song.",
+  );
 }
 
 export async function uploadRemoteMusic(
@@ -229,7 +269,9 @@ export async function uploadRemoteMusic(
   const invalid = validateCustomMusicFile(file);
   if (invalid) throw new Error(invalid);
 
-  const local = await materializeCustomMusicFile(file, { signal: options?.signal });
+  const local = await materializeCustomMusicFile(file, {
+    signal: options?.signal,
+  });
   if (options?.signal?.aborted) throw abortSending();
 
   // Always POST through /api/remote/music so the booth GET can read the same object.
@@ -241,7 +283,12 @@ export async function uploadRemoteMusic(
     const message = error instanceof Error ? error.message : "";
     const tooLarge = /413|too large|payload/i.test(message);
     if (!blobConfigured || !tooLarge) throw error;
-    await uploadRemoteMusicViaBlobClient(eventId, token, local, options?.signal);
+    await uploadRemoteMusicViaBlobClient(
+      eventId,
+      token,
+      local,
+      options?.signal,
+    );
   }
 
   return sendRemoteCommand(eventId, token, "setCustomMusic", {
@@ -282,13 +329,18 @@ export async function waitForRemoteMusicAck(
       const data = await remoteStatus(eventId, token);
       const ack = data.view.lastAck;
       if (ack?.commandId === commandId) {
-        if (!ack.ok) throw new Error(ack.message || "The booth could not load that song.");
+        if (!ack.ok)
+          throw new Error(ack.message || "The booth could not load that song.");
         return { ack, view: data.view };
       }
       lastError = null;
     } catch (error) {
       if (options?.signal?.aborted) throw abortSending();
-      if (error instanceof Error && error.message.includes("booth could not load")) throw error;
+      if (
+        error instanceof Error &&
+        error.message.includes("booth could not load")
+      )
+        throw error;
       lastError = error;
     }
     await sleep(REMOTE_POLL_MS, options?.signal);
@@ -314,8 +366,20 @@ export function snapshotFromBooth(
     preferBundledBed?: boolean;
     frameStyle: string;
   },
-  settings: Pick<AppSettings, "slowMoEnabled" | "videoQuality" | "boothMusicMuted" | "cloudDestination" | "driveFolderName">,
-  cloud: RemoteCloudFlags = { blobConfigured: false, remoteMusicAvailable: false, driveConfigured: false, driveConnected: false },
+  settings: Pick<
+    AppSettings,
+    | "slowMoEnabled"
+    | "videoQuality"
+    | "boothMusicMuted"
+    | "cloudDestination"
+    | "driveFolderName"
+  >,
+  cloud: RemoteCloudFlags = {
+    blobConfigured: false,
+    remoteMusicAvailable: false,
+    driveConfigured: false,
+    driveConnected: false,
+  },
   camera?: RemoteCameraInfo | null,
 ): RemoteEventSnapshot {
   const hasCustom = Boolean(event.customMusicBlobId);
@@ -324,7 +388,10 @@ export function snapshotFromBooth(
     name: event.name,
     clientNames: event.clientNames,
     accentColor: event.accentColor,
-    captureDurationSec: event.captureDurationSec === 15 || event.captureDurationSec === 20 ? event.captureDurationSec : 10,
+    captureDurationSec:
+      event.captureDurationSec === 15 || event.captureDurationSec === 20
+        ? event.captureDurationSec
+        : 10,
     musicBedLabel: normalizeMusicBedLabel(event.musicBedLabel),
     hasCustomMusic: hasCustom,
     usingCustomMusic: hasCustom && !prefer,
@@ -352,4 +419,10 @@ export function snapshotFromBooth(
   };
 }
 
-export type { CaptureDurationSec, CloudDestination, FrameStyleId, MusicBedLabel, VideoQuality };
+export type {
+  CaptureDurationSec,
+  CloudDestination,
+  FrameStyleId,
+  MusicBedLabel,
+  VideoQuality,
+};

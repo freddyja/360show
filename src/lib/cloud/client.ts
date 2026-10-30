@@ -95,9 +95,46 @@ export function pickSynced(s: AppSettings): SyncedSettings {
 
 type Result<T> = { status: CloudSyncStatus; data?: T };
 
+/** Without a key: is sync enabled on the server (401) or not set up (503)? */
+let probed: Promise<CloudSyncStatus> | null = null;
+function probeConfigured(): Promise<CloudSyncStatus> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false)
+    return Promise.resolve("offline");
+  probed ??= fetch("/api/events", { cache: "no-store" })
+    .then(
+      (r) =>
+        (r.status === 503
+          ? "off"
+          : r.status === 401
+            ? "needs-key"
+            : "offline") as CloudSyncStatus,
+    )
+    .catch(() => "offline" as CloudSyncStatus)
+    .finally(() => setTimeout(() => (probed = null), 60_000));
+  return probed;
+}
+
+export type VerifyResult = "ok" | "rejected" | "off" | "offline";
+
+/** Check a candidate key against the server before saving it. */
+export async function verifyOwnerKey(key: string): Promise<VerifyResult> {
+  try {
+    const res = await fetch("/api/settings", {
+      cache: "no-store",
+      headers: { "x-booth-key": normalizeOwnerKey(key) },
+    });
+    if (res.ok) return "ok";
+    if (res.status === 401) return "rejected";
+    if (res.status === 503) return "off";
+    return "offline";
+  } catch {
+    return "offline";
+  }
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<Result<T>> {
   const key = readOwnerKey();
-  if (!key) return { status: "needs-key" };
+  if (!key) return { status: await probeConfigured() };
   if (typeof navigator !== "undefined" && navigator.onLine === false)
     return { status: "offline" };
   try {
@@ -111,7 +148,11 @@ async function call<T>(path: string, init?: RequestInit): Promise<Result<T>> {
       },
     });
     if (res.status === 503) return { status: "off" };
-    if (res.status === 401) return { status: "bad-key" };
+    if (res.status === 401) {
+      // Saved key rejected by the server: forget it so the booth asks again.
+      writeOwnerKey("");
+      return { status: "bad-key" };
+    }
     if (!res.ok) return { status: "offline" };
     return { status: "ok", data: (await res.json()) as T };
   } catch {

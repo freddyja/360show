@@ -5,7 +5,9 @@ const NAMESPACE = "360show-remote";
 const READY_TTL_MS = 5 * 60_000;
 const SESSION_TTL_SEC = Math.ceil(REMOTE_SESSION_TTL_MS / 1000);
 
-const g = globalThis as unknown as { __360showRemoteCacheReady?: { at: number; ok: boolean } };
+const g = globalThis as unknown as {
+  __360showRemoteCacheReady?: { at: number; ok: boolean };
+};
 
 function runtimeCache() {
   return getCache({ namespace: NAMESPACE });
@@ -32,8 +34,12 @@ async function probeRuntimeCache(): Promise<boolean> {
     const cache = runtimeCache();
     const probeKey = `probe:${process.pid}`;
     const payload = { ok: true, at: Date.now() };
-    await cache.set(probeKey, payload, { ttl: 60, name: "360show-remote-probe" });
-    const got = (await cache.get(probeKey)) as { ok?: boolean } | null | undefined;
+    await cache.set(probeKey, payload, {
+      ttl: 60,
+      name: "360show-remote-probe",
+    });
+    const got = (await cache.get(probeKey)) as
+      { ok?: boolean } | null | undefined;
     await cache.delete(probeKey).catch(() => undefined);
     return Boolean(got && got.ok === true);
   } catch {

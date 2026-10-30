@@ -13,7 +13,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const { refreshToken } = driveConfigured() ? await readDriveCookies() : { refreshToken: null };
+  const { refreshToken } = driveConfigured()
+    ? await readDriveCookies()
+    : { refreshToken: null };
   const blob = await getBlobAvailability();
   const remoteStore = await resolveRemoteStoreMode();
   const remoteAvailable = await remoteStoreReady();

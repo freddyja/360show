@@ -27,6 +27,9 @@ export function isDrivePlaybackUrl(src: string | null | undefined) {
 }
 
 export function sanitizeDriveFolderName(value: string, fallback = "360show") {
-  const cleaned = value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim();
+  const cleaned = value
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
   return cleaned.slice(0, 80) || fallback;
 }

@@ -11,7 +11,8 @@ const UNREACHABLE_TTL_MS = 60_000;
 const PROBE_MS = 4_000;
 const HEALTH_PATH = "shares/_360show-health";
 
-export type BlobUnavailableReason = "no-token" | "suspended" | "unreachable" | "error";
+export type BlobUnavailableReason =
+  "no-token" | "suspended" | "unreachable" | "error";
 
 export type BlobAvailability = {
   tokenPresent: boolean;
@@ -61,7 +62,9 @@ function availabilityFromError(error: unknown): BlobAvailability {
     tokenPresent: blobTokenPresent(),
     usable: false,
     reason: unusable ? "suspended" : "unreachable",
-    message: unusable ? BLOB_STORE_UNAVAILABLE_MESSAGE : formatBlobWriteError(error),
+    message: unusable
+      ? BLOB_STORE_UNAVAILABLE_MESSAGE
+      : formatBlobWriteError(error),
   };
 }
 
@@ -91,10 +94,18 @@ export function noteBlobFailure(error: unknown) {
 function isTimeoutError(error: unknown) {
   const name = error instanceof Error ? error.name : "";
   const msg = error instanceof Error ? error.message : String(error ?? "");
-  return name === "TimeoutError" || name === "AbortError" || /timed out|timeout|aborted/i.test(msg);
+  return (
+    name === "TimeoutError" ||
+    name === "AbortError" ||
+    /timed out|timeout|aborted/i.test(msg)
+  );
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), ms);
   const timeout = new Promise<never>((_, reject) => {
@@ -120,14 +131,25 @@ async function probeStore(): Promise<BlobAvailability> {
   }
 
   try {
-    await withTimeout(head(HEALTH_PATH, { abortSignal: AbortSignal.timeout(PROBE_MS) }), PROBE_MS, "Blob health check");
+    await withTimeout(
+      head(HEALTH_PATH, { abortSignal: AbortSignal.timeout(PROBE_MS) }),
+      PROBE_MS,
+      "Blob health check",
+    );
     return { tokenPresent: true, usable: true, reason: "ok", message: null };
   } catch (error) {
-    if (error instanceof BlobNotFoundError || (error instanceof Error && error.name === "BlobNotFoundError")) {
+    if (
+      error instanceof BlobNotFoundError ||
+      (error instanceof Error && error.name === "BlobNotFoundError")
+    ) {
       return { tokenPresent: true, usable: true, reason: "ok", message: null };
     }
     const value = availabilityFromError(error);
-    if (value.reason === "unreachable" && !isTimeoutError(error) && !isBlobUnusableError(error)) {
+    if (
+      value.reason === "unreachable" &&
+      !isTimeoutError(error) &&
+      !isBlobUnusableError(error)
+    ) {
       return {
         tokenPresent: true,
         usable: false,
@@ -139,7 +161,9 @@ async function probeStore(): Promise<BlobAvailability> {
   }
 }
 
-export async function getBlobAvailability(options?: { force?: boolean }): Promise<BlobAvailability> {
+export async function getBlobAvailability(options?: {
+  force?: boolean;
+}): Promise<BlobAvailability> {
   const cached = readCache();
   if (!options?.force && cacheFresh(cached) && cached) return cached.value;
   if (inflight) return inflight;
@@ -148,7 +172,11 @@ export async function getBlobAvailability(options?: { force?: boolean }): Promis
     const value = await probeStore();
     writeCache({
       at: Date.now(),
-      ttl: value.usable ? HEALTHY_TTL_MS : value.reason === "suspended" ? UNUSABLE_TTL_MS : UNREACHABLE_TTL_MS,
+      ttl: value.usable
+        ? HEALTHY_TTL_MS
+        : value.reason === "suspended"
+          ? UNUSABLE_TTL_MS
+          : UNREACHABLE_TTL_MS,
       value,
     });
     return value;

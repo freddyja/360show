@@ -5,7 +5,13 @@ import { TabletOperatorScreen } from "@/components/screens/TabletOperatorScreen"
 
 export default function TabletPage() {
   return (
-    <Suspense fallback={<div className="min-h-dvh bg-[#07101c] p-6 text-slate-200">Loading tablet remote…</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-dvh bg-[#07101c] p-6 text-slate-200">
+          Loading tablet remote…
+        </div>
+      }
+    >
       <TabletOperatorScreen />
     </Suspense>
   );

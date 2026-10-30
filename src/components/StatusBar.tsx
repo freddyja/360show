@@ -24,8 +24,16 @@ export function StatusBar({
             cameraOk ? "text-emerald-400" : "text-amber-300",
           )}
         >
-          {cameraOk ? <CheckCircle2 className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-          {cameraOk ? "Camera OK" : camera === "denied" ? "Camera blocked" : "Demo camera"}
+          {cameraOk ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <VideoOff className="h-4 w-4" />
+          )}
+          {cameraOk
+            ? "Camera OK"
+            : camera === "denied"
+              ? "Camera blocked"
+              : "Demo camera"}
         </span>
         <span className="inline-flex items-center gap-1.5 text-slate-300">
           <Battery className="h-4 w-4" />

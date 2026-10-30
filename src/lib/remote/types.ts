@@ -32,7 +32,8 @@ export const REMOTE_COMMAND_TYPES = [
 
 export type RemoteCommandType = (typeof REMOTE_COMMAND_TYPES)[number];
 
-export type RemoteBoothPhase = "idle" | "countdown" | "recording" | "processing";
+export type RemoteBoothPhase =
+  "idle" | "countdown" | "recording" | "processing";
 
 export type RemoteConnection = "paired" | "waiting" | "offline";
 
@@ -77,7 +78,9 @@ export interface RemoteCameraInfo {
   note: string | null;
 }
 
-export function isRemoteCameraFacing(value: unknown): value is RemoteCameraFacing {
+export function isRemoteCameraFacing(
+  value: unknown,
+): value is RemoteCameraFacing {
   return value === "user" || value === "environment";
 }
 
@@ -108,7 +111,8 @@ export function isRemoteSettingCommand(type: RemoteCommandType) {
   return (REMOTE_SETTING_COMMANDS as readonly string[]).includes(type);
 }
 
-export const SETTINGS_LOCKED_MESSAGE = "Settings are locked while the booth is busy. Try again when it is idle.";
+export const SETTINGS_LOCKED_MESSAGE =
+  "Settings are locked while the booth is busy. Try again when it is idle.";
 
 export interface RemoteCommandPayload {
   captureDurationSec?: CaptureDurationSec;
@@ -169,7 +173,11 @@ export interface RemotePublicView {
   lastClipId: string | null;
   expiresAt: number;
   lastAck: RemoteAck | null;
-  pendingCommand: { id: string; type: RemoteCommandType; createdAt: number } | null;
+  pendingCommand: {
+    id: string;
+    type: RemoteCommandType;
+    createdAt: number;
+  } | null;
   snapshot: RemoteEventSnapshot;
   pairCode: string;
 }
@@ -187,16 +195,26 @@ export function isEventId(value: string) {
   return /^[A-Za-z0-9._-]{6,96}$/.test(value);
 }
 
-export function isRemoteCommandType(value: unknown): value is RemoteCommandType {
-  return typeof value === "string" && (REMOTE_COMMAND_TYPES as readonly string[]).includes(value);
+export function isRemoteCommandType(
+  value: unknown,
+): value is RemoteCommandType {
+  return (
+    typeof value === "string" &&
+    (REMOTE_COMMAND_TYPES as readonly string[]).includes(value)
+  );
 }
 
-export function isCaptureDurationSec(value: unknown): value is CaptureDurationSec {
+export function isCaptureDurationSec(
+  value: unknown,
+): value is CaptureDurationSec {
   return value === 10 || value === 15 || value === 20;
 }
 
 export function isMusicBedLabel(value: unknown): value is MusicBedLabel {
-  return typeof value === "string" && (MUSIC_BEDS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (MUSIC_BEDS as readonly string[]).includes(value)
+  );
 }
 
 export function isVideoQuality(value: unknown): value is VideoQuality {
@@ -237,17 +255,24 @@ const MUSIC_EXT = /^(mp3|m4a|aac|wav|ogg|flac|opus|bin)$/;
 
 export function remoteMusicExt(fileName: string) {
   const match = fileName.toLowerCase().match(/\.([a-z0-9]+)$/);
-  const ext = match?.[1] === "wave" ? "wav" : match?.[1] === "oga" ? "ogg" : match?.[1];
+  const ext =
+    match?.[1] === "wave" ? "wav" : match?.[1] === "oga" ? "ogg" : match?.[1];
   return ext && MUSIC_EXT.test(ext) && ext !== "bin" ? ext : "bin";
 }
 
 export function remoteMusicPath(eventId: string, fileNameOrExt = "bin") {
-  const ext = fileNameOrExt.includes(".") ? remoteMusicExt(fileNameOrExt) : MUSIC_EXT.test(fileNameOrExt) ? fileNameOrExt : "bin";
+  const ext = fileNameOrExt.includes(".")
+    ? remoteMusicExt(fileNameOrExt)
+    : MUSIC_EXT.test(fileNameOrExt)
+      ? fileNameOrExt
+      : "bin";
   return `remote/${eventId}/music.${ext}`;
 }
 
 export function isRemoteMusicPath(pathname: string, eventId: string) {
-  return new RegExp(`^remote/${eventId}/music\\.(mp3|m4a|aac|wav|ogg|flac|opus|bin)$`).test(pathname);
+  return new RegExp(
+    `^remote/${eventId}/music\\.(mp3|m4a|aac|wav|ogg|flac|opus|bin)$`,
+  ).test(pathname);
 }
 
 export function remotePairStorageKey(eventId: string) {
@@ -265,12 +290,21 @@ export function connectionFromSession(
   return "waiting";
 }
 
-export function operatorIsFresh(session: Pick<RemoteSession, "operatorHeartbeatAt" | "expiresAt">, now = Date.now()) {
+export function operatorIsFresh(
+  session: Pick<RemoteSession, "operatorHeartbeatAt" | "expiresAt">,
+  now = Date.now(),
+) {
   if (now > session.expiresAt) return false;
-  return session.operatorHeartbeatAt > 0 && now - session.operatorHeartbeatAt < REMOTE_OPERATOR_ONLINE_MS;
+  return (
+    session.operatorHeartbeatAt > 0 &&
+    now - session.operatorHeartbeatAt < REMOTE_OPERATOR_ONLINE_MS
+  );
 }
 
-export function boothStatusForPhase(phase: RemoteBoothPhase, extra?: string | null) {
+export function boothStatusForPhase(
+  phase: RemoteBoothPhase,
+  extra?: string | null,
+) {
   if (phase === "countdown") return "Countdown…";
   if (phase === "recording") return "Recording…";
   if (phase === "processing") return "Saving spin…";

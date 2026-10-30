@@ -54,7 +54,8 @@ export function formatBlobWriteError(error: unknown): string {
   if (isBlobUnusableError(error)) {
     return BLOB_STORE_UNAVAILABLE_MESSAGE;
   }
-  const raw = error instanceof Error ? error.message : String(error ?? "unknown error");
+  const raw =
+    error instanceof Error ? error.message : String(error ?? "unknown error");
   if (isBlobAccessMismatch(error)) {
     return (
       `Vercel Blob rejected the write: ${raw} ` +

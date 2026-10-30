@@ -42,7 +42,10 @@ function invalid(message: string) {
 
 export async function POST(request: Request) {
   if (!(await remoteStoreReady())) {
-    return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
+    return NextResponse.json(
+      { error: storeUnavailableMessage() },
+      { status: 503 },
+    );
   }
 
   const body = (await request.json().catch(() => null)) as {
@@ -59,8 +62,17 @@ export async function POST(request: Request) {
   }
 
   const session = await readSession(eventId);
-  if (!session || !sessionIsLive(session) || !tokenMatches(session, body.token)) {
-    return NextResponse.json({ error: "Pair token expired or invalid. Scan the QR from Capture again." }, { status: 401 });
+  if (
+    !session ||
+    !sessionIsLive(session) ||
+    !tokenMatches(session, body.token)
+  ) {
+    return NextResponse.json(
+      {
+        error: "Pair token expired or invalid. Scan the QR from Capture again.",
+      },
+      { status: 401 },
+    );
   }
 
   const incoming = body.payload || {};
@@ -71,7 +83,10 @@ export async function POST(request: Request) {
   const fixedId = clientId ? `rcmd_c_${clientId}` : null;
   if (fixedId) {
     const pendingNow = await readCommands(eventId);
-    if (pendingNow.some((cmd) => cmd.id === fixedId) || session.lastAck?.commandId === fixedId) {
+    if (
+      pendingNow.some((cmd) => cmd.id === fixedId) ||
+      session.lastAck?.commandId === fixedId
+    ) {
       await touchOperatorPing(eventId, now0);
       return NextResponse.json({
         ok: true,
@@ -97,7 +112,10 @@ export async function POST(request: Request) {
   // Settings lock: the phone also enforces this, but answering here gives the
   // remote an immediate, clear reply instead of a queued command that fails.
   if (isRemoteSettingCommand(body.type) && session.boothPhase !== "idle") {
-    return NextResponse.json({ error: SETTINGS_LOCKED_MESSAGE, locked: true }, { status: 423 });
+    return NextResponse.json(
+      { error: SETTINGS_LOCKED_MESSAGE, locked: true },
+      { status: 423 },
+    );
   }
   const command: RemoteCommand = {
     id: fixedId || newCommandId(),
@@ -113,50 +131,77 @@ export async function POST(request: Request) {
     command.payload.captureDurationSec = incoming.captureDurationSec;
   }
   if (command.type === "setMusicBed") {
-    if (!isMusicBedLabel(incoming.musicBedLabel)) return invalid("Unknown music bed.");
+    if (!isMusicBedLabel(incoming.musicBedLabel))
+      return invalid("Unknown music bed.");
     command.payload.musicBedLabel = incoming.musicBedLabel;
   }
   if (command.type === "setFrameStyle") {
-    if (typeof incoming.frameStyle !== "string" || !isFrameStyleId(incoming.frameStyle)) {
+    if (
+      typeof incoming.frameStyle !== "string" ||
+      !isFrameStyleId(incoming.frameStyle)
+    ) {
       return invalid("Unknown frame style.");
     }
     command.payload.frameStyle = incoming.frameStyle;
   }
   if (command.type === "setEventBranding") {
-    const name = incoming.name !== undefined ? clipText(incoming.name, 80) : undefined;
-    const clientNames = incoming.clientNames !== undefined ? clipText(incoming.clientNames, 80) : undefined;
-    if (incoming.name !== undefined && !name) return invalid("Event name cannot be empty.");
-    if (incoming.accentColor !== undefined && !isAccentColor(incoming.accentColor)) {
+    const name =
+      incoming.name !== undefined ? clipText(incoming.name, 80) : undefined;
+    const clientNames =
+      incoming.clientNames !== undefined
+        ? clipText(incoming.clientNames, 80)
+        : undefined;
+    if (incoming.name !== undefined && !name)
+      return invalid("Event name cannot be empty.");
+    if (
+      incoming.accentColor !== undefined &&
+      !isAccentColor(incoming.accentColor)
+    ) {
       return invalid("Accent color must be a #RRGGBB hex value.");
     }
-    if (name === undefined && clientNames === undefined && incoming.accentColor === undefined) {
+    if (
+      name === undefined &&
+      clientNames === undefined &&
+      incoming.accentColor === undefined
+    ) {
       return invalid("No branding fields to update.");
     }
     if (name) command.payload.name = name;
-    if (clientNames !== undefined) command.payload.clientNames = clientNames || "Guests";
-    if (incoming.accentColor) command.payload.accentColor = incoming.accentColor;
+    if (clientNames !== undefined)
+      command.payload.clientNames = clientNames || "Guests";
+    if (incoming.accentColor)
+      command.payload.accentColor = incoming.accentColor;
   }
   if (command.type === "setSlowMo") {
-    if (typeof incoming.slowMoEnabled !== "boolean") return invalid("slowMoEnabled must be true or false.");
+    if (typeof incoming.slowMoEnabled !== "boolean")
+      return invalid("slowMoEnabled must be true or false.");
     command.payload.slowMoEnabled = incoming.slowMoEnabled;
   }
   if (command.type === "setVideoQuality") {
-    if (!isVideoQuality(incoming.videoQuality)) return invalid("Video quality must be high or standard.");
+    if (!isVideoQuality(incoming.videoQuality))
+      return invalid("Video quality must be high or standard.");
     command.payload.videoQuality = incoming.videoQuality;
   }
   if (command.type === "setBoothMusicMuted") {
-    if (typeof incoming.boothMusicMuted !== "boolean") return invalid("boothMusicMuted must be true or false.");
+    if (typeof incoming.boothMusicMuted !== "boolean")
+      return invalid("boothMusicMuted must be true or false.");
     command.payload.boothMusicMuted = incoming.boothMusicMuted;
   }
   if (command.type === "setCloudDestination") {
-    if (!isCloudDestination(incoming.cloudDestination)) return invalid("Cloud destination must be blob or drive.");
+    if (!isCloudDestination(incoming.cloudDestination))
+      return invalid("Cloud destination must be blob or drive.");
     command.payload.cloudDestination = incoming.cloudDestination;
-    const folder = incoming.driveFolderName !== undefined ? clipText(incoming.driveFolderName, 64) : undefined;
-    if (incoming.driveFolderName !== undefined && !folder) return invalid("Drive folder name cannot be empty.");
+    const folder =
+      incoming.driveFolderName !== undefined
+        ? clipText(incoming.driveFolderName, 64)
+        : undefined;
+    if (incoming.driveFolderName !== undefined && !folder)
+      return invalid("Drive folder name cannot be empty.");
     if (folder) command.payload.driveFolderName = folder;
   }
   if (command.type === "setCameraFacing") {
-    if (!isRemoteCameraFacing(incoming.cameraFacing)) return invalid("Camera must be user (front) or environment (back).");
+    if (!isRemoteCameraFacing(incoming.cameraFacing))
+      return invalid("Camera must be user (front) or environment (back).");
     command.payload.cameraFacing = incoming.cameraFacing;
   }
   if (command.type === "setCustomMusic") {
@@ -168,11 +213,15 @@ export async function POST(request: Request) {
     }
     const fileName = clipText(incoming.fileName, 180);
     if (!fileName) return invalid("Missing song file name.");
-    if (typeof incoming.size === "number" && (incoming.size < 64 || incoming.size > 18 * 1024 * 1024)) {
+    if (
+      typeof incoming.size === "number" &&
+      (incoming.size < 64 || incoming.size > 18 * 1024 * 1024)
+    ) {
       return invalid("Song must be between 64 bytes and 18 MB.");
     }
     command.payload.fileName = fileName;
-    if (typeof incoming.contentType === "string") command.payload.contentType = incoming.contentType.slice(0, 80);
+    if (typeof incoming.contentType === "string")
+      command.payload.contentType = incoming.contentType.slice(0, 80);
     if (typeof incoming.size === "number") command.payload.size = incoming.size;
     await writeRemoteMusicMeta(eventId, {
       fileName,
@@ -182,22 +231,34 @@ export async function POST(request: Request) {
   }
 
   const existing = await readCommands(eventId);
-  if (existing.some((cmd) => cmd.type === "startSpin") && command.type === "startSpin") {
-    return NextResponse.json({ error: "A START SPIN is already waiting on the booth." }, { status: 409 });
+  if (
+    existing.some((cmd) => cmd.type === "startSpin") &&
+    command.type === "startSpin"
+  ) {
+    return NextResponse.json(
+      { error: "A START SPIN is already waiting on the booth." },
+      { status: 409 },
+    );
   }
 
   const now = Date.now();
   await touchOperatorPing(eventId, now);
   let superseded: string[] = [];
   try {
-    if (isRemoteSettingCommand(command.type) && command.type !== "setCustomMusic") {
+    if (
+      isRemoteSettingCommand(command.type) &&
+      command.type !== "setCustomMusic"
+    ) {
       superseded = await enqueueSettingCommand(eventId, command);
     } else {
       await enqueueCommand(eventId, command);
     }
   } catch (error) {
     if (error instanceof Error && error.message === "START_SPIN_PENDING") {
-      return NextResponse.json({ error: "A START SPIN is already waiting on the booth." }, { status: 409 });
+      return NextResponse.json(
+        { error: "A START SPIN is already waiting on the booth." },
+        { status: 409 },
+      );
     }
     throw error;
   }

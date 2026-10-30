@@ -1,6 +1,11 @@
 "use client";
 
-import { driveDownloadUrl, drivePreviewUrl, driveViewUrl, sanitizeDriveFolderName } from "@/lib/drive/urls";
+import {
+  driveDownloadUrl,
+  drivePreviewUrl,
+  driveViewUrl,
+  sanitizeDriveFolderName,
+} from "@/lib/drive/urls";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
@@ -9,7 +14,11 @@ function escapeQueryValue(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-async function driveJson<T>(url: string, accessToken: string, init?: RequestInit): Promise<T> {
+async function driveJson<T>(
+  url: string,
+  accessToken: string,
+  init?: RequestInit,
+): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -18,14 +27,22 @@ async function driveJson<T>(url: string, accessToken: string, init?: RequestInit
       ...init?.headers,
     },
   });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: { message?: string } };
+  const data = (await res.json().catch(() => ({}))) as T & {
+    error?: { message?: string };
+  };
   if (!res.ok) {
-    throw new Error(data.error?.message || `Google Drive request failed (${res.status})`);
+    throw new Error(
+      data.error?.message || `Google Drive request failed (${res.status})`,
+    );
   }
   return data;
 }
 
-async function findOrCreateFolder(accessToken: string, name: string, parentId?: string) {
+async function findOrCreateFolder(
+  accessToken: string,
+  name: string,
+  parentId?: string,
+) {
   const safe = sanitizeDriveFolderName(name);
   const parentClause = parentId ? ` and '${parentId}' in parents` : "";
   const q = `name='${escapeQueryValue(safe)}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentClause}`;
@@ -35,14 +52,18 @@ async function findOrCreateFolder(accessToken: string, name: string, parentId?: 
   );
   if (listed.files?.[0]?.id) return listed.files[0].id;
 
-  const created = await driveJson<{ id: string }>(`${DRIVE_API}/files`, accessToken, {
-    method: "POST",
-    body: JSON.stringify({
-      name: safe,
-      mimeType: "application/vnd.google-apps.folder",
-      ...(parentId ? { parents: [parentId] } : {}),
-    }),
-  });
+  const created = await driveJson<{ id: string }>(
+    `${DRIVE_API}/files`,
+    accessToken,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: safe,
+        mimeType: "application/vnd.google-apps.folder",
+        ...(parentId ? { parents: [parentId] } : {}),
+      }),
+    },
+  );
   if (!created.id) throw new Error("Could not create Google Drive folder");
   return created.id;
 }
@@ -69,8 +90,12 @@ async function resumableUpload(options: {
     }),
   });
   if (!start.ok) {
-    const err = (await start.json().catch(() => null)) as { error?: { message?: string } } | null;
-    throw new Error(err?.error?.message || "Could not start Google Drive upload");
+    const err = (await start.json().catch(() => null)) as {
+      error?: { message?: string };
+    } | null;
+    throw new Error(
+      err?.error?.message || "Could not start Google Drive upload",
+    );
   }
   const location = start.headers.get("Location");
   if (!location) throw new Error("Google Drive did not return an upload URL");
@@ -83,13 +108,23 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 type PutResult = { status: number; body: string; range: string | null };
 
 /** PUT bytes with XHR so we get upload progress (fetch has none). Network errors resolve as status 0. */
-function xhrPut(url: string, body: Blob | null, headers: Record<string, string>, onProgress?: (loaded: number) => void) {
+function xhrPut(
+  url: string,
+  body: Blob | null,
+  headers: Record<string, string>,
+  onProgress?: (loaded: number) => void,
+) {
   return new Promise<PutResult>((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
     for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     if (onProgress) xhr.upload.onprogress = (e) => onProgress(e.loaded);
-    xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText, range: xhr.getResponseHeader("Range") });
+    xhr.onload = () =>
+      resolve({
+        status: xhr.status,
+        body: xhr.responseText,
+        range: xhr.getResponseHeader("Range"),
+      });
     xhr.onerror = () => resolve({ status: 0, body: "", range: null });
     xhr.ontimeout = () => resolve({ status: 0, body: "", range: null });
     xhr.send(body);
@@ -108,7 +143,11 @@ function parseId(body: string) {
  * Upload to a Drive resumable session. On a network drop or 5xx, ask Drive how
  * many bytes it has (Content-Range: bytes * /size) and resume from there.
  */
-async function putResumable(location: string, file: File, onProgress?: (fraction: number) => void) {
+async function putResumable(
+  location: string,
+  file: File,
+  onProgress?: (fraction: number) => void,
+) {
   const size = file.size;
   const type = file.type || "application/octet-stream";
   let offset = 0;
@@ -116,12 +155,17 @@ async function putResumable(location: string, file: File, onProgress?: (fraction
   for (let attempt = 0; attempt < 5; attempt++) {
     if (attempt > 0) {
       await sleep(Math.min(8_000, 1_000 * 2 ** (attempt - 1)));
-      const probe = await xhrPut(location, null, { "Content-Range": `bytes */${size}` });
+      const probe = await xhrPut(location, null, {
+        "Content-Range": `bytes */${size}`,
+      });
       if (probe.status === 200 || probe.status === 201) {
         const id = parseId(probe.body);
         if (id) return id;
       }
-      if (probe.status === 404 || probe.status === 410) throw new Error("Google Drive upload session expired. Tap Retry upload.");
+      if (probe.status === 404 || probe.status === 410)
+        throw new Error(
+          "Google Drive upload session expired. Tap Retry upload.",
+        );
       if (probe.status === 308) {
         const m = probe.range?.match(/bytes=0-(\d+)/);
         offset = m ? Number(m[1]) + 1 : 0;
@@ -131,8 +175,11 @@ async function putResumable(location: string, file: File, onProgress?: (fraction
     }
     const chunk = offset > 0 ? file.slice(offset) : file;
     const headers: Record<string, string> = { "Content-Type": type };
-    if (offset > 0) headers["Content-Range"] = `bytes ${offset}-${size - 1}/${size}`;
-    const res = await xhrPut(location, chunk, headers, (loaded) => onProgress?.(Math.min(1, (offset + loaded) / size)));
+    if (offset > 0)
+      headers["Content-Range"] = `bytes ${offset}-${size - 1}/${size}`;
+    const res = await xhrPut(location, chunk, headers, (loaded) =>
+      onProgress?.(Math.min(1, (offset + loaded) / size)),
+    );
     if (res.status === 200 || res.status === 201) {
       const id = parseId(res.body);
       if (id) {
@@ -143,11 +190,16 @@ async function putResumable(location: string, file: File, onProgress?: (fraction
       continue;
     }
     if (res.status === 0 || res.status === 308 || res.status >= 500) {
-      lastError = res.status === 0 ? "Network dropped during Google Drive upload" : `Google Drive upload error (${res.status})`;
+      lastError =
+        res.status === 0
+          ? "Network dropped during Google Drive upload"
+          : `Google Drive upload error (${res.status})`;
       continue;
     }
     try {
-      lastError = (JSON.parse(res.body) as { error?: { message?: string } }).error?.message || lastError;
+      lastError =
+        (JSON.parse(res.body) as { error?: { message?: string } }).error
+          ?.message || lastError;
     } catch {}
     break;
   }
@@ -162,7 +214,10 @@ export async function uploadClipToDrive(options: {
   clipId: string;
   onProgress?: (fraction: number) => void;
 }) {
-  const rootId = await findOrCreateFolder(options.accessToken, options.folderName);
+  const rootId = await findOrCreateFolder(
+    options.accessToken,
+    options.folderName,
+  );
   const eventId = await findOrCreateFolder(
     options.accessToken,
     sanitizeDriveFolderName(options.eventName, "event"),
@@ -183,17 +238,22 @@ export async function uploadClipToDrive(options: {
   for (let attempt = 0; attempt < 3 && !shared; attempt++) {
     try {
       if (attempt) await sleep(1_000 * attempt);
-      await driveJson(`${DRIVE_API}/files/${encodeURIComponent(fileId)}/permissions`, options.accessToken, {
-        method: "POST",
-        body: JSON.stringify({ role: "reader", type: "anyone" }),
-      });
+      await driveJson(
+        `${DRIVE_API}/files/${encodeURIComponent(fileId)}/permissions`,
+        options.accessToken,
+        {
+          method: "POST",
+          body: JSON.stringify({ role: "reader", type: "anyone" }),
+        },
+      );
       shared = true;
     } catch (error) {
       shareError = error;
     }
   }
   if (!shared) {
-    const detail = shareError instanceof Error ? shareError.message : "unknown error";
+    const detail =
+      shareError instanceof Error ? shareError.message : "unknown error";
     throw new Error(
       `Uploaded to Drive but could not make it viewable by link (${detail}). Your Google Workspace may block public links.`,
     );

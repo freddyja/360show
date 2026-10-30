@@ -20,11 +20,19 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const PHASES: RemoteBoothPhase[] = ["idle", "countdown", "recording", "processing"];
+const PHASES: RemoteBoothPhase[] = [
+  "idle",
+  "countdown",
+  "recording",
+  "processing",
+];
 
 export async function POST(request: Request) {
   if (!(await remoteStoreReady())) {
-    return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
+    return NextResponse.json(
+      { error: storeUnavailableMessage() },
+      { status: 503 },
+    );
   }
 
   const body = (await request.json().catch(() => null)) as {
@@ -41,12 +49,25 @@ export async function POST(request: Request) {
 
   const eventId = body?.eventId?.trim() || "";
   if (!isEventId(eventId) || !body?.token) {
-    return NextResponse.json({ error: "Missing booth credentials." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing booth credentials." },
+      { status: 400 },
+    );
   }
 
   const session = await readSession(eventId);
-  if (!session || !sessionIsLive(session) || !tokenMatches(session, body.token)) {
-    return NextResponse.json({ error: "Remote session expired or invalid. Enable remote again on Capture." }, { status: 401 });
+  if (
+    !session ||
+    !sessionIsLive(session) ||
+    !tokenMatches(session, body.token)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Remote session expired or invalid. Enable remote again on Capture.",
+      },
+      { status: 401 },
+    );
   }
 
   const now = Date.now();
@@ -74,14 +95,17 @@ export async function POST(request: Request) {
   const pendingList = await readCommands(eventId);
   const lastAck = acks[acks.length - 1] ?? session.lastAck;
 
-  const phase = PHASES.includes(body.boothPhase as RemoteBoothPhase) ? (body.boothPhase as RemoteBoothPhase) : session.boothPhase;
+  const phase = PHASES.includes(body.boothPhase as RemoteBoothPhase)
+    ? (body.boothPhase as RemoteBoothPhase)
+    : session.boothPhase;
   const next = {
     ...session,
     boothHeartbeatAt: now,
     boothArmed: body.boothArmed !== false,
     boothPhase: phase,
     boothStatus: (body.boothStatus || session.boothStatus).slice(0, 180),
-    lastClipId: body.lastClipId === undefined ? session.lastClipId : body.lastClipId,
+    lastClipId:
+      body.lastClipId === undefined ? session.lastClipId : body.lastClipId,
     snapshot: body.snapshot || session.snapshot,
     lastAck,
   };

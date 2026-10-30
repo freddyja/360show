@@ -81,10 +81,17 @@ export function TabletOperatorScreen() {
   useEffect(() => {
     if (!pair) return;
     let lock: { release: () => Promise<void> } | null = null;
-    const nav = navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> } };
+    const nav = navigator as Navigator & {
+      wakeLock?: {
+        request: (t: "screen") => Promise<{ release: () => Promise<void> }>;
+      };
+    };
     const acquire = () => {
       if (document.visibilityState === "visible" && nav.wakeLock) {
-        nav.wakeLock.request("screen").then((l) => (lock = l), () => undefined);
+        nav.wakeLock.request("screen").then(
+          (l) => (lock = l),
+          () => undefined,
+        );
       }
     };
     acquire();
@@ -128,16 +135,23 @@ export function TabletOperatorScreen() {
       } catch (err) {
         if (cancelled) return;
         if (err instanceof RemoteHttpError && err.status === 401) {
-          unpair("The booth ended this remote session. Enter the new code from the booth screen.");
+          unpair(
+            "The booth ended this remote session. Enter the new code from the booth screen.",
+          );
           return;
         }
         failuresRef.current += 1;
         setFailures(failuresRef.current);
-        setError(err instanceof Error ? err.message : "Could not reach the booth.");
+        setError(
+          err instanceof Error ? err.message : "Could not reach the booth.",
+        );
       }
       if (cancelled) return;
       const delay = failuresRef.current
-        ? Math.min(MAX_BACKOFF_MS, REMOTE_POLL_MS * 2 ** Math.min(failuresRef.current, 4))
+        ? Math.min(
+            MAX_BACKOFF_MS,
+            REMOTE_POLL_MS * 2 ** Math.min(failuresRef.current, 4),
+          )
         : REMOTE_POLL_MS;
       timer = window.setTimeout(() => void poll(), delay);
     };
@@ -161,7 +175,11 @@ export function TabletOperatorScreen() {
     setError(null);
     try {
       const data = await tabletJoin(code);
-      const next = { eventId: data.eventId, token: data.token, pairCode: data.pairCode };
+      const next = {
+        eventId: data.eventId,
+        token: data.token,
+        pairCode: data.pairCode,
+      };
       writeTabletPair(next);
       setPair(next);
       setView(data.view);
@@ -177,7 +195,8 @@ export function TabletOperatorScreen() {
     if (!pair || sending) return;
     setSending(type);
     setNotice(null);
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.(30);
+    if (typeof navigator !== "undefined" && "vibrate" in navigator)
+      navigator.vibrate?.(30);
     try {
       const result = await tabletCommand(pair.eventId, pair.token, type);
       if (result.view) setView(result.view);
@@ -190,27 +209,51 @@ export function TabletOperatorScreen() {
       );
     } catch (err) {
       if (err instanceof RemoteHttpError && err.status === 401) {
-        unpair("The booth ended this remote session. Enter the new code from the booth screen.");
+        unpair(
+          "The booth ended this remote session. Enter the new code from the booth screen.",
+        );
       } else {
-        setNotice(err instanceof Error ? `Not sent: ${err.message}` : "Not sent. Check Wi-Fi and tap again.");
+        setNotice(
+          err instanceof Error
+            ? `Not sent: ${err.message}`
+            : "Not sent. Check Wi-Fi and tap again.",
+        );
       }
     } finally {
       setSending(null);
     }
   }
 
-  async function sendSetting(type: RemoteCommandType, payload: RemoteCommandPayload) {
+  async function sendSetting(
+    type: RemoteCommandType,
+    payload: RemoteCommandPayload,
+  ) {
     if (!pair) return false;
     try {
-      const result = await tabletCommand(pair.eventId, pair.token, type, payload);
+      const result = await tabletCommand(
+        pair.eventId,
+        pair.token,
+        type,
+        payload,
+      );
       if (result.view) setView(result.view);
-      setNotice(result.superseded ? "Setting updated (replaced an earlier change still waiting)." : "Setting sent — waiting for the booth…");
+      setNotice(
+        result.superseded
+          ? "Setting updated (replaced an earlier change still waiting)."
+          : "Setting sent — waiting for the booth…",
+      );
       return true;
     } catch (err) {
       if (err instanceof RemoteHttpError && err.status === 401) {
-        unpair("The booth ended this remote session. Enter the new code from the booth screen.");
+        unpair(
+          "The booth ended this remote session. Enter the new code from the booth screen.",
+        );
       } else {
-        setNotice(err instanceof Error ? `Setting not applied: ${err.message}` : "Setting not sent. Check Wi-Fi.");
+        setNotice(
+          err instanceof Error
+            ? `Setting not applied: ${err.message}`
+            : "Setting not sent. Check Wi-Fi.",
+        );
       }
       return false;
     }
@@ -223,7 +266,8 @@ export function TabletOperatorScreen() {
       <main className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-[#07101c] p-6 text-white">
         <h1 className="text-3xl font-semibold">Booth Remote</h1>
         <p className="max-w-md text-center text-slate-300">
-          On the booth, open Capture → <b>Enable remote control</b>. Scan the <b>Tablet</b> QR, or type the 6-character code.
+          On the booth, open Capture → <b>Enable remote control</b>. Scan the{" "}
+          <b>Tablet</b> QR, or type the 6-character code.
         </p>
         <form onSubmit={onJoin} className="flex w-full max-w-md flex-col gap-4">
           <input
@@ -251,10 +295,18 @@ export function TabletOperatorScreen() {
   }
 
   const phase = view?.boothPhase ?? "idle";
-  const boothAge = view?.boothHeartbeatAt ? now - view.boothHeartbeatAt : Infinity;
+  const boothAge = view?.boothHeartbeatAt
+    ? now - view.boothHeartbeatAt
+    : Infinity;
   const tabletAge = lastOkAt ? now - lastOkAt : Infinity;
-  const link: Link = failures === 0 && tabletAge < REMOTE_POLL_MS * 4 ? "live" : failures < 4 ? "reconnecting" : "lost";
-  const boothOnline = view?.connection === "paired" && boothAge < REMOTE_BOOTH_ONLINE_MS;
+  const link: Link =
+    failures === 0 && tabletAge < REMOTE_POLL_MS * 4
+      ? "live"
+      : failures < 4
+        ? "reconnecting"
+        : "lost";
+  const boothOnline =
+    view?.connection === "paired" && boothAge < REMOTE_BOOTH_ONLINE_MS;
   const stale = link !== "live" || !boothOnline;
   const busy = phase !== "idle";
   const pending = view?.pendingCommand;
@@ -264,18 +316,28 @@ export function TabletOperatorScreen() {
     <main className="flex min-h-dvh flex-col gap-4 bg-[#07101c] p-4 text-white sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Booth Remote</p>
-          <p className="text-xl font-semibold">{view?.snapshot.name || "Connecting…"}</p>
+          <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+            Booth Remote
+          </p>
+          <p className="text-xl font-semibold">
+            {view?.snapshot.name || "Connecting…"}
+          </p>
         </div>
         <div
           className={cn(
             "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium",
-            link === "live" && boothOnline && "bg-emerald-500/20 text-emerald-200",
+            link === "live" &&
+              boothOnline &&
+              "bg-emerald-500/20 text-emerald-200",
             link === "live" && !boothOnline && "bg-amber-500/20 text-amber-100",
             link !== "live" && "bg-red-500/20 text-red-200",
           )}
         >
-          {link === "live" ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+          {link === "live" ? (
+            <Wifi className="h-4 w-4" />
+          ) : (
+            <WifiOff className="h-4 w-4" />
+          )}
           {link === "live"
             ? boothOnline
               ? "Booth connected"
@@ -297,11 +359,17 @@ export function TabletOperatorScreen() {
         )}
         aria-live="polite"
       >
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Booth state{stale ? " (last known)" : ""}</p>
-        <p className="mt-2 text-5xl font-black tracking-wider sm:text-7xl">{PHASE_LABEL[phase] ?? phase}</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+          Booth state{stale ? " (last known)" : ""}
+        </p>
+        <p className="mt-2 text-5xl font-black tracking-wider sm:text-7xl">
+          {PHASE_LABEL[phase] ?? phase}
+        </p>
         <p className="mt-2 text-slate-300">{view?.boothStatus || "—"}</p>
         <p className="mt-1 text-xs text-slate-500">
-          {Number.isFinite(boothAge) ? `Booth updated ${Math.max(0, Math.round(boothAge / 1000))}s ago` : "Waiting for booth…"}
+          {Number.isFinite(boothAge)
+            ? `Booth updated ${Math.max(0, Math.round(boothAge / 1000))}s ago`
+            : "Waiting for booth…"}
         </p>
       </section>
 
@@ -318,7 +386,9 @@ export function TabletOperatorScreen() {
         <button
           type="button"
           onClick={() => void send("stopSpin")}
-          disabled={Boolean(sending) || (!busy && pending?.type !== "startSpin")}
+          disabled={
+            Boolean(sending) || (!busy && pending?.type !== "startSpin")
+          }
           className="flex min-h-[26vh] select-none flex-col items-center justify-center gap-3 rounded-3xl bg-red-500 text-5xl font-black text-white shadow-lg active:scale-[0.98] disabled:opacity-35"
         >
           <Square className="h-20 w-20" />
@@ -329,14 +399,27 @@ export function TabletOperatorScreen() {
       <TabletSettingsPanel
         snapshot={view?.snapshot}
         locked={busy || stale || pending?.type === "startSpin"}
-        lockReason={busy || pending?.type === "startSpin" ? "Locked during the spin" : "Booth offline"}
+        lockReason={
+          busy || pending?.type === "startSpin"
+            ? "Locked during the spin"
+            : "Booth offline"
+        }
         onSend={sendSetting}
       />
 
       <footer className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
         <div className="space-y-1">
           {notice && <p className="text-slate-200">{notice}</p>}
-          {pending && !(busy && pending.type === "startSpin") && <p>Waiting on booth: {pending.type === "startSpin" ? "START" : pending.type === "stopSpin" ? "STOP" : pending.type}</p>}
+          {pending && !(busy && pending.type === "startSpin") && (
+            <p>
+              Waiting on booth:{" "}
+              {pending.type === "startSpin"
+                ? "START"
+                : pending.type === "stopSpin"
+                  ? "STOP"
+                  : pending.type}
+            </p>
+          )}
           {ack && (
             <p className={ack.ok ? "text-emerald-300" : "text-amber-200"}>
               Booth: {ack.message || (ack.ok ? "OK" : "Failed")}

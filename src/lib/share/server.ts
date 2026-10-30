@@ -1,18 +1,33 @@
 import { BLOB_CLOUD_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import type { CloudShare } from "@/lib/share/types";
-import { isClipId, isFrameStyleId, shareMetaPath, shareVideoPath } from "@/lib/share/types";
+import {
+  isClipId,
+  isFrameStyleId,
+  shareMetaPath,
+  shareVideoPath,
+} from "@/lib/share/types";
 import {
   blobFileProxyPath,
   getWithStoreAccess,
   isPrivateBlobUrl,
   putWithStoreAccess,
 } from "@/lib/share/blobAccess";
-import { blobCircuitOpen, blobConfigured, noteBlobFailure } from "@/lib/share/blobStatus";
+import {
+  blobCircuitOpen,
+  blobConfigured,
+  noteBlobFailure,
+} from "@/lib/share/blobStatus";
 
-export { blobConfigured, blobTokenPresent, blobUsable, getBlobAvailability } from "@/lib/share/blobStatus";
+export {
+  blobConfigured,
+  blobTokenPresent,
+  blobUsable,
+  getBlobAvailability,
+} from "@/lib/share/blobStatus";
 
 function hydrateShare(data: CloudShare): CloudShare | null {
-  if (!data?.clipId || !data.videoUrl || !isFrameStyleId(data.frameStyle)) return null;
+  if (!data?.clipId || !data.videoUrl || !isFrameStyleId(data.frameStyle))
+    return null;
   if (data.destination === "drive") return data;
   if (isPrivateBlobUrl(data.videoUrl)) {
     return { ...data, videoUrl: blobFileProxyPath(data.clipId) };
@@ -20,13 +35,17 @@ function hydrateShare(data: CloudShare): CloudShare | null {
   return data;
 }
 
-async function parseShareStream(stream: ReadableStream<Uint8Array> | null): Promise<CloudShare | null> {
+async function parseShareStream(
+  stream: ReadableStream<Uint8Array> | null,
+): Promise<CloudShare | null> {
   if (!stream) return null;
   const data = (await new Response(stream).json()) as CloudShare;
   return hydrateShare(data);
 }
 
-export async function readCloudShare(clipId: string): Promise<CloudShare | null> {
+export async function readCloudShare(
+  clipId: string,
+): Promise<CloudShare | null> {
   if (!blobConfigured() || !isClipId(clipId)) return null;
   try {
     const result = await getWithStoreAccess(shareMetaPath(clipId));
@@ -47,9 +66,13 @@ export async function writeCloudShare(share: CloudShare) {
     ? { ...share, videoUrl: blobFileProxyPath(share.clipId) }
     : share;
   try {
-    return await putWithStoreAccess(shareMetaPath(share.clipId), JSON.stringify(payload), {
-      contentType: "application/json",
-    });
+    return await putWithStoreAccess(
+      shareMetaPath(share.clipId),
+      JSON.stringify(payload),
+      {
+        contentType: "application/json",
+      },
+    );
   } catch (error) {
     noteBlobFailure(error);
     throw error;
@@ -63,17 +86,23 @@ export async function readShareVideo(clipId: string) {
   try {
     const meta = await readCloudShare(clipId);
     const paths = [
-      meta?.videoContentType ? shareVideoPath(clipId, meta.videoContentType) : null,
+      meta?.videoContentType
+        ? shareVideoPath(clipId, meta.videoContentType)
+        : null,
       ...VIDEO_TYPES.map((type) => shareVideoPath(clipId, type)),
       `shares/${clipId}/video.webm`,
-    ].filter((path, index, list): path is string => Boolean(path) && list.indexOf(path) === index);
+    ].filter(
+      (path, index, list): path is string =>
+        Boolean(path) && list.indexOf(path) === index,
+    );
 
     for (const pathname of paths) {
       const result = await getWithStoreAccess(pathname);
       if (!result || result.statusCode !== 200 || !result.stream) continue;
       return {
         stream: result.stream,
-        contentType: result.blob.contentType || meta?.videoContentType || "video/webm",
+        contentType:
+          result.blob.contentType || meta?.videoContentType || "video/webm",
         size: result.blob.size,
         contentDisposition: result.blob.contentDisposition || "inline",
       };

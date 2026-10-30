@@ -10,18 +10,32 @@ export function isCustomMusicBlobId(key: string) {
   return key.startsWith("music:");
 }
 
-export function hasCustomMusic(event: { customMusicBlobId?: string | null } | null | undefined) {
+export function hasCustomMusic(
+  event: { customMusicBlobId?: string | null } | null | undefined,
+) {
   return Boolean(event?.customMusicBlobId);
 }
 
 /** Custom file is stored and currently winning over the bundled bed. */
 export function usesCustomMusic(
-  event: { customMusicBlobId?: string | null; preferBundledBed?: boolean } | null | undefined,
+  event:
+    | { customMusicBlobId?: string | null; preferBundledBed?: boolean }
+    | null
+    | undefined,
 ) {
   return Boolean(event?.customMusicBlobId) && !event?.preferBundledBed;
 }
 
-export function exportMusicId(event: { customMusicBlobId?: string | null; musicBedLabel?: string | null; preferBundledBed?: boolean } | null | undefined) {
+export function exportMusicId(
+  event:
+    | {
+        customMusicBlobId?: string | null;
+        musicBedLabel?: string | null;
+        preferBundledBed?: boolean;
+      }
+    | null
+    | undefined,
+) {
   if (event?.customMusicBlobId && !event.preferBundledBed) {
     return `c${event.customMusicBlobId.replace(/[^A-Za-z0-9]/g, "").slice(-48)}`;
   }
@@ -31,7 +45,8 @@ export function exportMusicId(event: { customMusicBlobId?: string | null; musicB
 export function isLikelyAudioFile(file: File) {
   if (file.type.startsWith("audio/")) return true;
   if (file.type === "video/mp4" && /\.m4a$/i.test(file.name)) return true;
-  if (!file.type || file.type === "application/octet-stream") return AUDIO_NAME.test(file.name);
+  if (!file.type || file.type === "application/octet-stream")
+    return AUDIO_NAME.test(file.name);
   return AUDIO_NAME.test(file.name);
 }
 
@@ -55,7 +70,15 @@ export function validateCustomMusicFile(file: File): string | null {
 }
 
 export function musicCaption(
-  event: { customMusicName?: string | null; customMusicBlobId?: string | null; musicBedLabel?: string; preferBundledBed?: boolean } | null | undefined,
+  event:
+    | {
+        customMusicName?: string | null;
+        customMusicBlobId?: string | null;
+        musicBedLabel?: string;
+        preferBundledBed?: boolean;
+      }
+    | null
+    | undefined,
   fallbackBed: string,
 ) {
   if (event?.preferBundledBed) return fallbackBed;

@@ -1,4 +1,10 @@
-import { FRAME_STYLE_IDS, type BoothEvent, type Clip, type FrameStyleId, type RampProfileId } from "@/lib/types";
+import {
+  FRAME_STYLE_IDS,
+  type BoothEvent,
+  type Clip,
+  type FrameStyleId,
+  type RampProfileId,
+} from "@/lib/types";
 import { normalizeMusicBedLabel } from "@/lib/music/beds";
 
 export interface CloudShare {
@@ -67,7 +73,11 @@ export function shareMetaPath(clipId: string) {
 }
 
 export function shareVideoPath(clipId: string, contentType: string) {
-  const ext = contentType.includes("mp4") ? "mp4" : contentType.includes("quicktime") ? "mov" : "webm";
+  const ext = contentType.includes("mp4")
+    ? "mp4"
+    : contentType.includes("quicktime")
+      ? "mov"
+      : "webm";
   return `shares/${clipId}/export.${ext}`;
 }
 
@@ -111,7 +121,12 @@ export function cloudShareFrom(
   baked = true,
   extra?: Pick<
     CloudShare,
-    "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled" | "musicBedLabel" | "hasAudio"
+    | "destination"
+    | "driveFileId"
+    | "webViewLink"
+    | "slowMoEnabled"
+    | "musicBedLabel"
+    | "hasAudio"
   >,
 ): CloudShare {
   return {

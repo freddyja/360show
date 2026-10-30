@@ -14,16 +14,21 @@ export type DeviceRole = "booth" | "tablet";
 const KEY = "__360showDeviceRole";
 
 export function setDeviceRole(role: DeviceRole) {
-  if (typeof window !== "undefined") (window as unknown as Record<string, unknown>)[KEY] = role;
+  if (typeof window !== "undefined")
+    (window as unknown as Record<string, unknown>)[KEY] = role;
 }
 
 export function deviceRole(): DeviceRole {
   if (typeof window === "undefined") return "booth";
-  return (window as unknown as Record<string, unknown>)[KEY] === "tablet" ? "tablet" : "booth";
+  return (window as unknown as Record<string, unknown>)[KEY] === "tablet"
+    ? "tablet"
+    : "booth";
 }
 
 export function assertBoothRole(what: string) {
   if (deviceRole() === "tablet") {
-    throw new Error(`${what} runs only on the booth phone, never on the tablet remote.`);
+    throw new Error(
+      `${what} runs only on the booth phone, never on the tablet remote.`,
+    );
   }
 }
