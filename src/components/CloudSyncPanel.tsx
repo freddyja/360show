@@ -49,6 +49,10 @@ export function CloudSyncPanel() {
           <input
             type="password"
             autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            inputMode="text"
             aria-label="Owner key"
             placeholder={
               hasKey ? "Owner key saved on this device" : "Owner key"

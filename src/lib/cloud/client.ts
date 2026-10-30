@@ -17,15 +17,29 @@ export type CloudSyncStatus =
 
 export function readOwnerKey() {
   try {
-    return localStorage.getItem(KEY_STORAGE) || "";
+    return normalizeOwnerKey(localStorage.getItem(KEY_STORAGE) || "");
   } catch {
     return "";
   }
 }
 
+/** Same normalization as the server: NFKC, no zero-width chars, trimmed, one pair of quotes removed. */
+export function normalizeOwnerKey(raw: string) {
+  let v = raw
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+  if (
+    v.length >= 2 &&
+    ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))
+  )
+    v = v.slice(1, -1).trim();
+  return v;
+}
+
 export function writeOwnerKey(key: string) {
   try {
-    if (key) localStorage.setItem(KEY_STORAGE, key.trim());
+    if (key) localStorage.setItem(KEY_STORAGE, normalizeOwnerKey(key));
     else localStorage.removeItem(KEY_STORAGE);
   } catch {}
 }

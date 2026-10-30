@@ -6,7 +6,11 @@ import type { CloudEventRecord, CloudSettingsRecord } from "./types";
 
 /** Trim whitespace/newlines and one pair of surrounding quotes (common paste mistake). */
 export function normalizeOwnerKey(raw: string | null | undefined) {
-  let v = (raw || "").trim();
+  // NFKC folds full-width/compat characters; strip zero-width chars iOS keyboards can insert.
+  let v = (raw || "")
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
   if (
     v.length >= 2 &&
     ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))
