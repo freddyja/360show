@@ -135,7 +135,12 @@ async function persistShareMeta(payload: CloudShare, options?: { allowDriveFallb
   throw new Error(message);
 }
 
-async function uploadVideoToBlob(pathname: string, file: File, preferred: BlobAccess | null) {
+async function uploadVideoToBlob(
+  pathname: string,
+  file: File,
+  preferred: BlobAccess | null,
+  onUploadProgress?: (fraction: number) => void,
+) {
   const order: BlobAccess[] =
     preferred === "private" ? ["private", "public"] : ["public", "private"];
   let lastError: unknown;
@@ -145,6 +150,9 @@ async function uploadVideoToBlob(pathname: string, file: File, preferred: BlobAc
         access,
         handleUploadUrl: "/api/share/upload",
         multipart: true,
+        onUploadProgress: onUploadProgress
+          ? ({ percentage }) => onUploadProgress(Math.min(1, Math.max(0, percentage / 100)))
+          : undefined,
       });
     } catch (error) {
       lastError = error;
@@ -168,6 +176,7 @@ export async function publishClipToCloud(options: {
   musicBedLabel?: string;
   hasAudio?: boolean;
   blobAccess?: BlobAccess | null;
+  onUploadProgress?: (fraction: number) => void;
   existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled" | "musicBedLabel" | "hasAudio"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, existing } = options;
@@ -193,7 +202,7 @@ export async function publishClipToCloud(options: {
     }
     const pathname = shareVideoPath(clip.id, prepared.contentType);
     const preferred = options.blobAccess ?? (await fetchShareConfig()).blobAccess ?? null;
-    const uploaded = await uploadVideoToBlob(pathname, prepared.file, preferred);
+    const uploaded = await uploadVideoToBlob(pathname, prepared.file, preferred, options.onUploadProgress);
     videoUrl = playbackVideoUrl(clip.id, uploaded.url);
     videoContentType = prepared.contentType;
   } else {
@@ -219,6 +228,7 @@ export async function publishClipToDrive(options: {
   slowMoEnabled?: boolean;
   musicBedLabel?: string;
   hasAudio?: boolean;
+  onUploadProgress?: (fraction: number) => void;
   existing?: Pick<CloudShare, "videoUrl" | "videoContentType" | "baked" | "destination" | "driveFileId" | "webViewLink" | "slowMoEnabled" | "musicBedLabel" | "hasAudio"> | CloudShare | null;
 }): Promise<CloudShare> {
   const { event, clip, localBlob, folderName, existing } = options;
@@ -267,6 +277,7 @@ export async function publishClipToDrive(options: {
     folderName,
     eventName: event.name,
     clipId: clip.id,
+    onProgress: options.onUploadProgress,
   });
 
   return persistShareMeta(

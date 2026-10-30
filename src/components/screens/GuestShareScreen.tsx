@@ -44,6 +44,9 @@ export function GuestShareScreen({
   const [waitingForUpload, setWaitingForUpload] = useState(false);
   const [config, setConfig] = useState<ShareConfig | null>(null);
   const [publishState, setPublishState] = useState<string | null>(null);
+  // Operator QR / share link stay hidden until upload + metadata publish finish.
+  const [publishPhase, setPublishPhase] = useState<"working" | "done" | "error" | "blocked">("working");
+  const [publishRetry, setPublishRetry] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [status, setStatus] = useState("Ready");
   const publishOnce = useRef<string | null>(null);
@@ -121,6 +124,7 @@ export function GuestShareScreen({
     const publishKey = `${clipId}:${destination}:${operatorSlowMo ? "slowmo" : "1x"}:${musicBedId(localEvent.musicBedLabel)}:${localEvent.customMusicBlobId || "bed"}:${localEvent.frameStyle}`;
     if (publishOnce.current === publishKey) return;
     publishOnce.current = publishKey;
+    setPublishPhase("working");
     let cancelled = false;
     const clipToPublish = localClip;
     const eventToPublish = localEvent;
@@ -182,18 +186,22 @@ export function GuestShareScreen({
 
         if (settings.forceOffline) {
           setPublishState("Offline — clip stays on this tablet");
+          setPublishPhase("blocked");
           return;
         }
         if (destination === "blob" && !config.blobConfigured) {
           setPublishState(BLOB_CLOUD_UNAVAILABLE_MESSAGE);
+          setPublishPhase("blocked");
           return;
         }
         if (destination === "drive" && !config.driveConfigured) {
           setPublishState("Google Drive is not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET");
+          setPublishPhase("blocked");
           return;
         }
         if (destination === "drive" && !config.driveConnected) {
           setPublishState("Connect Google Drive in Settings, then open Share again");
+          setPublishPhase("blocked");
           return;
         }
 
@@ -211,6 +219,9 @@ export function GuestShareScreen({
                 musicBedLabel,
                 hasAudio: mixedAudio,
                 existing,
+                onUploadProgress: (fraction) => {
+                  if (!cancelled) setPublishState(`Uploading to Google Drive… ${Math.round(fraction * 100)}%`);
+                },
               })
             : await publishClipToCloud({
                 event: eventToPublish,
@@ -222,9 +233,13 @@ export function GuestShareScreen({
                 hasAudio: mixedAudio,
                 blobAccess: config.blobAccess,
                 existing,
+                onUploadProgress: (fraction) => {
+                  if (!cancelled) setPublishState(`Uploading to guest cloud… ${Math.round(fraction * 100)}%`);
+                },
               });
         if (cancelled) return;
         setCloud(published);
+        setPublishPhase("done");
         await patchClip(clipToPublish.id, {
           hasBakedBlob: needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, usesCustomMusic(eventToPublish), eventToPublish.frameStyle),
           bakedAt: needsExportBake(operatorSlowMo, eventToPublish.musicBedLabel, usesCustomMusic(eventToPublish), eventToPublish.frameStyle)
@@ -263,6 +278,7 @@ export function GuestShareScreen({
         const fatal = isBlobUnusableError(error);
         if (!fatal) publishOnce.current = null;
         if (!cancelled) {
+          setPublishPhase(fatal ? "blocked" : "error");
           setPublishState(
             fatal
               ? BLOB_CLOUD_UNAVAILABLE_MESSAGE
@@ -296,6 +312,7 @@ export function GuestShareScreen({
     clipId,
     getBlob,
     patchClip,
+    publishRetry,
   ]);
 
   if (!ready || (!clip && !cloudReady)) {
@@ -436,6 +453,7 @@ export function GuestShareScreen({
     }
   }
 
+  const shareReady = publicMode || publishPhase === "done";
   const readyLabel =
     status !== "Ready"
       ? status
@@ -546,20 +564,52 @@ export function GuestShareScreen({
               </p>
             )}
         </div>
-        <QRCard
-          url={shareUrl}
-          accentColor={event.accentColor}
-          note={
-            !publicMode && destination === "blob" && config && !config.blobConfigured
-              ? "Guest phones cannot open this QR until cloud share is back. Download on this tablet still works."
-              : null
-          }
-        />
+        {shareReady ? (
+          <QRCard url={shareUrl} accentColor={event.accentColor} note={null} />
+        ) : (
+          <div
+            className="booth-card flex flex-col items-center justify-center gap-3 rounded-[24px] border p-6 text-center"
+            aria-live="polite"
+            data-testid="share-pending"
+          >
+            {publishPhase === "working" ? (
+              <>
+                <RefreshCw className="h-8 w-8 animate-spin text-cyan-300" />
+                <p className="text-xl font-semibold text-white">Uploading…</p>
+                <p className="text-sm text-slate-300">{publishState || "Preparing clip…"}</p>
+                <p className="text-xs text-slate-500">The guest QR appears when the upload is finished.</p>
+              </>
+            ) : publishPhase === "error" ? (
+              <>
+                <p className="text-xl font-semibold text-rose-200">Upload failed</p>
+                <p className="text-sm text-slate-300">{publishState || "Cloud upload failed"}</p>
+                <button
+                  type="button"
+                  className="rounded-full border border-cyan-300 bg-cyan-400/20 px-5 py-2 font-semibold text-white"
+                  onClick={() => {
+                    publishOnce.current = null;
+                    setPublishState(null);
+                    setPublishPhase("working");
+                    setPublishRetry((n) => n + 1);
+                  }}
+                >
+                  Retry upload
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-semibold text-amber-200">Guest QR unavailable</p>
+                <p className="text-sm text-slate-300">{publishState || "Cloud share is not available."}</p>
+                <p className="text-xs text-slate-500">Download on this device still works.</p>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mt-4">
         <ShareActions
-          url={shareUrl}
+          url={shareReady ? shareUrl : ""}
           onDownload={() => void download()}
           canDownload={Boolean(clip.hasBlob || clip.demoAssetPath || remoteUrl || resolvedCloud?.driveFileId)}
           downloadSubtitle={
