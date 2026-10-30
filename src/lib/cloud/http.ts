@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cloudSyncReady, isCloudEventId, ownerKeyMatches } from "./server";
+import { checkOwnerKey, cloudSyncReady, isCloudEventId } from "./server";
 import type { CloudEventRecord } from "./types";
 
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -11,9 +11,17 @@ export function gate(request: Request) {
       { status: 503, headers: NO_STORE },
     );
   }
-  if (!ownerKeyMatches(request)) {
+  const check = checkOwnerKey(request);
+  if (check !== "ok") {
     return NextResponse.json(
-      { error: "Owner key required", configured: true },
+      {
+        error:
+          check === "missing-header"
+            ? "Owner key required (x-booth-key header missing)"
+            : "Owner key does not match",
+        reason: check,
+        configured: true,
+      },
       { status: 401, headers: NO_STORE },
     );
   }

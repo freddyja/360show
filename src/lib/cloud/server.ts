@@ -4,9 +4,42 @@ import { getWithStoreAccess, putWithStoreAccess } from "@/lib/share/blobAccess";
 import { blobConfigured } from "@/lib/share/server";
 import type { CloudEventRecord, CloudSettingsRecord } from "./types";
 
-/** Server-side owner key gate for cloud event/settings sync. */
+/** Trim whitespace/newlines and one pair of surrounding quotes (common paste mistake). */
+export function normalizeOwnerKey(raw: string | null | undefined) {
+  let v = (raw || "").trim();
+  if (
+    v.length >= 2 &&
+    ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))
+  )
+    v = v.slice(1, -1).trim();
+  return v;
+}
+
+const envKey = () => normalizeOwnerKey(process.env.BOOTH_OWNER_KEY);
+
+/** Server-side owner key gate for cloud event/settings sync. Read at runtime (Node). */
 export function ownerKeyConfigured() {
-  return Boolean(process.env.BOOTH_OWNER_KEY?.trim());
+  return Boolean(envKey());
+}
+
+export type OwnerKeyCheck = "ok" | "missing-header" | "mismatch";
+
+export function checkOwnerKey(request: Request): OwnerKeyCheck {
+  const expected = envKey();
+  const got = normalizeOwnerKey(request.headers.get("x-booth-key"));
+  if (!got) return "missing-header";
+  const a = createHash("sha256").update(expected).digest();
+  const b = createHash("sha256").update(got).digest();
+  if (expected && timingSafeEqual(a, b)) return "ok";
+  // Diagnostics without values: lengths only, server log only.
+  console.warn(
+    `[cloud-sync] owner key mismatch (server key length ${expected.length}, header length ${got.length})`,
+  );
+  return "mismatch";
+}
+
+export function ownerKeyMatches(request: Request) {
+  return checkOwnerKey(request) === "ok";
 }
 
 /** Local `next dev` without Blob uses an in-memory store so sync can be exercised. */
@@ -19,18 +52,9 @@ export function cloudSyncReady() {
   return ownerKeyConfigured() && (blobConfigured() || devMemory());
 }
 
-export function ownerKeyMatches(request: Request) {
-  const expected = process.env.BOOTH_OWNER_KEY?.trim();
-  const got = request.headers.get("x-booth-key")?.trim() || "";
-  if (!expected || !got) return false;
-  const a = createHash("sha256").update(expected).digest();
-  const b = createHash("sha256").update(got).digest();
-  return timingSafeEqual(a, b);
-}
-
 /** Unguessable, per-key prefix so blob paths can't be enumerated even in a public store. */
 function root() {
-  const key = process.env.BOOTH_OWNER_KEY?.trim() || "";
+  const key = envKey();
   return `booth/${createHash("sha256").update(`360show:${key}`).digest("hex").slice(0, 24)}`;
 }
 
