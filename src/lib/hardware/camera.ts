@@ -4,17 +4,13 @@ import { resolveVideoQuality, videoQualityProfile } from "../capture/quality";
 
 export type CameraStatus = "ok" | "denied" | "unavailable";
 
-async function applyQualityConstraints(
-  stream: MediaStream,
-  quality: VideoQuality,
-) {
+async function applyQualityConstraints(stream: MediaStream, quality: VideoQuality) {
   const track = stream.getVideoTracks()[0];
   if (!track?.applyConstraints) return;
   const profile = videoQualityProfile(quality);
   const caps = track.getCapabilities?.();
   const maxW = caps?.width && "max" in caps.width ? caps.width.max : undefined;
-  const maxH =
-    caps?.height && "max" in caps.height ? caps.height.max : undefined;
+  const maxH = caps?.height && "max" in caps.height ? caps.height.max : undefined;
   // 1080p is the reliable target. If the sensor reports more, still cap at the profile
   // (Fold / flagship phones can do 4K, which blows up bake time and Blob size).
   const width = maxW ? Math.min(profile.width, maxW) : profile.width;
@@ -80,27 +76,18 @@ function facingOf(stream: MediaStream): CameraFacing | null {
 
 export async function getCameraAvailability(): Promise<CameraAvailability> {
   assertBoothRole("getCameraAvailability");
-  if (
-    typeof navigator === "undefined" ||
-    !navigator.mediaDevices?.enumerateDevices
-  ) {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
     return { front: null, back: null, count: 0 };
   }
   try {
-    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(
-      (d) => d.kind === "videoinput",
-    );
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
     const labels = cams.map((d) => d.label.toLowerCase());
     const labelled = labels.some(Boolean);
     const front = labels.some((l) => /front|user|facing front|selfie/.test(l));
     const back = labels.some((l) => /back|rear|environment|world/.test(l));
     if (!labelled || (!front && !back)) {
       // Unlabelled or desktop webcams: we can't tell which way they face.
-      return {
-        front: cams.length ? null : false,
-        back: cams.length ? null : false,
-        count: cams.length,
-      };
+      return { front: cams.length ? null : false, back: cams.length ? null : false, count: cams.length };
     }
     return { front, back, count: cams.length };
   } catch {
@@ -113,15 +100,9 @@ export async function getCameraAvailability(): Promise<CameraAvailability> {
  * exists), then the other facing, then any camera. Never mirrors the stream:
  * recordings are saved exactly as the sensor delivers them.
  */
-export async function openCamera(
-  quality: VideoQuality = "high",
-  facing: CameraFacing = readCameraFacing(),
-): Promise<CameraOpenResult> {
+export async function openCamera(quality: VideoQuality = "high", facing: CameraFacing = readCameraFacing()): Promise<CameraOpenResult> {
   assertBoothRole("openCamera");
-  if (
-    typeof navigator === "undefined" ||
-    !navigator.mediaDevices?.getUserMedia
-  ) {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
     throw new Error("Camera API unavailable");
   }
 
@@ -134,23 +115,10 @@ export async function openCamera(
     height: { ideal: profile.height },
     frameRate: { ideal: profile.fps },
   });
-  const attempts: {
-    video: MediaTrackConstraints | true;
-    target: CameraFacing | null;
-  }[] = [
+  const attempts: { video: MediaTrackConstraints | true; target: CameraFacing | null }[] = [
     { video: sized({ exact: facing }), target: facing },
     ...(resolved === "high"
-      ? [
-          {
-            video: {
-              facingMode: { exact: facing },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              frameRate: { ideal: 30 },
-            },
-            target: facing,
-          },
-        ]
+      ? [{ video: { facingMode: { exact: facing }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, target: facing }]
       : []),
     { video: { facingMode: { exact: facing } }, target: facing },
     // Desktop webcams / browsers without facingMode support reject `exact`.
@@ -162,41 +130,25 @@ export async function openCamera(
   let lastError: unknown = null;
   for (const { video, target } of attempts) {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video,
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
       await applyQualityConstraints(stream, resolved);
       const actual = facingOf(stream) ?? target;
-      return {
-        stream,
-        requested: facing,
-        actual,
-        fellBack: actual !== null && actual !== facing,
-      };
+      return { stream, requested: facing, actual, fellBack: actual !== null && actual !== facing };
     } catch (error) {
       lastError = error;
       const name = error instanceof Error ? error.name : "";
       if (name === "NotAllowedError" || name === "SecurityError") throw error;
     }
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("No camera available");
+  throw lastError instanceof Error ? lastError : new Error("No camera available");
 }
 
-export async function getCameraStream(
-  quality: VideoQuality = "high",
-  facing?: CameraFacing,
-): Promise<MediaStream> {
+export async function getCameraStream(quality: VideoQuality = "high", facing?: CameraFacing): Promise<MediaStream> {
   assertBoothRole("getCameraStream");
   return (await openCamera(quality, facing)).stream;
 }
 
-export async function probeCamera(
-  quality: VideoQuality = "high",
-  facing?: CameraFacing,
-): Promise<CameraStatus> {
+export async function probeCamera(quality: VideoQuality = "high", facing?: CameraFacing): Promise<CameraStatus> {
   assertBoothRole("probeCamera");
   return (await probeCameraFacing(quality, facing)).status;
 }
@@ -205,46 +157,23 @@ export async function probeCamera(
 export async function probeCameraFacing(
   quality: VideoQuality = "high",
   facing: CameraFacing = readCameraFacing(),
-): Promise<{
-  status: CameraStatus;
-  actual: CameraFacing | null;
-  fellBack: boolean;
-  availability: CameraAvailability;
-}> {
+): Promise<{ status: CameraStatus; actual: CameraFacing | null; fellBack: boolean; availability: CameraAvailability }> {
   assertBoothRole("probeCameraFacing");
-  if (
-    typeof navigator === "undefined" ||
-    !navigator.mediaDevices?.getUserMedia
-  ) {
-    return {
-      status: "unavailable",
-      actual: null,
-      fellBack: false,
-      availability: { front: false, back: false, count: 0 },
-    };
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    return { status: "unavailable", actual: null, fellBack: false, availability: { front: false, back: false, count: 0 } };
   }
   try {
     const opened = await openCamera(quality, facing);
     opened.stream.getTracks().forEach((track) => track.stop());
     const availability = await getCameraAvailability();
     // What we just learned beats label guessing.
-    if (opened.actual === facing)
-      availability[facing === "user" ? "front" : "back"] = true;
-    if (opened.fellBack)
-      availability[facing === "user" ? "front" : "back"] = false;
-    return {
-      status: "ok",
-      actual: opened.actual,
-      fellBack: opened.fellBack,
-      availability,
-    };
+    if (opened.actual === facing) availability[facing === "user" ? "front" : "back"] = true;
+    if (opened.fellBack) availability[facing === "user" ? "front" : "back"] = false;
+    return { status: "ok", actual: opened.actual, fellBack: opened.fellBack, availability };
   } catch (error) {
     const name = error instanceof Error ? error.name : "";
     return {
-      status:
-        name === "NotAllowedError" || name === "SecurityError"
-          ? "denied"
-          : "unavailable",
+      status: name === "NotAllowedError" || name === "SecurityError" ? "denied" : "unavailable",
       actual: null,
       fellBack: false,
       availability: await getCameraAvailability(),

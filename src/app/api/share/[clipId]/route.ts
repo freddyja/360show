@@ -1,29 +1,15 @@
 import { NextResponse } from "next/server";
-import {
-  blobUsable,
-  getBlobAvailability,
-  readCloudShare,
-  writeCloudShare,
-} from "@/lib/share/server";
-import {
-  BLOB_STORE_UNAVAILABLE_MESSAGE,
-  formatBlobWriteError,
-} from "@/lib/share/access";
+import { blobUsable, getBlobAvailability, readCloudShare, writeCloudShare } from "@/lib/share/server";
+import { BLOB_STORE_UNAVAILABLE_MESSAGE, formatBlobWriteError } from "@/lib/share/access";
 import { isClipId, isFrameStyleId, type CloudShare } from "@/lib/share/types";
 
 export const dynamic = "force-dynamic";
 
 function drivePayloadComplete(body: CloudShare) {
-  return (
-    body.destination === "drive" &&
-    Boolean(body.driveFileId || body.webViewLink)
-  );
+  return body.destination === "drive" && Boolean(body.driveFileId || body.webViewLink);
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ clipId: string }> },
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ clipId: string }> }) {
   const { clipId } = await params;
   if (!isClipId(clipId)) {
     return NextResponse.json({ error: "Invalid clip id" }, { status: 400 });
@@ -40,10 +26,7 @@ export async function GET(
   return NextResponse.json({ error: "Share not found" }, { status: 404 });
 }
 
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ clipId: string }> },
-) {
+export async function PUT(request: Request, { params }: { params: Promise<{ clipId: string }> }) {
   const { clipId } = await params;
   if (!isClipId(clipId)) {
     return NextResponse.json({ error: "Invalid clip id" }, { status: 400 });
@@ -56,15 +39,8 @@ export async function PUT(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  if (
-    body.clipId !== clipId ||
-    !body.videoUrl ||
-    !isFrameStyleId(body.frameStyle)
-  ) {
-    return NextResponse.json(
-      { error: "Invalid share payload" },
-      { status: 400 },
-    );
+  if (body.clipId !== clipId || !body.videoUrl || !isFrameStyleId(body.frameStyle)) {
+    return NextResponse.json({ error: "Invalid share payload" }, { status: 400 });
   }
 
   const blob = await getBlobAvailability();

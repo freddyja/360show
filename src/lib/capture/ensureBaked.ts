@@ -9,10 +9,7 @@ import type { VideoQuality } from "./quality";
 
 const inflight = new Map<string, Promise<BakeResult>>();
 
-export function bakeSourceForClip(
-  clip: Clip,
-  localBlob?: Blob | null,
-): Blob | string {
+export function bakeSourceForClip(clip: Clip, localBlob?: Blob | null): Blob | string {
   if (localBlob && localBlob.size > 500) return localBlob;
   return clip.demoAssetPath || DEMO_ASSET_PATH;
 }
@@ -23,12 +20,7 @@ export function needsExportBake(
   hasCustom = false,
   frameStyle?: FrameStyleId | string | null,
 ) {
-  return (
-    Boolean(slowMo) ||
-    hasCustom ||
-    hasMusicBed(musicLabel) ||
-    isBurnableFrame(frameStyle)
-  );
+  return Boolean(slowMo) || hasCustom || hasMusicBed(musicLabel) || isBurnableFrame(frameStyle);
 }
 
 /**
@@ -105,9 +97,5 @@ export function triggerBlobDownload(blob: Blob, filename: string) {
 }
 
 export function extensionForBlob(blob: Blob) {
-  return blob.type.includes("mp4")
-    ? "mp4"
-    : blob.type.includes("quicktime")
-      ? "mov"
-      : "webm";
+  return blob.type.includes("mp4") ? "mp4" : blob.type.includes("quicktime") ? "mov" : "webm";
 }

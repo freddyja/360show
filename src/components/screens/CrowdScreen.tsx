@@ -9,12 +9,7 @@ import { FrameOverlay, frameMediaClass } from "@/components/FrameOverlay";
 import { RampPlayer } from "@/components/RampPlayer";
 import { getBakedBlob } from "@/lib/db";
 import { bakedBlobKey } from "@/lib/capture/bake";
-import {
-  readCrowd,
-  subscribeCrowd,
-  type CrowdNowPlaying,
-  type CrowdPhase,
-} from "@/lib/crowd/channel";
+import { readCrowd, subscribeCrowd, type CrowdNowPlaying, type CrowdPhase } from "@/lib/crowd/channel";
 import { isDrivePlaybackUrl } from "@/lib/drive/urls";
 import { frameBakeId, rampProfileForFrame } from "@/lib/frames";
 import { musicBedId } from "@/lib/music/beds";
@@ -53,11 +48,7 @@ export function CrowdScreen({ eventId }: { eventId: string }) {
 
   const phaseClipId = live?.clipId || latestClip?.id || hintClipId;
   const localClip = useMemo(
-    () =>
-      clips.find((item) => item.id === phaseClipId) ??
-      latestClip ??
-      eventClips[0] ??
-      null,
+    () => clips.find((item) => item.id === phaseClipId) ?? latestClip ?? eventClips[0] ?? null,
     [clips, phaseClipId, latestClip, eventClips],
   );
 
@@ -75,16 +66,8 @@ export function CrowdScreen({ eventId }: { eventId: string }) {
     };
   }, [phaseClipId, localClip?.hasBlob]);
 
-  const remoteUrl =
-    localClip?.remoteVideoUrl ||
-    live?.remoteVideoUrl ||
-    cloud?.videoUrl ||
-    null;
-  const originalSrc = useClipSrc(
-    localClip?.id,
-    localClip?.demoAssetPath || cloud?.demoAssetPath,
-    remoteUrl,
-  );
+  const remoteUrl = localClip?.remoteVideoUrl || live?.remoteVideoUrl || cloud?.videoUrl || null;
+  const originalSrc = useClipSrc(localClip?.id, localClip?.demoAssetPath || cloud?.demoAssetPath, remoteUrl);
   const [bakedSrc, setBakedSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -127,18 +110,12 @@ export function CrowdScreen({ eventId }: { eventId: string }) {
   const names = event?.clientNames || cloud?.clientNames || "Guests";
   const accent = event?.accentColor || cloud?.accentColor || "#22d3ee";
   const frameStyle = event?.frameStyle || cloud?.frameStyle || "gold-oval";
-  const hasLocalOriginal = Boolean(
-    localClip && (localClip.hasBlob || localClip.demoAssetPath),
-  );
-  const playingBakedFile =
-    Boolean(bakedSrc) ||
-    Boolean((cloud?.baked || remoteUrl) && !hasLocalOriginal && clip);
-  const liveRamp =
-    hasLocalOriginal && !bakedSrc && settings.slowMoEnabled !== false;
+  const hasLocalOriginal = Boolean(localClip && (localClip.hasBlob || localClip.demoAssetPath));
+  const playingBakedFile = Boolean(bakedSrc) || Boolean((cloud?.baked || remoteUrl) && !hasLocalOriginal && clip);
+  const liveRamp = hasLocalOriginal && !bakedSrc && settings.slowMoEnabled !== false;
   const showWebFrame = !playingBakedFile;
   const phase: CrowdPhase = live?.phase || (clip ? "ready" : "idle");
-  const spinning =
-    phase === "countdown" || phase === "recording" || phase === "processing";
+  const spinning = phase === "countdown" || phase === "recording" || phase === "processing";
   const shareUrl = clip ? clipShareUrl(clip.id) : "";
 
   if (!ready) return <BootScreen />;
@@ -149,15 +126,11 @@ export function CrowdScreen({ eventId }: { eventId: string }) {
       <div className="relative flex min-h-dvh flex-col px-4 py-4 sm:px-8 sm:py-6">
         <header className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm tracking-[0.28em] text-cyan-200 uppercase">
-              360 Photo Booth
-            </p>
+            <p className="text-sm tracking-[0.28em] text-cyan-200 uppercase">360 Photo Booth</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight text-white drop-shadow sm:text-5xl md:text-6xl">
               {event?.name || cloud?.eventName || "Tonight’s Event"}
             </h1>
-            <p className="mt-2 text-xl text-white/90 sm:text-3xl md:text-4xl">
-              {names}
-            </p>
+            <p className="mt-2 text-xl text-white/90 sm:text-3xl md:text-4xl">{names}</p>
           </div>
           <Link
             href={capturePath(eventId)}
@@ -176,29 +149,18 @@ export function CrowdScreen({ eventId }: { eventId: string }) {
               <RampPlayer
                 src={src}
                 poster={clip.thumbnailDataUrl}
-                className={cn(
-                  "h-full w-full object-cover",
-                  showWebFrame ? frameMediaClass(frameStyle) : "",
-                )}
+                className={cn("h-full w-full object-cover", showWebFrame ? frameMediaClass(frameStyle) : "")}
                 rampProfile={rampProfileForFrame(frameStyle)}
                 liveRamp={liveRamp}
                 allowSound
               />
               {showWebFrame && (
-                <FrameOverlay
-                  style={frameStyle}
-                  names={names}
-                  accentColor={accent}
-                />
+                <FrameOverlay style={frameStyle} names={names} accentColor={accent} />
               )}
               {spinning && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45">
                   <p className="text-6xl font-semibold text-white sm:text-8xl">
-                    {phase === "countdown"
-                      ? (live?.count ?? 3)
-                      : phase === "recording"
-                        ? "SPINNING"
-                        : "SAVING"}
+                    {phase === "countdown" ? live?.count ?? 3 : phase === "recording" ? "SPINNING" : "SAVING"}
                   </p>
                 </div>
               )}
@@ -215,21 +177,12 @@ export function CrowdScreen({ eventId }: { eventId: string }) {
                   }
                 }}
               >
-                {unmuted ? (
-                  <Volume2 className="h-4 w-4" />
-                ) : (
-                  <VolumeX className="h-4 w-4" />
-                )}
+                {unmuted ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
                 {unmuted ? "Sound on" : "Tap for sound"}
               </button>
             </div>
           ) : (
-            <IdleHero
-              names={names}
-              accent={accent}
-              phase={phase}
-              count={live?.count}
-            />
+            <IdleHero names={names} accent={accent} phase={phase} count={live?.count} />
           )}
         </div>
 
@@ -247,12 +200,7 @@ export function CrowdScreen({ eventId }: { eventId: string }) {
           </p>
           {clip && shareUrl && !isDrivePlaybackUrl(src) && (
             <div className="rounded-2xl bg-white p-2">
-              <QRCodeSVG
-                value={shareUrl}
-                size={92}
-                bgColor="#ffffff"
-                fgColor="#07101c"
-              />
+              <QRCodeSVG value={shareUrl} size={92} bgColor="#ffffff" fgColor="#07101c" />
             </div>
           )}
         </footer>
@@ -274,10 +222,7 @@ function IdleHero({
 }) {
   return (
     <div className="flex w-full flex-col items-center justify-center text-center">
-      <div
-        className="mb-6 h-2 w-32 rounded-full sm:w-48"
-        style={{ backgroundColor: accent }}
-      />
+      <div className="mb-6 h-2 w-32 rounded-full sm:w-48" style={{ backgroundColor: accent }} />
       <p className="text-6xl font-semibold tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.55)] sm:text-8xl md:text-9xl">
         {phase === "countdown" && (count ?? 3)}
         {phase === "recording" && "SPINNING"}
@@ -286,9 +231,7 @@ function IdleHero({
       </p>
       <p className="mt-4 text-2xl text-white/85 sm:text-4xl">{names}</p>
       {(phase === "idle" || phase === "ready") && (
-        <p className="mt-3 text-lg tracking-[0.2em] text-cyan-100 uppercase sm:text-xl">
-          Step onto the platform
-        </p>
+        <p className="mt-3 text-lg tracking-[0.2em] text-cyan-100 uppercase sm:text-xl">Step onto the platform</p>
       )}
     </div>
   );

@@ -46,13 +46,7 @@ export function RemoteEnablePanel({
   const [copied, setCopied] = useState(false);
   const tabletUrl = tabletUrlFromRemoteUrl(remoteUrl);
   const laptop = view ? operatorIsFresh(view) : false;
-  const status = !enabled
-    ? "off"
-    : error
-      ? "error"
-      : laptop
-        ? "paired"
-        : "waiting";
+  const status = !enabled ? "off" : error ? "error" : laptop ? "paired" : "waiting";
 
   return (
     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -63,8 +57,8 @@ export function RemoteEnablePanel({
             Remote operator
           </p>
           <p className="mt-1 max-w-xl text-xs text-slate-400">
-            Pair a laptop over HTTPS to START SPIN and change look, music, and
-            booth settings. The phone stays the camera.
+            Pair a laptop over HTTPS to START SPIN and change look, music, and booth settings. The
+            phone stays the camera.
           </p>
         </div>
         {enabled ? (
@@ -106,38 +100,22 @@ export function RemoteEnablePanel({
             {remoteUrl && (
               <figure className="text-center">
                 <div className="rounded-2xl bg-white p-2">
-                  <QRCodeSVG
-                    value={remoteUrl}
-                    size={148}
-                    bgColor="#ffffff"
-                    fgColor="#07101c"
-                  />
+                  <QRCodeSVG value={remoteUrl} size={148} bgColor="#ffffff" fgColor="#07101c" />
                 </div>
-                <figcaption className="mt-1 text-xs text-slate-400">
-                  Laptop
-                </figcaption>
+                <figcaption className="mt-1 text-xs text-slate-400">Laptop</figcaption>
               </figure>
             )}
             {tabletUrl && (
               <figure className="text-center">
                 <div className="rounded-2xl bg-white p-2">
-                  <QRCodeSVG
-                    value={tabletUrl}
-                    size={148}
-                    bgColor="#ffffff"
-                    fgColor="#07101c"
-                  />
+                  <QRCodeSVG value={tabletUrl} size={148} bgColor="#ffffff" fgColor="#07101c" />
                 </div>
-                <figcaption className="mt-1 text-xs text-slate-400">
-                  Tablet (Start / Stop)
-                </figcaption>
+                <figcaption className="mt-1 text-xs text-slate-400">Tablet (Start / Stop)</figcaption>
               </figure>
             )}
           </div>
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-              Pair status
-            </p>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Pair status</p>
             <p
               className={cn(
                 "mt-1 text-lg font-medium",
@@ -151,15 +129,11 @@ export function RemoteEnablePanel({
               {status === "error" && "Remote channel error"}
             </p>
             {pairCode && (
-              <p className="mt-3 font-mono text-3xl tracking-[0.35em] text-white">
-                {pairCode}
-              </p>
+              <p className="mt-3 font-mono text-3xl tracking-[0.35em] text-white">{pairCode}</p>
             )}
             <p className="mt-2 flex items-center gap-2 text-sm text-slate-400">
               <Smartphone className="h-4 w-4" />
-              Laptop opens this link (or types the code on `/remote` for this
-              event). Tablet scans the Tablet QR, or opens /tablet and types the
-              code.
+              Laptop opens this link (or types the code on `/remote` for this event). Tablet scans the Tablet QR, or opens /tablet and types the code.
             </p>
             {remoteUrl && (
               <button
@@ -180,9 +154,7 @@ export function RemoteEnablePanel({
               </button>
             )}
             {remoteUrl && (
-              <p className="mt-2 break-all text-xs text-slate-500">
-                {remoteUrl}
-              </p>
+              <p className="mt-2 break-all text-xs text-slate-500">{remoteUrl}</p>
             )}
           </div>
         </div>

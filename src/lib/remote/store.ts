@@ -2,11 +2,7 @@ import { timingSafeEqual } from "crypto";
 import { del } from "@vercel/blob";
 import { getWithStoreAccess, putWithStoreAccess } from "@/lib/share/blobAccess";
 import { blobConfigured } from "@/lib/share/server";
-import {
-  blobCircuitOpen,
-  blobUsable,
-  noteBlobFailure,
-} from "@/lib/share/blobStatus";
+import { blobCircuitOpen, blobUsable, noteBlobFailure } from "@/lib/share/blobStatus";
 import { REMOTE_UNAVAILABLE_MESSAGE } from "@/lib/share/access";
 import { createId } from "@/lib/ids";
 import {
@@ -45,13 +41,10 @@ type RemoteMusicFile = {
   contentType: string;
 };
 
-const memoryCodes = globalThis as unknown as {
-  __360showRemoteCodes?: Map<string, string>;
-};
+const memoryCodes = globalThis as unknown as { __360showRemoteCodes?: Map<string, string> };
 
 function memoryCodeMap() {
-  if (!memoryCodes.__360showRemoteCodes)
-    memoryCodes.__360showRemoteCodes = new Map();
+  if (!memoryCodes.__360showRemoteCodes) memoryCodes.__360showRemoteCodes = new Map();
   return memoryCodes.__360showRemoteCodes;
 }
 
@@ -62,9 +55,7 @@ type MemoryBucket = {
   music: RemoteMusicFile | null;
 };
 
-const memory = globalThis as unknown as {
-  __360showRemote?: Map<string, MemoryBucket>;
-};
+const memory = globalThis as unknown as { __360showRemote?: Map<string, MemoryBucket> };
 
 function memoryMap() {
   if (!memory.__360showRemote) memory.__360showRemote = new Map();
@@ -74,17 +65,12 @@ function memoryMap() {
 export type RemoteStoreMode = "blob" | "cache" | "memory" | "none";
 
 const MODE_TTL_MS = 30_000;
-const gMode = globalThis as unknown as {
-  __360showRemoteMode?: { at: number; mode: RemoteStoreMode };
-};
+const gMode = globalThis as unknown as { __360showRemoteMode?: { at: number; mode: RemoteStoreMode } };
 
 export async function resolveRemoteStoreMode(): Promise<RemoteStoreMode> {
   const cached = gMode.__360showRemoteMode;
   if (cached && Date.now() - cached.at < MODE_TTL_MS) {
-    if (
-      (cached.mode === "blob" || cached.mode === "cache") &&
-      blobCircuitOpen()
-    ) {
+    if ((cached.mode === "blob" || cached.mode === "cache") && blobCircuitOpen()) {
       // Store just proved unusable — do not keep serving a pairing channel.
     } else {
       return cached.mode;
@@ -128,9 +114,7 @@ export function musicUnavailableMessage() {
 
 function randomPairCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
-  return Array.from(bytes, (b) => PAIR_ALPHABET[b % PAIR_ALPHABET.length]).join(
-    "",
-  );
+  return Array.from(bytes, (b) => PAIR_ALPHABET[b % PAIR_ALPHABET.length]).join("");
 }
 
 function randomToken() {
@@ -139,10 +123,7 @@ function randomToken() {
 }
 
 export function normalizePairCode(value: string) {
-  return value
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
 export function safeEqual(a: string, b: string) {
@@ -166,9 +147,7 @@ async function readJsonBlob<T>(pathname: string): Promise<T | null> {
 
 async function writeJsonBlob(pathname: string, data: unknown) {
   try {
-    await putWithStoreAccess(pathname, JSON.stringify(data), {
-      contentType: "application/json",
-    });
+    await putWithStoreAccess(pathname, JSON.stringify(data), { contentType: "application/json" });
   } catch (error) {
     noteBlobFailure(error);
     throw error;
@@ -187,30 +166,19 @@ async function deleteJsonBlob(pathname: string) {
   }
 }
 
-function liveSession(
-  data: RemoteSession | null | undefined,
-  eventId: string,
-): RemoteSession | null {
+function liveSession(data: RemoteSession | null | undefined, eventId: string): RemoteSession | null {
   if (!data?.eventId || data.eventId !== eventId || !data.token) return null;
   return data;
 }
 
-export async function readSession(
-  eventId: string,
-): Promise<RemoteSession | null> {
+export async function readSession(eventId: string): Promise<RemoteSession | null> {
   if (!isEventId(eventId)) return null;
   const mode = await resolveRemoteStoreMode();
   if (mode === "blob") {
-    return liveSession(
-      await readJsonBlob<RemoteSession>(remoteSessionPath(eventId)),
-      eventId,
-    );
+    return liveSession(await readJsonBlob<RemoteSession>(remoteSessionPath(eventId)), eventId);
   }
   if (mode === "cache") {
-    return liveSession(
-      await cacheGetJson<RemoteSession>(cacheSessionKey(eventId)),
-      eventId,
-    );
+    return liveSession(await cacheGetJson<RemoteSession>(cacheSessionKey(eventId)), eventId);
   }
   if (mode === "memory") return memoryMap().get(eventId)?.session ?? null;
   return null;
@@ -226,60 +194,34 @@ export async function writeSession(session: RemoteSession) {
     await cacheSetJson(cacheSessionKey(session.eventId), session);
     return;
   }
-  const bucket = memoryMap().get(session.eventId) ?? {
-    session: null,
-    commands: [],
-    operatorAt: 0,
-    music: null,
-  };
+  const bucket = memoryMap().get(session.eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
   bucket.session = session;
   memoryMap().set(session.eventId, bucket);
 }
 
-type CommandFile =
-  { commands: RemoteCommand[] } | RemoteCommand | { empty?: boolean };
+type CommandFile = { commands: RemoteCommand[] } | RemoteCommand | { empty?: boolean };
 
-function commandsFromFile(
-  data: CommandFile | null | undefined,
-  now = Date.now(),
-): RemoteCommand[] {
+function commandsFromFile(data: CommandFile | null | undefined, now = Date.now()): RemoteCommand[] {
   if (!data || typeof data !== "object") return [];
   if ("empty" in data && data.empty) return [];
-  const list =
-    "commands" in data && Array.isArray(data.commands)
-      ? data.commands
-      : "id" in data && data.id
-        ? [data as RemoteCommand]
-        : [];
-  return list.filter(
-    (cmd) =>
-      cmd?.id && cmd.type && now - cmd.createdAt <= REMOTE_COMMAND_TTL_MS,
-  );
+  const list = "commands" in data && Array.isArray(data.commands) ? data.commands : "id" in data && data.id ? [data as RemoteCommand] : [];
+  return list.filter((cmd) => cmd?.id && cmd.type && now - cmd.createdAt <= REMOTE_COMMAND_TTL_MS);
 }
 
 export async function readCommands(eventId: string): Promise<RemoteCommand[]> {
   if (!isEventId(eventId)) return [];
   const mode = await resolveRemoteStoreMode();
   if (mode === "blob") {
-    return commandsFromFile(
-      await readJsonBlob<CommandFile>(remoteCommandPath(eventId)),
-    );
+    return commandsFromFile(await readJsonBlob<CommandFile>(remoteCommandPath(eventId)));
   }
   if (mode === "cache") {
-    return commandsFromFile(
-      await cacheGetJson<CommandFile>(cacheCommandKey(eventId)),
-    );
+    return commandsFromFile(await cacheGetJson<CommandFile>(cacheCommandKey(eventId)));
   }
-  if (mode === "memory")
-    return commandsFromFile({
-      commands: memoryMap().get(eventId)?.commands ?? [],
-    });
+  if (mode === "memory") return commandsFromFile({ commands: memoryMap().get(eventId)?.commands ?? [] });
   return [];
 }
 
-export async function readCommand(
-  eventId: string,
-): Promise<RemoteCommand | null> {
+export async function readCommand(eventId: string): Promise<RemoteCommand | null> {
   const list = await readCommands(eventId);
   return list[0] ?? null;
 }
@@ -302,29 +244,18 @@ async function persistCommands(eventId: string, commands: RemoteCommand[]) {
     await cacheSetJson(cacheCommandKey(eventId), { commands });
     return;
   }
-  const bucket = memoryMap().get(eventId) ?? {
-    session: null,
-    commands: [],
-    operatorAt: 0,
-    music: null,
-  };
+  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
   bucket.commands = commands;
   memoryMap().set(eventId, bucket);
 }
 
-export async function writeCommand(
-  eventId: string,
-  command: RemoteCommand | null,
-) {
+export async function writeCommand(eventId: string, command: RemoteCommand | null) {
   await persistCommands(eventId, command ? [command] : []);
 }
 
 export async function enqueueCommand(eventId: string, command: RemoteCommand) {
   const existing = await readCommands(eventId);
-  if (
-    existing.some((cmd) => cmd.type === "startSpin") &&
-    command.type === "startSpin"
-  ) {
+  if (existing.some((cmd) => cmd.type === "startSpin") && command.type === "startSpin") {
     throw new Error("START_SPIN_PENDING");
   }
   await persistCommands(eventId, [...existing, command].slice(-24));
@@ -335,18 +266,11 @@ export async function enqueueCommand(eventId: string, command: RemoteCommand) {
  * (last value wins; branding fields merge) and queue the new one. Returns the
  * ids that were superseded.
  */
-export async function enqueueSettingCommand(
-  eventId: string,
-  command: RemoteCommand,
-) {
+export async function enqueueSettingCommand(eventId: string, command: RemoteCommand) {
   const existing = await readCommands(eventId);
   const superseded = existing.filter((cmd) => cmd.type === command.type);
   if (command.type === "setEventBranding") {
-    command.payload = Object.assign(
-      {},
-      ...superseded.map((cmd) => cmd.payload),
-      command.payload,
-    );
+    command.payload = Object.assign({}, ...superseded.map((cmd) => cmd.payload), command.payload);
   }
   const kept = existing.filter((cmd) => cmd.type !== command.type);
   await persistCommands(eventId, [...kept, command].slice(-24));
@@ -374,12 +298,7 @@ export async function touchOperatorPing(eventId: string, now = Date.now()) {
     await cacheSetJson(cacheOperatorKey(eventId), { at: now });
     return now;
   }
-  const bucket = memoryMap().get(eventId) ?? {
-    session: null,
-    commands: [],
-    operatorAt: 0,
-    music: null,
-  };
+  const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
   bucket.operatorAt = now;
   memoryMap().set(eventId, bucket);
   return now;
@@ -389,9 +308,7 @@ export async function readOperatorPing(eventId: string): Promise<number> {
   if (!isEventId(eventId)) return 0;
   const mode = await resolveRemoteStoreMode();
   if (mode === "blob") {
-    const data = await readJsonBlob<{ at?: number }>(
-      remoteOperatorPath(eventId),
-    );
+    const data = await readJsonBlob<{ at?: number }>(remoteOperatorPath(eventId));
     return typeof data?.at === "number" ? data.at : 0;
   }
   if (mode === "cache") {
@@ -406,25 +323,13 @@ export async function writeRemoteMusicMeta(
   meta: { fileName: string; contentType: string; size?: number },
 ) {
   if (blobConfigured()) {
-    await writeJsonBlob(remoteMusicMetaPath(eventId), {
-      ...meta,
-      uploadedAt: Date.now(),
-    });
+    await writeJsonBlob(remoteMusicMetaPath(eventId), { ...meta, uploadedAt: Date.now() });
     return;
   }
   if ((await resolveRemoteStoreMode()) === "memory") {
-    const bucket = memoryMap().get(eventId) ?? {
-      session: null,
-      commands: [],
-      operatorAt: 0,
-      music: null,
-    };
+    const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
     if (bucket.music) {
-      bucket.music = {
-        ...bucket.music,
-        fileName: meta.fileName,
-        contentType: meta.contentType,
-      };
+      bucket.music = { ...bucket.music, fileName: meta.fileName, contentType: meta.contentType };
     }
     memoryMap().set(eventId, bucket);
   }
@@ -443,34 +348,21 @@ export async function writeRemoteMusic(
     return;
   }
   if ((await resolveRemoteStoreMode()) === "memory") {
-    const bucket = memoryMap().get(eventId) ?? {
-      session: null,
-      commands: [],
-      operatorAt: 0,
-      music: null,
-    };
-    bucket.music = {
-      bytes,
-      fileName: meta.fileName,
-      contentType: meta.contentType,
-    };
+    const bucket = memoryMap().get(eventId) ?? { session: null, commands: [], operatorAt: 0, music: null };
+    bucket.music = { bytes, fileName: meta.fileName, contentType: meta.contentType };
     memoryMap().set(eventId, bucket);
     return;
   }
   throw new Error(musicUnavailableMessage());
 }
 
-export async function readRemoteMusic(
-  eventId: string,
-): Promise<RemoteMusicFile | null> {
+export async function readRemoteMusic(eventId: string): Promise<RemoteMusicFile | null> {
   if (!isEventId(eventId)) return null;
   if (!blobConfigured()) {
     return memoryMap().get(eventId)?.music ?? null;
   }
 
-  const meta = await readJsonBlob<{ fileName?: string; contentType?: string }>(
-    remoteMusicMetaPath(eventId),
-  );
+  const meta = await readJsonBlob<{ fileName?: string; contentType?: string }>(remoteMusicMetaPath(eventId));
   const paths = [
     meta?.fileName ? remoteMusicPath(eventId, meta.fileName) : null,
     "mp3",
@@ -482,33 +374,19 @@ export async function readRemoteMusic(
     "opus",
     "bin",
   ]
-    .map((item) =>
-      item && item.includes("/")
-        ? item
-        : item
-          ? remoteMusicPath(eventId, item)
-          : null,
-    )
-    .filter(
-      (path, index, list): path is string =>
-        Boolean(path) && list.indexOf(path) === index,
-    );
+    .map((item) => (item && item.includes("/") ? item : item ? remoteMusicPath(eventId, item) : null))
+    .filter((path, index, list): path is string => Boolean(path) && list.indexOf(path) === index);
 
   try {
     for (const pathname of paths) {
       const result = await getWithStoreAccess(pathname);
       if (!result || result.statusCode !== 200 || !result.stream) continue;
-      const bytes = Buffer.from(
-        await new Response(result.stream).arrayBuffer(),
-      );
+      const bytes = Buffer.from(await new Response(result.stream).arrayBuffer());
       if (!bytes.length) continue;
       return {
         bytes,
         fileName: meta?.fileName || pathname.split("/").pop() || "song",
-        contentType:
-          meta?.contentType ||
-          result.blob.contentType ||
-          "application/octet-stream",
+        contentType: meta?.contentType || result.blob.contentType || "application/octet-stream",
       };
     }
     return memoryMap().get(eventId)?.music ?? null;
@@ -518,10 +396,7 @@ export async function readRemoteMusic(
   }
 }
 
-export async function createPairSession(
-  eventId: string,
-  snapshot: RemoteEventSnapshot,
-): Promise<RemoteSession> {
+export async function createPairSession(eventId: string, snapshot: RemoteEventSnapshot): Promise<RemoteSession> {
   const now = Date.now();
   const session: RemoteSession = {
     eventId,
@@ -559,20 +434,13 @@ async function writePairCodeIndex(pairCode: string, eventId: string) {
   if (mode === "memory") memoryCodeMap().set(code, eventId);
 }
 
-export async function eventIdForPairCode(
-  pairCode: string,
-): Promise<string | null> {
+export async function eventIdForPairCode(pairCode: string): Promise<string | null> {
   const code = normalizePairCode(pairCode);
   if (code.length !== 6) return null;
   const mode = await resolveRemoteStoreMode();
   let eventId: string | null | undefined = null;
-  if (mode === "blob")
-    eventId = (
-      await readJsonBlob<{ eventId?: string }>(remotePairCodeIndexPath(code))
-    )?.eventId;
-  else if (mode === "cache")
-    eventId = (await cacheGetJson<{ eventId?: string }>(cachePairCodeKey(code)))
-      ?.eventId;
+  if (mode === "blob") eventId = (await readJsonBlob<{ eventId?: string }>(remotePairCodeIndexPath(code)))?.eventId;
+  else if (mode === "cache") eventId = (await cacheGetJson<{ eventId?: string }>(cachePairCodeKey(code)))?.eventId;
   else if (mode === "memory") eventId = memoryCodeMap().get(code);
   return eventId && isEventId(eventId) ? eventId : null;
 }
@@ -594,18 +462,12 @@ export function sessionIsLive(session: RemoteSession, now = Date.now()) {
   return now <= session.expiresAt;
 }
 
-export function tokenMatches(
-  session: RemoteSession,
-  token: string | null | undefined,
-) {
+export function tokenMatches(session: RemoteSession, token: string | null | undefined) {
   if (!token) return false;
   return safeEqual(session.token, token);
 }
 
-export function pairCodeMatches(
-  session: RemoteSession,
-  code: string | null | undefined,
-) {
+export function pairCodeMatches(session: RemoteSession, code: string | null | undefined) {
   if (!code) return false;
   const a = normalizePairCode(session.pairCode);
   const b = normalizePairCode(code);
@@ -638,15 +500,8 @@ export function publicView(
   };
 }
 
-export async function publicViewNow(
-  session: RemoteSession,
-  pending: RemoteCommand | null,
-  now = Date.now(),
-) {
-  const operatorHeartbeatAt = Math.max(
-    session.operatorHeartbeatAt,
-    await readOperatorPing(session.eventId),
-  );
+export async function publicViewNow(session: RemoteSession, pending: RemoteCommand | null, now = Date.now()) {
+  const operatorHeartbeatAt = Math.max(session.operatorHeartbeatAt, await readOperatorPing(session.eventId));
   return publicView(session, pending, now, operatorHeartbeatAt);
 }
 
@@ -654,9 +509,6 @@ export function newCommandId() {
   return createId("rcmd");
 }
 
-export function applyAck(
-  session: RemoteSession,
-  ack: RemoteAck,
-): RemoteSession {
+export function applyAck(session: RemoteSession, ack: RemoteAck): RemoteSession {
   return { ...session, lastAck: ack };
 }

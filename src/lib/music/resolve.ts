@@ -8,9 +8,7 @@ import { exportMusicId, usesCustomMusic } from "./custom";
 
 const objectUrls = new Map<string, string>();
 
-export async function srcForCustomMusic(
-  blobId: string,
-): Promise<string | null> {
+export async function srcForCustomMusic(blobId: string): Promise<string | null> {
   const cached = objectUrls.get(blobId);
   if (cached) return cached;
   const blob = await getNamedBlob(blobId);
@@ -29,9 +27,7 @@ export function forgetCustomMusicSrc(blobId: string | null | undefined) {
   }
 }
 
-export async function resolveEventMusic(
-  event: BoothEvent | null | undefined,
-): Promise<{
+export async function resolveEventMusic(event: BoothEvent | null | undefined): Promise<{
   src: string | null;
   musicId: string;
 }> {
@@ -69,13 +65,7 @@ export function useEventMusicSrc(event: BoothEvent | null | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [
-    event,
-    event?.id,
-    event?.customMusicBlobId,
-    event?.musicBedLabel,
-    event?.preferBundledBed,
-  ]);
+  }, [event, event?.id, event?.customMusicBlobId, event?.musicBedLabel, event?.preferBundledBed]);
 
   return src;
 }

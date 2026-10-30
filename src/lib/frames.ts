@@ -68,8 +68,7 @@ export const FRAME_STYLES: FrameStyleMeta[] = [
   {
     id: "polaroid-stack",
     name: "Polaroid stack",
-    description:
-      "Warm instant-film border with a stacked print and caption strip",
+    description: "Warm instant-film border with a stacked print and caption strip",
     assetSrc: "/frames/polaroid-stack.png",
     defaultAccent: "#F5F0E8",
     rampProfile: "time-ramp-gentle",
@@ -121,9 +120,7 @@ export function frameBakeId(id?: FrameStyleId | string | null) {
   return isBurnableFrame(id) ? String(id) : "none";
 }
 
-export function frameCaptionLayout(
-  id?: FrameStyleId | string | null,
-): FrameCaptionLayout | null {
+export function frameCaptionLayout(id?: FrameStyleId | string | null): FrameCaptionLayout | null {
   if (id === "polaroid-stack") {
     return { y: 0.855, color: "#4A4036", tracking: "0.16em", rotateDeg: -1.3 };
   }
@@ -141,10 +138,5 @@ export function frameCaptionLayout(
 
 /** Keep HUD chips off bottom plaques (CF, polaroid, black-tie, neon 80s). */
 export function frameHudTop(id?: FrameStyleId | string | null) {
-  return (
-    id === "christian-fellowship" ||
-    id === "polaroid-stack" ||
-    id === "black-tie-bar" ||
-    id === "neon-80s"
-  );
+  return id === "christian-fellowship" || id === "polaroid-stack" || id === "black-tie-bar" || id === "neon-80s";
 }

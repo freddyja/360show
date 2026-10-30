@@ -20,9 +20,7 @@ const PROBE_PATH = "shares/_access-probe.json";
 let cachedAccess: BlobAccess | null = null;
 
 export function blobAccessFromEnv(): BlobAccess | null {
-  const raw = (process.env.BLOB_ACCESS || process.env.BLOB_STORE_ACCESS || "")
-    .trim()
-    .toLowerCase();
+  const raw = (process.env.BLOB_ACCESS || process.env.BLOB_STORE_ACCESS || "").trim().toLowerCase();
   if (raw === "public" || raw === "private") return raw;
   return null;
 }
@@ -36,16 +34,11 @@ function isMismatch(error: unknown) {
 }
 
 function isNotFound(error: unknown) {
-  return (
-    error instanceof BlobNotFoundError ||
-    (error instanceof Error && error.name === "BlobNotFoundError")
-  );
+  return error instanceof BlobNotFoundError || (error instanceof Error && error.name === "BlobNotFoundError");
 }
 
 function accessOrder(preferred: BlobAccess | null): BlobAccess[] {
-  return preferred === "private"
-    ? ["private", "public"]
-    : ["public", "private"];
+  return preferred === "private" ? ["private", "public"] : ["public", "private"];
 }
 
 /**
@@ -61,9 +54,7 @@ export async function resolveBlobAccess(): Promise<BlobAccess> {
   }
   if (cachedAccess) return cachedAccess;
   if (blobCircuitOpen()) {
-    throw new Error(
-      formatBlobWriteError(new Error("This store has been suspended.")),
-    );
+    throw new Error(formatBlobWriteError(new Error("This store has been suspended.")));
   }
 
   const body = JSON.stringify({ probedAt: Date.now() });
@@ -119,13 +110,9 @@ export async function putWithStoreAccess(
   extra: { contentType?: string } = {},
 ) {
   if (blobCircuitOpen()) {
-    throw new Error(
-      formatBlobWriteError(new Error("This store has been suspended.")),
-    );
+    throw new Error(formatBlobWriteError(new Error("This store has been suspended.")));
   }
-  const preferred = await resolveBlobAccess().catch(
-    () => blobAccessFromEnv() || cachedAccess || "public",
-  );
+  const preferred = await resolveBlobAccess().catch(() => blobAccessFromEnv() || cachedAccess || "public");
   let lastError: unknown;
   for (const access of accessOrder(preferred)) {
     try {
@@ -143,7 +130,5 @@ export async function putWithStoreAccess(
       if (isBlobUnusableError(error) || !isMismatch(error)) throw error;
     }
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error(formatBlobWriteError(lastError));
+  throw lastError instanceof Error ? lastError : new Error(formatBlobWriteError(lastError));
 }

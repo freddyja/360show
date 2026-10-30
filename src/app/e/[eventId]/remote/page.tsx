@@ -4,11 +4,7 @@ import { use } from "react";
 import { Suspense } from "react";
 import { RemoteOperatorScreen } from "@/components/screens/RemoteOperatorScreen";
 
-export default function RemoteOperatorPage({
-  params,
-}: {
-  params: Promise<{ eventId: string }>;
-}) {
+export default function RemoteOperatorPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = use(params);
   return (
     <Suspense

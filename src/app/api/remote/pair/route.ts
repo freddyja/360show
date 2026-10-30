@@ -14,10 +14,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   if (!(await remoteStoreReady())) {
-    return NextResponse.json(
-      { error: storeUnavailableMessage() },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
   }
 
   const body = (await request.json().catch(() => null)) as {
@@ -29,10 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid event id." }, { status: 400 });
   }
   if (!body?.snapshot?.name || !body.snapshot.frameStyle) {
-    return NextResponse.json(
-      { error: "Missing event snapshot." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Missing event snapshot." }, { status: 400 });
   }
 
   try {
@@ -49,12 +43,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not create remote session.",
-      },
+      { error: error instanceof Error ? error.message : "Could not create remote session." },
       { status: 500 },
     );
   }

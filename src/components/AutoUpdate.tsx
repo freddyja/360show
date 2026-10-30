@@ -33,16 +33,9 @@ export function AutoUpdate() {
       // bundle (stale cache / CDN skew), wait 10 min before trying again.
       try {
         const key = "360show:autoUpdate";
-        const prev = JSON.parse(sessionStorage.getItem(key) || "null") as {
-          to: string;
-          at: number;
-        } | null;
-        if (prev && prev.to === pending && Date.now() - prev.at < 10 * 60_000)
-          return;
-        sessionStorage.setItem(
-          key,
-          JSON.stringify({ to: pending, at: Date.now() }),
-        );
+        const prev = JSON.parse(sessionStorage.getItem(key) || "null") as { to: string; at: number } | null;
+        if (prev && prev.to === pending && Date.now() - prev.at < 10 * 60_000) return;
+        sessionStorage.setItem(key, JSON.stringify({ to: pending, at: Date.now() }));
       } catch {}
       reloading = true;
       window.location.reload();

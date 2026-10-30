@@ -1,43 +1,26 @@
 import { cookies } from "next/headers";
-import {
-  DRIVE_RETURN_COOKIE,
-  DRIVE_RT_COOKIE,
-  DRIVE_SCOPES,
-  DRIVE_STATE_COOKIE,
-} from "@/lib/drive/urls";
+import { DRIVE_RETURN_COOKIE, DRIVE_RT_COOKIE, DRIVE_SCOPES, DRIVE_STATE_COOKIE } from "@/lib/drive/urls";
 
 export function driveConfigured() {
-  return Boolean(
-    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
-  );
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
 export function googleRedirectUri(request: Request) {
-  const explicit =
-    process.env.GOOGLE_REDIRECT_URI || process.env.GOOGLE_OAUTH_REDIRECT_URI;
+  const explicit = process.env.GOOGLE_REDIRECT_URI || process.env.GOOGLE_OAUTH_REDIRECT_URI;
   if (explicit) return explicit.replace(/\/$/, "");
   const url = new URL(request.url);
-  const forwardedHost =
-    request.headers.get("x-forwarded-host") ||
-    request.headers.get("host") ||
-    url.host;
+  const forwardedHost = request.headers.get("x-forwarded-host") || request.headers.get("host") || url.host;
   let host = forwardedHost;
   if (host.startsWith("0.0.0.0")) host = host.replace("0.0.0.0", "localhost");
   if (host.startsWith("[::]")) host = host.replace("[::]", "localhost");
-  const proto =
-    request.headers.get("x-forwarded-proto") ||
-    url.protocol.replace(":", "") ||
-    "http";
+  const proto = request.headers.get("x-forwarded-proto") || url.protocol.replace(":", "") || "http";
   return `${proto}://${host}/api/drive/callback`;
 }
 
 function cookieSecure(request: Request) {
   if (process.env.NODE_ENV !== "production") return false;
   try {
-    return (
-      new URL(request.url).protocol === "https:" ||
-      request.headers.get("x-forwarded-proto") === "https"
-    );
+    return new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
   } catch {
     return true;
   }
@@ -45,11 +28,7 @@ function cookieSecure(request: Request) {
 
 export async function setDriveCookies(
   request: Request,
-  values: {
-    refreshToken?: string | null;
-    state?: string | null;
-    returnPath?: string | null;
-  },
+  values: { refreshToken?: string | null; state?: string | null; returnPath?: string | null },
 ) {
   const store = await cookies();
   const secure = cookieSecure(request);
@@ -57,10 +36,7 @@ export async function setDriveCookies(
 
   if (values.refreshToken !== undefined) {
     if (values.refreshToken) {
-      store.set(DRIVE_RT_COOKIE, values.refreshToken, {
-        ...base,
-        maxAge: 60 * 60 * 24 * 180,
-      });
+      store.set(DRIVE_RT_COOKIE, values.refreshToken, { ...base, maxAge: 60 * 60 * 24 * 180 });
     } else {
       store.delete(DRIVE_RT_COOKIE);
     }
@@ -74,10 +50,7 @@ export async function setDriveCookies(
   }
   if (values.returnPath !== undefined) {
     if (values.returnPath) {
-      store.set(DRIVE_RETURN_COOKIE, values.returnPath, {
-        ...base,
-        maxAge: 600,
-      });
+      store.set(DRIVE_RETURN_COOKIE, values.returnPath, { ...base, maxAge: 600 });
     } else {
       store.delete(DRIVE_RETURN_COOKIE);
     }
@@ -115,9 +88,7 @@ interface GoogleTokenResponse {
   error_description?: string;
 }
 
-async function tokenRequest(
-  body: URLSearchParams,
-): Promise<GoogleTokenResponse> {
+async function tokenRequest(body: URLSearchParams): Promise<GoogleTokenResponse> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -125,9 +96,7 @@ async function tokenRequest(
   });
   const data = (await res.json()) as GoogleTokenResponse;
   if (!res.ok || !data.access_token) {
-    throw new Error(
-      data.error_description || data.error || "Google token request failed",
-    );
+    throw new Error(data.error_description || data.error || "Google token request failed");
   }
   return data;
 }
@@ -166,12 +135,7 @@ export async function fetchDriveEmail(accessToken: string) {
 }
 
 export function safeReturnPath(value: string | null | undefined) {
-  if (
-    !value ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    value.includes("://")
-  ) {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("://")) {
     return "/";
   }
   return value;

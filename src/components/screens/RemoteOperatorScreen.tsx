@@ -61,9 +61,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     void fetchShareConfig().then((config) => {
       if (cancelled) return;
       if (config.remoteAvailable === false) {
-        setRemotePaused(
-          config.remoteUnavailableReason || REMOTE_UNAVAILABLE_MESSAGE,
-        );
+        setRemotePaused(config.remoteUnavailableReason || REMOTE_UNAVAILABLE_MESSAGE);
       }
     });
     return () => {
@@ -93,8 +91,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
         }
       } catch (err) {
         if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : "Could not reach the booth.";
+        const message = err instanceof Error ? err.message : "Could not reach the booth.";
         setError(message);
         setView(null);
         if (message === REMOTE_UNAVAILABLE_MESSAGE) {
@@ -139,17 +136,11 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   }
 
   const patchSnapshot = useCallback((patch: Partial<RemoteEventSnapshot>) => {
-    setView((prev) =>
-      prev ? { ...prev, snapshot: { ...prev.snapshot, ...patch } } : prev,
-    );
+    setView((prev) => (prev ? { ...prev, snapshot: { ...prev.snapshot, ...patch } } : prev));
   }, []);
 
   const send = useCallback(
-    async (
-      type: RemoteCommandType,
-      payload: RemoteCommandPayload = {},
-      optimistic?: Partial<RemoteEventSnapshot>,
-    ) => {
+    async (type: RemoteCommandType, payload: RemoteCommandPayload = {}, optimistic?: Partial<RemoteEventSnapshot>) => {
       if (!token) return;
       if (optimistic) patchSnapshot(optimistic);
       setSending(true);
@@ -185,25 +176,14 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     setMusicUploading(true);
     setError(null);
     try {
-      const data = await uploadRemoteMusic(
-        eventId,
-        token,
-        file,
-        Boolean(snapshot?.blobConfigured),
-        {
-          signal: ac.signal,
-        },
-      );
+      const data = await uploadRemoteMusic(eventId, token, file, Boolean(snapshot?.blobConfigured), {
+        signal: ac.signal,
+      });
       if (ac.signal.aborted) return;
-      const settled = await waitForRemoteMusicAck(
-        eventId,
-        token,
-        data.commandId,
-        {
-          signal: ac.signal,
-          timeoutMs: 45_000,
-        },
-      );
+      const settled = await waitForRemoteMusicAck(eventId, token, data.commandId, {
+        signal: ac.signal,
+        timeoutMs: 45_000,
+      });
       if (ac.signal.aborted) return;
       setView({
         ...settled.view,
@@ -228,9 +208,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       }
       setError(
         formatCustomMusicError(err) ||
-          (err instanceof Error
-            ? err.message
-            : "Could not send the song to the booth."),
+          (err instanceof Error ? err.message : "Could not send the song to the booth."),
       );
     } finally {
       window.clearTimeout(timer);
@@ -250,23 +228,13 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   const paired = connection === "paired";
   const boothBusy = view?.boothPhase && view.boothPhase !== "idle";
   const spinLabel = snapshot ? `${snapshot.captureDurationSec}s` : "10s";
-  const crowdHref = crowdUrl(
-    eventId,
-    typeof window === "undefined" ? undefined : window.location.origin,
-    view?.lastClipId,
-  );
+  const crowdHref = crowdUrl(eventId, typeof window === "undefined" ? undefined : window.location.origin, view?.lastClipId);
   const locked = sending || musicUploading || !paired;
 
   const statusLine = useMemo(() => {
     if (!view) return token ? "Connecting…" : "Not paired";
-    if (
-      view.lastAck &&
-      Date.now() - view.lastAck.at < 8000 &&
-      view.boothPhase === "idle"
-    ) {
-      return view.lastAck.ok
-        ? view.lastAck.message || view.boothStatus
-        : view.lastAck.message;
+    if (view.lastAck && Date.now() - view.lastAck.at < 8000 && view.boothPhase === "idle") {
+      return view.lastAck.ok ? view.lastAck.message || view.boothStatus : view.lastAck.message;
     }
     return view.boothStatus || boothStatusForPhase(view.boothPhase);
   }, [view, token]);
@@ -275,17 +243,12 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     return (
       <div className="booth-page min-h-dvh p-4 sm:p-8">
         <div className="booth-frame mx-auto max-w-xl rounded-[28px] p-6 sm:p-10">
-          <p className="text-xs uppercase tracking-[0.25em] text-cyan-200">
-            Remote operator
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">
-            Laptop remote is paused
-          </h1>
+          <p className="text-xs uppercase tracking-[0.25em] text-cyan-200">Remote operator</p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">Laptop remote is paused</h1>
           <p className="mt-3 text-slate-300">{remotePaused}</p>
           <p className="mt-3 text-sm text-slate-400">
-            Capture, look, frames, and custom songs stay on the booth phone.
-            Guest cloud share via Blob is paused too. This page will work again
-            when Vercel Blob is back.
+            Capture, look, frames, and custom songs stay on the booth phone. Guest cloud share via
+            Blob is paused too. This page will work again when Vercel Blob is back.
           </p>
         </div>
       </div>
@@ -296,21 +259,13 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
     return (
       <div className="booth-page min-h-dvh p-4 sm:p-8">
         <div className="booth-frame mx-auto max-w-xl rounded-[28px] p-6 sm:p-10">
-          <p className="text-xs uppercase tracking-[0.25em] text-cyan-200">
-            Remote operator
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">
-            Pair this laptop
-          </h1>
+          <p className="text-xs uppercase tracking-[0.25em] text-cyan-200">Remote operator</p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">Pair this laptop</h1>
           <p className="mt-2 text-slate-300">
-            On the booth phone, open Capture →{" "}
-            <span className="text-white">Enable remote control</span>, then
-            enter the 6-character code here. No account needed.
+            On the booth phone, open Capture → <span className="text-white">Enable remote control</span>,
+            then enter the 6-character code here. No account needed.
           </p>
-          <form
-            onSubmit={(e) => void onJoin(e)}
-            className="mt-6 flex flex-col gap-3"
-          >
+          <form onSubmit={(e) => void onJoin(e)} className="mt-6 flex flex-col gap-3">
             <input
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
@@ -319,10 +274,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               autoComplete="off"
               className="booth-card min-h-14 rounded-2xl border px-4 text-center font-mono text-2xl tracking-[0.4em] text-white outline-none focus:border-cyan-400"
             />
-            <button
-              type="submit"
-              className="min-h-12 rounded-full bg-cyan-400 font-medium text-slate-950"
-            >
+            <button type="submit" className="min-h-12 rounded-full bg-cyan-400 font-medium text-slate-950">
               Pair
             </button>
           </form>
@@ -337,33 +289,24 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
       <div className="booth-frame mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-5xl flex-col rounded-[28px] p-5 sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-cyan-200">
-              Remote operator
-            </p>
+            <p className="text-xs uppercase tracking-[0.25em] text-cyan-200">Remote operator</p>
             <h1 className="mt-1 text-3xl font-semibold text-white sm:text-4xl">
               {snapshot?.name || "Booth"}
               {snapshot?.clientNames ? ` — ${snapshot.clientNames}` : ""}
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              Commands run on the phone while Capture is open. Pick a song on
-              this laptop to play on the booth; phone library browse, Drive
-              login, logos, and the camera stay on the phone.
+              Commands run on the phone while Capture is open. Pick a song on this laptop to play on
+              the booth; phone library browse, Drive login, logos, and the camera stay on the phone.
             </p>
           </div>
           <ConnectionChip connection={connection} />
         </div>
 
         <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-            Booth status
-          </p>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Booth status</p>
           <p className="mt-1 text-xl font-medium text-white">{statusLine}</p>
           {error && <p className="mt-1 text-sm text-red-300">{error}</p>}
-          {pairCode && (
-            <p className="mt-1 font-mono text-sm tracking-[0.25em] text-slate-500">
-              {pairCode}
-            </p>
-          )}
+          {pairCode && <p className="mt-1 font-mono text-sm tracking-[0.25em] text-slate-500">{pairCode}</p>}
         </div>
 
         <button
@@ -384,9 +327,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               {(!view || view.boothPhase === "idle") && "START SPIN"}
             </span>
             <span className="mt-2 block text-lg text-slate-300">
-              {!paired
-                ? "Waiting for the booth Capture screen"
-                : `Launch ${spinLabel} capture on the phone`}
+              {!paired ? "Waiting for the booth Capture screen" : `Launch ${spinLabel} capture on the phone`}
             </span>
           </span>
         </button>
@@ -420,36 +361,25 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
 
         <section className="mt-8">
           <h2 className="text-lg font-medium text-white">Event / look</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Applies on the booth for the next spin (and on the live Capture
-            chrome now).
-          </p>
+          <p className="mt-1 text-sm text-slate-400">Applies on the booth for the next spin (and on the live Capture chrome now).</p>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <label className="block">
-              <span className="mb-2 block text-sm text-slate-400">
-                Event name
-              </span>
+              <span className="mb-2 block text-sm text-slate-400">Event name</span>
               <input
                 value={nameDraft}
                 disabled={locked}
                 onChange={(e) => setNameDraft(e.target.value)}
                 onBlur={() => {
                   if (nameDraft.trim() && nameDraft.trim() !== snapshot?.name) {
-                    void send(
-                      "setEventBranding",
-                      { name: nameDraft.trim() },
-                      { name: nameDraft.trim() },
-                    );
+                    void send("setEventBranding", { name: nameDraft.trim() }, { name: nameDraft.trim() });
                   }
                 }}
                 className="booth-card min-h-12 w-full rounded-2xl border px-4 text-white outline-none focus:border-blue-400"
               />
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm text-slate-400">
-                Couple / client names
-              </span>
+              <span className="mb-2 block text-sm text-slate-400">Couple / client names</span>
               <input
                 value={namesDraft}
                 disabled={locked}
@@ -457,32 +387,20 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                 onBlur={() => {
                   const next = namesDraft.trim() || "Guests";
                   if (next !== snapshot?.clientNames) {
-                    void send(
-                      "setEventBranding",
-                      { clientNames: next },
-                      { clientNames: next },
-                    );
+                    void send("setEventBranding", { clientNames: next }, { clientNames: next });
                   }
                 }}
                 className="booth-card min-h-12 w-full rounded-2xl border px-4 text-white outline-none focus:border-blue-400"
               />
             </label>
             <div>
-              <span className="mb-2 block text-sm text-slate-400">
-                Accent color
-              </span>
+              <span className="mb-2 block text-sm text-slate-400">Accent color</span>
               <div className="flex items-center gap-3">
                 <input
                   type="color"
                   disabled={locked}
                   value={snapshot?.accentColor || "#3B82F6"}
-                  onChange={(e) =>
-                    void send(
-                      "setEventBranding",
-                      { accentColor: e.target.value },
-                      { accentColor: e.target.value },
-                    )
-                  }
+                  onChange={(e) => void send("setEventBranding", { accentColor: e.target.value }, { accentColor: e.target.value })}
                   className="h-12 w-16 cursor-pointer rounded-xl border border-white/10 bg-transparent"
                 />
                 <input
@@ -492,11 +410,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                     const value = e.target.value;
                     patchSnapshot({ accentColor: value });
                     if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-                      void send(
-                        "setEventBranding",
-                        { accentColor: value },
-                        { accentColor: value },
-                      );
+                      void send("setEventBranding", { accentColor: value }, { accentColor: value });
                     }
                   }}
                   className="booth-card min-h-12 flex-1 rounded-2xl border px-4 text-white outline-none focus:border-blue-400"
@@ -504,22 +418,14 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               </div>
             </div>
             <div>
-              <span className="mb-2 block text-sm text-slate-400">
-                Spin length
-              </span>
+              <span className="mb-2 block text-sm text-slate-400">Spin length</span>
               <div className="grid grid-cols-3 gap-2">
                 {CAPTURE_DURATION_SECS.map((sec) => (
                   <button
                     key={sec}
                     type="button"
                     disabled={locked}
-                    onClick={() =>
-                      void send(
-                        "setSpinLength",
-                        { captureDurationSec: sec },
-                        { captureDurationSec: sec },
-                      )
-                    }
+                    onClick={() => void send("setSpinLength", { captureDurationSec: sec }, { captureDurationSec: sec })}
                     className={cn(
                       "min-h-12 rounded-2xl border text-base font-medium",
                       snapshot?.captureDurationSec === sec
@@ -540,16 +446,11 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               disabled={locked}
               value={normalizeMusicBedLabel(snapshot?.musicBedLabel)}
               onChange={(e) => {
-                const musicBedLabel = e.target
-                  .value as (typeof MUSIC_BEDS)[number];
+                const musicBedLabel = e.target.value as (typeof MUSIC_BEDS)[number];
                 void send(
                   "setMusicBed",
                   { musicBedLabel },
-                  {
-                    musicBedLabel,
-                    preferBundledBed: true,
-                    usingCustomMusic: false,
-                  },
+                  { musicBedLabel, preferBundledBed: true, usingCustomMusic: false },
                 );
               }}
               className="booth-card min-h-12 w-full rounded-2xl border px-4 text-white outline-none focus:border-blue-400"
@@ -561,9 +462,8 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               ))}
             </select>
             <p className="mt-2 text-xs text-slate-500">
-              Bundled beds or None apply on the booth. A song picked here
-              uploads over the pair channel into the phone’s IndexedDB and wins
-              until you pick a bed again.
+              Bundled beds or None apply on the booth. A song picked here uploads over the pair channel
+              into the phone’s IndexedDB and wins until you pick a bed again.
               {snapshot?.usingCustomMusic && snapshot.customMusicName
                 ? ` Now playing on the booth: ${snapshot.customMusicName}.`
                 : snapshot?.hasCustomMusic && snapshot.customMusicName
@@ -572,16 +472,14 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
             </p>
             {snapshot?.remoteMusicAvailable === false ? (
               <p className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                Laptop song upload is paused while Vercel Blob is unavailable.
-                Pick a song on the booth phone in Event setup instead.
+                Laptop song upload is paused while Vercel Blob is unavailable. Pick a song on the booth
+                phone in Event setup instead.
               </p>
             ) : (
               <>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <label className="relative flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-500/15 px-4 text-center text-sm font-medium text-white">
-                    {musicUploading
-                      ? "Uploading to booth…"
-                      : "Use song from this laptop"}
+                    {musicUploading ? "Uploading to booth…" : "Use song from this laptop"}
                     <input
                       type="file"
                       accept="audio/*,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
@@ -605,10 +503,9 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                   )}
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  mp3 / m4a / wav / aac / ogg, max{" "}
-                  {formatMusicBytes(18 * 1024 * 1024)}. You cannot browse the
-                  phone’s library from here — pick a file on this laptop. You
-                  are responsible for the rights to play it.
+                  mp3 / m4a / wav / aac / ogg, max {formatMusicBytes(18 * 1024 * 1024)}. You cannot browse the
+                  phone’s library from here — pick a file on this laptop. You are responsible for the rights
+                  to play it.
                 </p>
               </>
             )}
@@ -626,13 +523,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                     void send(
                       "setFrameStyle",
                       { frameStyle: style.id },
-                      {
-                        frameStyle: style.id,
-                        accentColor:
-                          style.defaultAccent ||
-                          snapshot?.accentColor ||
-                          "#3B82F6",
-                      },
+                      { frameStyle: style.id, accentColor: style.defaultAccent || snapshot?.accentColor || "#3B82F6" },
                     )
                   }
                   className={cn(
@@ -649,15 +540,11 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                       alt=""
                       className={cn(
                         "mb-2 h-14 w-full rounded-lg object-cover",
-                        style.thumbAlign === "bottom"
-                          ? "object-bottom"
-                          : "object-center",
+                        style.thumbAlign === "bottom" ? "object-bottom" : "object-center",
                       )}
                     />
                   )}
-                  <span className="block font-medium text-white">
-                    {style.name}
-                  </span>
+                  <span className="block font-medium text-white">{style.name}</span>
                 </button>
               ))}
             </div>
@@ -676,10 +563,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
 
         <section className="mt-8">
           <h2 className="text-lg font-medium text-white">Booth settings</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Same toggles as Settings on the phone. Drive login still happens
-            there.
-          </p>
+          <p className="mt-1 text-sm text-slate-400">Same toggles as Settings on the phone. Drive login still happens there.</p>
 
           <div className="mt-4 grid gap-3">
             <ToggleRow
@@ -687,40 +571,24 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               subtitle="On: live preview ramp and baked slow-mo. Off: normal-speed preview and files."
               checked={snapshot?.slowMoEnabled !== false}
               disabled={locked}
-              onChange={(slowMoEnabled) =>
-                void send("setSlowMo", { slowMoEnabled }, { slowMoEnabled })
-              }
+              onChange={(slowMoEnabled) => void send("setSlowMo", { slowMoEnabled }, { slowMoEnabled })}
             />
             <ToggleRow
               title="Mute booth music"
               subtitle="Silences looping beds on the booth phone. Guests still hear overlay / mixed files."
               checked={snapshot?.boothMusicMuted === true}
               disabled={locked}
-              onChange={(boothMusicMuted) =>
-                void send(
-                  "setBoothMusicMuted",
-                  { boothMusicMuted },
-                  { boothMusicMuted },
-                )
-              }
+              onChange={(boothMusicMuted) => void send("setBoothMusicMuted", { boothMusicMuted }, { boothMusicMuted })}
             />
           </div>
 
           <div className="mt-4">
-            <span className="mb-2 block text-sm text-slate-400">
-              Video quality
-            </span>
+            <span className="mb-2 block text-sm text-slate-400">Video quality</span>
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 disabled={locked}
-                onClick={() =>
-                  void send(
-                    "setVideoQuality",
-                    { videoQuality: "high" },
-                    { videoQuality: "high" },
-                  )
-                }
+                onClick={() => void send("setVideoQuality", { videoQuality: "high" }, { videoQuality: "high" })}
                 className={cn(
                   "flex min-h-[88px] flex-col items-start rounded-2xl border px-4 py-3 text-left disabled:opacity-40",
                   snapshot?.videoQuality !== "standard"
@@ -729,20 +597,12 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                 )}
               >
                 <span className="text-white">High</span>
-                <span className="mt-1 text-sm text-slate-400">
-                  1920×1080 · ~8 Mbps
-                </span>
+                <span className="mt-1 text-sm text-slate-400">1920×1080 · ~8 Mbps</span>
               </button>
               <button
                 type="button"
                 disabled={locked}
-                onClick={() =>
-                  void send(
-                    "setVideoQuality",
-                    { videoQuality: "standard" },
-                    { videoQuality: "standard" },
-                  )
-                }
+                onClick={() => void send("setVideoQuality", { videoQuality: "standard" }, { videoQuality: "standard" })}
                 className={cn(
                   "flex min-h-[88px] flex-col items-start rounded-2xl border px-4 py-3 text-left disabled:opacity-40",
                   snapshot?.videoQuality === "standard"
@@ -751,28 +611,18 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
                 )}
               >
                 <span className="text-white">Standard</span>
-                <span className="mt-1 text-sm text-slate-400">
-                  1280×720 · ~4 Mbps
-                </span>
+                <span className="mt-1 text-sm text-slate-400">1280×720 · ~4 Mbps</span>
               </button>
             </div>
           </div>
 
           <div className="mt-4">
-            <span className="mb-2 block text-sm text-slate-400">
-              Cloud destination
-            </span>
+            <span className="mb-2 block text-sm text-slate-400">Cloud destination</span>
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 disabled={locked}
-                onClick={() =>
-                  void send(
-                    "setCloudDestination",
-                    { cloudDestination: "blob" },
-                    { cloudDestination: "blob" },
-                  )
-                }
+                onClick={() => void send("setCloudDestination", { cloudDestination: "blob" }, { cloudDestination: "blob" })}
                 className={cn(
                   "min-h-[88px] rounded-2xl border px-4 py-3 text-left disabled:opacity-40",
                   snapshot?.cloudDestination !== "drive"
@@ -790,13 +640,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
               <button
                 type="button"
                 disabled={locked}
-                onClick={() =>
-                  void send(
-                    "setCloudDestination",
-                    { cloudDestination: "drive" },
-                    { cloudDestination: "drive" },
-                  )
-                }
+                onClick={() => void send("setCloudDestination", { cloudDestination: "drive" }, { cloudDestination: "drive" })}
                 className={cn(
                   "min-h-[88px] rounded-2xl border px-4 py-3 text-left disabled:opacity-40",
                   snapshot?.cloudDestination === "drive"
@@ -816,9 +660,7 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
             </div>
             {snapshot?.cloudDestination === "drive" && (
               <label className="mt-3 block">
-                <span className="mb-2 block text-sm text-slate-400">
-                  Drive folder name
-                </span>
+                <span className="mb-2 block text-sm text-slate-400">Drive folder name</span>
                 <input
                   defaultValue={snapshot.driveFolderName}
                   key={snapshot.driveFolderName}
@@ -875,17 +717,8 @@ export function RemoteOperatorScreen({ eventId }: { eventId: string }) {
   );
 }
 
-function ConnectionChip({
-  connection,
-}: {
-  connection: "paired" | "waiting" | "offline";
-}) {
-  const label =
-    connection === "paired"
-      ? "Paired"
-      : connection === "waiting"
-        ? "Waiting"
-        : "Offline";
+function ConnectionChip({ connection }: { connection: "paired" | "waiting" | "offline" }) {
+  const label = connection === "paired" ? "Paired" : connection === "waiting" ? "Waiting" : "Offline";
   const color =
     connection === "paired"
       ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
@@ -893,11 +726,7 @@ function ConnectionChip({
         ? "border-amber-400/40 bg-amber-500/15 text-amber-100"
         : "border-white/15 bg-white/5 text-slate-300";
   return (
-    <span
-      className={cn("rounded-full border px-4 py-2 text-sm font-medium", color)}
-    >
-      {label}
-    </span>
+    <span className={cn("rounded-full border px-4 py-2 text-sm font-medium", color)}>{label}</span>
   );
 }
 

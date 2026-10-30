@@ -17,10 +17,7 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   if (!(await remoteMusicAvailable())) {
-    return NextResponse.json(
-      { error: musicUnavailableMessage() },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: musicUnavailableMessage() }, { status: 503 });
   }
 
   const body = (await request.json()) as HandleUploadBody;
@@ -32,12 +29,7 @@ export async function POST(request: Request) {
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         let payload: { eventId?: string; token?: string } = {};
         try {
-          payload = clientPayload
-            ? (JSON.parse(clientPayload) as {
-                eventId?: string;
-                token?: string;
-              })
-            : {};
+          payload = clientPayload ? (JSON.parse(clientPayload) as { eventId?: string; token?: string }) : {};
         } catch {
           throw new Error("Invalid pair payload.");
         }
@@ -46,11 +38,7 @@ export async function POST(request: Request) {
           throw new Error("Invalid music upload path.");
         }
         const session = await readSession(eventId);
-        if (
-          !session ||
-          !sessionIsLive(session) ||
-          !tokenMatches(session, payload.token)
-        ) {
+        if (!session || !sessionIsLive(session) || !tokenMatches(session, payload.token)) {
           throw new Error("Pair token expired or invalid.");
         }
         return {
@@ -78,11 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json(jsonResponse);
   } catch (error) {
     return NextResponse.json(
-      {
-        error:
-          formatBlobWriteError(error) ||
-          (error instanceof Error ? error.message : "Upload failed"),
-      },
+      { error: formatBlobWriteError(error) || (error instanceof Error ? error.message : "Upload failed") },
       { status: 400 },
     );
   }

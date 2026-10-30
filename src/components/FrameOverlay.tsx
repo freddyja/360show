@@ -38,9 +38,7 @@ export function FrameOverlay({
               top: `${caption.y * 100}%`,
               color: caption.color,
               letterSpacing: caption.tracking,
-              maxWidth: caption.maxWidth
-                ? `${caption.maxWidth * 100}%`
-                : undefined,
+              maxWidth: caption.maxWidth ? `${caption.maxWidth * 100}%` : undefined,
               transform: `translate(-50%, -50%)${caption.rotateDeg ? ` rotate(${caption.rotateDeg}deg)` : ""}`,
             }}
           >
@@ -70,25 +68,8 @@ export function FrameOverlay({
         viewBox="0 0 1600 900"
         preserveAspectRatio="xMidYMid meet"
       >
-        <ellipse
-          cx="800"
-          cy="640"
-          rx="520"
-          ry="140"
-          fill="none"
-          stroke={accentColor}
-          strokeWidth="10"
-        />
-        <ellipse
-          cx="800"
-          cy="640"
-          rx="490"
-          ry="118"
-          fill="none"
-          stroke={accentColor}
-          strokeWidth="3"
-          opacity="0.45"
-        />
+        <ellipse cx="800" cy="640" rx="520" ry="140" fill="none" stroke={accentColor} strokeWidth="10" />
+        <ellipse cx="800" cy="640" rx="490" ry="118" fill="none" stroke={accentColor} strokeWidth="3" opacity="0.45" />
       </svg>
     );
   }
@@ -116,19 +97,11 @@ export function FrameOverlay({
     return (
       <div className="pointer-events-none absolute inset-x-6 bottom-5">
         <div className="rounded-2xl border border-amber-200/40 bg-black/55 px-4 py-2 text-center backdrop-blur-sm">
-          <p className="text-sm tracking-[0.2em] text-amber-100 uppercase">
-            {names}
-          </p>
+          <p className="text-sm tracking-[0.2em] text-amber-100 uppercase">{names}</p>
         </div>
       </div>
     );
   }
 
-  return (
-    <div
-      className={cn(
-        "pointer-events-none absolute inset-3 rounded-2xl border border-white/40",
-      )}
-    />
-  );
+  return <div className={cn("pointer-events-none absolute inset-3 rounded-2xl border border-white/40")} />;
 }

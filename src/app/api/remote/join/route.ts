@@ -17,37 +17,20 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   if (!(await remoteStoreReady())) {
-    return NextResponse.json(
-      { error: storeUnavailableMessage() },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: storeUnavailableMessage() }, { status: 503 });
   }
 
-  const body = (await request.json().catch(() => null)) as {
-    eventId?: string;
-    pairCode?: string;
-  } | null;
+  const body = (await request.json().catch(() => null)) as { eventId?: string; pairCode?: string } | null;
   const pairCode = body?.pairCode || "";
   // Tablet operator may join with only the code; resolve the event from the code index.
-  const eventId =
-    body?.eventId?.trim() || (await eventIdForPairCode(pairCode)) || "";
+  const eventId = body?.eventId?.trim() || (await eventIdForPairCode(pairCode)) || "";
   if (!isEventId(eventId) || pairCode.trim().length < 4) {
-    return NextResponse.json(
-      { error: "Enter the 6-character code shown on Capture." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Enter the 6-character code shown on Capture." }, { status: 400 });
   }
 
   const session = await readSession(eventId);
-  if (
-    !session ||
-    !sessionIsLive(session) ||
-    !pairCodeMatches(session, pairCode)
-  ) {
-    return NextResponse.json(
-      { error: "Invalid or expired pair code." },
-      { status: 401 },
-    );
+  if (!session || !sessionIsLive(session) || !pairCodeMatches(session, pairCode)) {
+    return NextResponse.json({ error: "Invalid or expired pair code." }, { status: 401 });
   }
 
   const now = Date.now();

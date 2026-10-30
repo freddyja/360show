@@ -24,10 +24,7 @@ export async function mixMusicIntoStream(
     return { stream: videoStream, mixedAudio: false, stop: () => undefined };
   }
 
-  const AudioCtx =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext })
-      .webkitAudioContext;
+  const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtx) {
     return { stream: videoStream, mixedAudio: false, stop: () => undefined };
   }
@@ -76,10 +73,7 @@ export async function mixMusicIntoStream(
       return { stream: videoStream, mixedAudio: false, stop: () => undefined };
     }
 
-    const mixed = new MediaStream([
-      ...videoStream.getVideoTracks(),
-      ...audioTracks,
-    ]);
+    const mixed = new MediaStream([...videoStream.getVideoTracks(), ...audioTracks]);
     return { stream: mixed, mixedAudio: true, stop };
   } catch {
     stop();

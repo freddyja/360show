@@ -16,10 +16,7 @@ export function CrowdOpenControls({
 }) {
   const [copied, setCopied] = useState(false);
   const path = crowdPath(eventId, clipId);
-  const url =
-    typeof window === "undefined"
-      ? path
-      : crowdUrl(eventId, window.location.origin, clipId);
+  const url = typeof window === "undefined" ? path : crowdUrl(eventId, window.location.origin, clipId);
 
   return (
     <div className={cn("flex flex-wrap gap-2", className)}>

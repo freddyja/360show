@@ -11,25 +11,24 @@ export interface VideoQualityProfile {
   bitrate: number;
 }
 
-export const VIDEO_QUALITY_PROFILES: Record<VideoQuality, VideoQualityProfile> =
-  {
-    standard: {
-      id: "standard",
-      label: "Standard · 1280×720",
-      width: 1280,
-      height: 720,
-      fps: 30,
-      bitrate: 4_000_000,
-    },
-    high: {
-      id: "high",
-      label: "High · 1920×1080",
-      width: 1920,
-      height: 1080,
-      fps: 30,
-      bitrate: 8_000_000,
-    },
-  };
+export const VIDEO_QUALITY_PROFILES: Record<VideoQuality, VideoQualityProfile> = {
+  standard: {
+    id: "standard",
+    label: "Standard · 1280×720",
+    width: 1280,
+    height: 720,
+    fps: 30,
+    bitrate: 4_000_000,
+  },
+  high: {
+    id: "high",
+    label: "High · 1920×1080",
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    bitrate: 8_000_000,
+  },
+};
 
 const RECORDER_MIME_CANDIDATES = [
   "video/mp4;codecs=avc1.42E01E",
@@ -68,24 +67,18 @@ export function resolveVideoQuality(value: unknown): VideoQuality {
   return value === "standard" ? "standard" : "high";
 }
 
-export function videoQualityProfile(
-  quality?: VideoQuality | null,
-): VideoQualityProfile {
+export function videoQualityProfile(quality?: VideoQuality | null): VideoQualityProfile {
   return VIDEO_QUALITY_PROFILES[resolveVideoQuality(quality)];
 }
 
 export function pickRecorderMimeType(withAudio = false) {
   if (typeof MediaRecorder === "undefined") return "";
-  const list = withAudio
-    ? AV_RECORDER_MIME_CANDIDATES
-    : RECORDER_MIME_CANDIDATES;
+  const list = withAudio ? AV_RECORDER_MIME_CANDIDATES : RECORDER_MIME_CANDIDATES;
   return list.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
 }
 
 export function recorderMimeCandidates(withAudio = false) {
-  const list = withAudio
-    ? AV_RECORDER_MIME_CANDIDATES
-    : RECORDER_MIME_CANDIDATES;
+  const list = withAudio ? AV_RECORDER_MIME_CANDIDATES : RECORDER_MIME_CANDIDATES;
   if (typeof MediaRecorder === "undefined") return [];
   return list.filter((type) => MediaRecorder.isTypeSupported(type));
 }
@@ -106,41 +99,24 @@ function headerLooksLikeMp4(bytes: Uint8Array) {
 }
 
 function headerLooksLikeWebm(bytes: Uint8Array) {
-  return (
-    bytes.length >= 4 &&
-    bytes[0] === 0x1a &&
-    bytes[1] === 0x45 &&
-    bytes[2] === 0xdf &&
-    bytes[3] === 0xa3
-  );
+  return bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3;
 }
 
 function fallbackVideoContentType(reported?: string | null) {
   const value = (reported || "").toLowerCase();
-  if (
-    value.includes("mp4") ||
-    value.includes("quicktime") ||
-    value.includes("m4v")
-  )
-    return "video/mp4";
+  if (value.includes("mp4") || value.includes("quicktime") || value.includes("m4v")) return "video/mp4";
   return "video/webm";
 }
 
 /** Prefer ISO BMFF vs EBML over a lying MediaRecorder mimeType. */
-export function sniffVideoContentType(
-  header: ArrayBuffer | Uint8Array,
-  reported?: string | null,
-) {
+export function sniffVideoContentType(header: ArrayBuffer | Uint8Array, reported?: string | null) {
   const bytes = header instanceof Uint8Array ? header : new Uint8Array(header);
   if (headerLooksLikeMp4(bytes)) return "video/mp4";
   if (headerLooksLikeWebm(bytes)) return "video/webm";
   return fallbackVideoContentType(reported);
 }
 
-export async function typedVideoBlob(
-  parts: BlobPart[],
-  recordedType?: string | null,
-) {
+export async function typedVideoBlob(parts: BlobPart[], recordedType?: string | null) {
   const first = parts[0];
   let header: Uint8Array;
   if (first instanceof Blob) {
@@ -148,30 +124,21 @@ export async function typedVideoBlob(
   } else if (first instanceof ArrayBuffer) {
     header = new Uint8Array(first.slice(0, 16));
   } else if (ArrayBuffer.isView(first)) {
-    header = new Uint8Array(
-      first.buffer,
-      first.byteOffset,
-      Math.min(16, first.byteLength),
-    );
+    header = new Uint8Array(first.buffer, first.byteOffset, Math.min(16, first.byteLength));
   } else {
     header = new Uint8Array(await new Blob(parts).slice(0, 16).arrayBuffer());
   }
   return new Blob(parts, { type: sniffVideoContentType(header, recordedType) });
 }
 
-export async function contentTypeForVideoBlob(
-  blob: Blob,
-  reported?: string | null,
-) {
+export async function contentTypeForVideoBlob(blob: Blob, reported?: string | null) {
   const header = await blob.slice(0, 16).arrayBuffer();
   return sniffVideoContentType(header, reported || blob.type);
 }
 
 export function createVideoRecorder(stream: MediaStream, bitrate: number) {
   const withAudio = stream.getAudioTracks().length > 0;
-  const attempts: MediaRecorderOptions[] = recorderMimeCandidates(
-    withAudio,
-  ).map((mimeType) => ({
+  const attempts: MediaRecorderOptions[] = recorderMimeCandidates(withAudio).map((mimeType) => ({
     mimeType,
     videoBitsPerSecond: bitrate,
     ...(withAudio ? { audioBitsPerSecond: 128_000 } : {}),
@@ -190,11 +157,7 @@ export function createVideoRecorder(stream: MediaStream, bitrate: number) {
 }
 
 /** Scale source pixels to fit inside the quality cap without upscaling. */
-export function fitWithinQuality(
-  srcW: number,
-  srcH: number,
-  quality: VideoQuality,
-) {
+export function fitWithinQuality(srcW: number, srcH: number, quality: VideoQuality) {
   const profile = videoQualityProfile(quality);
   const width = srcW || profile.width;
   const height = srcH || profile.height;

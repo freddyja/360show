@@ -35,12 +35,8 @@ function loadImage(src: string) {
   return work;
 }
 
-export async function prepareFrameBurn(
-  options: FrameBurnOptions = {},
-): Promise<PreparedFrameBurn> {
-  const style = isBurnableFrame(options.style)
-    ? (options.style as FrameStyleId)
-    : "none";
+export async function prepareFrameBurn(options: FrameBurnOptions = {}): Promise<PreparedFrameBurn> {
+  const style = isBurnableFrame(options.style) ? (options.style as FrameStyleId) : "none";
   const pack = style === "none" ? null : getFrameStyle(style);
   const image = pack?.assetSrc ? await loadImage(pack.assetSrc) : null;
   return {
@@ -65,14 +61,7 @@ function coverImage(
   ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const radius = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -110,15 +99,7 @@ function drawGoldOval(
   ctx.strokeStyle = "rgba(248,231,160,0.7)";
   ctx.lineWidth = Math.max(2, Math.round(line * 0.25));
   ctx.beginPath();
-  ctx.ellipse(
-    w / 2,
-    h / 2,
-    w * 0.44 - line * 0.6,
-    h * 0.38 - line * 0.6,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(w / 2, h / 2, w * 0.44 - line * 0.6, h * 0.38 - line * 0.6, 0, 0, Math.PI * 2);
   ctx.stroke();
 
   const arm = Math.max(28, Math.round(Math.min(w, h) * 0.045));

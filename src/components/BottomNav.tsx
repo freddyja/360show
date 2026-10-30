@@ -8,30 +8,10 @@ import { cn } from "@/lib/cn";
 export function BottomNav({ eventId }: { eventId: string }) {
   const pathname = usePathname();
   const items = [
-    {
-      href: `/e/${eventId}`,
-      label: "Event",
-      icon: CalendarDays,
-      match: "event",
-    },
-    {
-      href: `/e/${eventId}/capture`,
-      label: "Capture",
-      icon: Aperture,
-      match: "capture",
-    },
-    {
-      href: `/e/${eventId}/gallery`,
-      label: "Gallery",
-      icon: Images,
-      match: "gallery",
-    },
-    {
-      href: `/e/${eventId}/settings`,
-      label: "Settings",
-      icon: Settings,
-      match: "settings",
-    },
+    { href: `/e/${eventId}`, label: "Event", icon: CalendarDays, match: "event" },
+    { href: `/e/${eventId}/capture`, label: "Capture", icon: Aperture, match: "capture" },
+    { href: `/e/${eventId}/gallery`, label: "Gallery", icon: Images, match: "gallery" },
+    { href: `/e/${eventId}/settings`, label: "Settings", icon: Settings, match: "settings" },
   ];
 
   return (

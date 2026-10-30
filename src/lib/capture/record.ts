@@ -2,13 +2,7 @@ import { assertBoothRole } from "@/lib/deviceRole";
 import { DEMO_ASSET_PATH } from "../types";
 import { openCamera, stopStream, type CameraFacing } from "../hardware/camera";
 import { createDemoScene } from "./demoScene";
-import {
-  createVideoRecorder,
-  resolveVideoQuality,
-  typedVideoBlob,
-  videoQualityProfile,
-  type VideoQuality,
-} from "./quality";
+import { createVideoRecorder, resolveVideoQuality, typedVideoBlob, videoQualityProfile, type VideoQuality } from "./quality";
 
 export type RecordResult = {
   blob: Blob | null;
@@ -24,10 +18,7 @@ async function recordStream(
   signal?: AbortSignal,
 ): Promise<Blob | null> {
   if (typeof MediaRecorder === "undefined") return null;
-  const recorder = createVideoRecorder(
-    stream,
-    videoQualityProfile(quality).bitrate,
-  );
+  const recorder = createVideoRecorder(stream, videoQualityProfile(quality).bitrate);
   const chunks: BlobPart[] = [];
 
   const blobPromise = new Promise<Blob | null>((resolve) => {
@@ -40,9 +31,7 @@ async function recordStream(
         resolve(null);
         return;
       }
-      void typedVideoBlob(chunks, recorder.mimeType).then(resolve, () =>
-        resolve(null),
-      );
+      void typedVideoBlob(chunks, recorder.mimeType).then(resolve, () => resolve(null));
     };
   });
 
@@ -128,12 +117,7 @@ export async function recordCapture(
   signal?: AbortSignal,
 ): Promise<Omit<RecordResult, "previewStream" | "stopPreview">> {
   assertBoothRole("recordCapture");
-  let blob = await recordStream(
-    live.stream,
-    durationMs,
-    resolveVideoQuality(quality),
-    signal,
-  );
+  let blob = await recordStream(live.stream, durationMs, resolveVideoQuality(quality), signal);
   if (!blob || blob.size < 1000) {
     blob = await blobFromDemoAsset();
   }

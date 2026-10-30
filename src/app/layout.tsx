@@ -40,9 +40,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="booth-root">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans min-h-dvh`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans min-h-dvh`}>
         <Providers>{children}</Providers>
         <AutoUpdate />
       </body>

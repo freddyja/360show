@@ -10,11 +10,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function redirectWith(
-  request: Request,
-  returnPath: string,
-  params: Record<string, string>,
-) {
+function redirectWith(request: Request, returnPath: string, params: Record<string, string>) {
   const origin = new URL(request.url).origin;
   const target = new URL(returnPath, origin);
   for (const [key, value] of Object.entries(params)) {
@@ -40,8 +36,7 @@ export async function GET(request: Request) {
     await setDriveCookies(request, { state: null, returnPath: null });
     return redirectWith(request, returnPath, {
       drive: "error",
-      reason:
-        error === "access_denied" ? "Google Drive access was denied." : error,
+      reason: error === "access_denied" ? "Google Drive access was denied." : error,
     });
   }
 
@@ -58,9 +53,7 @@ export async function GET(request: Request) {
   try {
     const tokens = await exchangeAuthCode(code, googleRedirectUri(request));
     if (!tokens.refresh_token) {
-      throw new Error(
-        "Google did not return a refresh token. Remove 360show from your Google account permissions and connect again.",
-      );
+      throw new Error("Google did not return a refresh token. Remove 360show from your Google account permissions and connect again.");
     }
     await setDriveCookies(request, {
       refreshToken: tokens.refresh_token,
@@ -72,8 +65,7 @@ export async function GET(request: Request) {
     await setDriveCookies(request, { state: null, returnPath: null });
     return redirectWith(request, returnPath, {
       drive: "error",
-      reason:
-        error instanceof Error ? error.message : "Google Drive connect failed.",
+      reason: error instanceof Error ? error.message : "Google Drive connect failed.",
     });
   }
 }
