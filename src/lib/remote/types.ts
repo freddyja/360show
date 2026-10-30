@@ -60,6 +60,8 @@ export interface RemoteEventSnapshot {
   options?: RemoteBoothOptions;
   /** Booth phone camera: chosen facing, what actually opened, and what exists. */
   camera?: RemoteCameraInfo;
+  /** Build id the booth phone is running (version skew check on the tablet). */
+  buildId?: string;
 }
 
 export type RemoteCameraFacing = "user" | "environment";

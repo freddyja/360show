@@ -1,5 +1,6 @@
 "use client";
 
+import { setUpdateBlocker } from "@/lib/version";
 import Link from "next/link";
 import { ArrowLeft, Heart, Maximize2, Play, RefreshCw, Sparkles } from "lucide-react";
 import { capturePath, clipShareUrl } from "@/lib/shareUrl";
@@ -46,6 +47,12 @@ export function GuestShareScreen({
   const [publishState, setPublishState] = useState<string | null>(null);
   // Operator QR / share link stay hidden until upload + metadata publish finish.
   const [publishPhase, setPublishPhase] = useState<"working" | "done" | "error" | "blocked">("working");
+  // Never auto-update (reload) during bake or Drive / cloud upload.
+  useEffect(() => {
+    setUpdateBlocker("share-publish", !publicMode && publishPhase === "working");
+    return () => setUpdateBlocker("share-publish", false);
+  }, [publicMode, publishPhase]);
+
   const [publishRetry, setPublishRetry] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [status, setStatus] = useState("Ready");

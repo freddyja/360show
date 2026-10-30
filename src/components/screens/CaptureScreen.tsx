@@ -1,5 +1,6 @@
 "use client";
 
+import { setUpdateBlocker } from "@/lib/version";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Eye, Share2 } from "lucide-react";
@@ -133,6 +134,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     muted: settings.boothMusicMuted,
   });
 
+  // Never auto-update (reload) mid countdown / recording / processing.
+  useEffect(() => {
+    setUpdateBlocker("capture", phase !== "idle");
+    return () => setUpdateBlocker("capture", false);
+  }, [phase]);
+
   useEffect(() => {
     if (!event) return;
     const crowdPhase =
@@ -230,7 +237,14 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     const current = eventRef.current;
     if (!current || phaseRef.current !== "idle") return;
     const spinMs = captureDurationMs(current.captureDurationSec);
-    const resolved = await resolveEventMusic(current);
+    // Block auto-update from the START tap, before the countdown phase is set.
+    setUpdateBlocker("capture-start", true);
+    let resolved: Awaited<ReturnType<typeof resolveEventMusic>>;
+    try {
+      resolved = await resolveEventMusic(current);
+    } finally {
+      setUpdateBlocker("capture-start", false);
+    }
     const boothSettings = settingsRef.current;
     syncBoothMusic({
       src: resolved.src,
@@ -244,6 +258,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     spinAbortRef.current = abort;
     phaseRef.current = "countdown";
     setPhase("countdown");
+    setUpdateBlocker("capture", true);
     setLivePreview(true);
 
     const live = await beginLivePreview(true, boothSettings.videoQuality, cameraFacingRef.current);
@@ -314,7 +329,10 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     };
     await saveClip(clip, blob);
     if (needsExportBake(boothSettings.slowMoEnabled !== false, current.musicBedLabel, usesCustomMusic(current), current.frameStyle)) {
-      void bakeExportInBackground(clip, blob);
+      // Background bake also blocks auto-update until it finishes.
+      const bakeKey = `bake-${clip.id}`;
+      setUpdateBlocker(bakeKey, true);
+      void bakeExportInBackground(clip, blob).finally(() => setUpdateBlocker(bakeKey, false));
     }
     await wait(600);
     phaseRef.current = "idle";

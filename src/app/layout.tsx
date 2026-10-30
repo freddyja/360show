@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/Providers";
+import { AutoUpdate } from "@/components/AutoUpdate";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,6 +42,7 @@ export default function RootLayout({
     <html lang="en" className="booth-root">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans min-h-dvh`}>
         <Providers>{children}</Providers>
+        <AutoUpdate />
       </body>
     </html>
   );

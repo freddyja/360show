@@ -1,5 +1,6 @@
 "use client";
 
+import { BUILD_ID } from "@/lib/version";
 import { upload } from "@vercel/blob/client";
 import { formatBlobWriteError, isBlobAccessMismatch, isBlobUnusableError, type BlobAccess } from "@/lib/share/access";
 import { validateCustomMusicFile } from "@/lib/music/custom";
@@ -339,6 +340,7 @@ export function snapshotFromBooth(
     driveConfigured: cloud.driveConfigured,
     blobConfigured: cloud.blobConfigured,
     remoteMusicAvailable: Boolean(cloud.remoteMusicAvailable),
+    buildId: BUILD_ID,
     options: {
       frames: FRAME_STYLES.map((f) => ({ id: f.id, name: f.name })),
       musicBeds: [...MUSIC_BEDS],
