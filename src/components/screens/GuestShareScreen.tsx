@@ -41,6 +41,7 @@ export function GuestShareScreen({
   const [queryCloud, setQueryCloud] = useState<CloudShare | null>(null);
   const [cloud, setCloud] = useState<CloudShare | null>(null);
   const [cloudReady, setCloudReady] = useState(false);
+  const [waitingForUpload, setWaitingForUpload] = useState(false);
   const [config, setConfig] = useState<ShareConfig | null>(null);
   const [publishState, setPublishState] = useState<string | null>(null);
   const [playing, setPlaying] = useState(true);
@@ -93,16 +94,27 @@ export function GuestShareScreen({
     (async () => {
       const nextConfig = await fetchShareConfig();
       if (!cancelled) setConfig(nextConfig);
-      const nextCloud = await fetchCloudShare(clipId);
+      let nextCloud = await fetchCloudShare(clipId);
       if (!cancelled) {
         setCloud(nextCloud);
         setCloudReady(true);
       }
+      // The booth shows the QR while it is still baking/uploading, so a guest who
+      // scans right away gets a 404. Keep checking instead of giving up.
+      const started = Date.now();
+      while (!cancelled && !nextCloud && publicMode && Date.now() - started < GUEST_WAIT_MS) {
+        setWaitingForUpload(true);
+        await new Promise((resolve) => setTimeout(resolve, GUEST_POLL_MS));
+        if (cancelled) return;
+        nextCloud = await fetchCloudShare(clipId);
+        if (nextCloud && !cancelled) setCloud(nextCloud);
+      }
+      if (!cancelled) setWaitingForUpload(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [clipId]);
+  }, [clipId, publicMode]);
 
   useEffect(() => {
     if (publicMode || !ready || !localClip || !localEvent || !config) return;
@@ -288,6 +300,20 @@ export function GuestShareScreen({
 
   if (!ready || (!clip && !cloudReady)) {
     return <BootScreen message="Loading spin…" />;
+  }
+
+  if ((!clip || !event) && waitingForUpload) {
+    return (
+      <Shell>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center" aria-live="polite">
+          <RefreshCw className="h-8 w-8 animate-spin text-cyan-300" />
+          <p className="text-2xl font-semibold text-white">Your clip is on its way…</p>
+          <p className="max-w-lg text-slate-400">
+            The booth is still uploading this spin. Keep this page open — it will appear here automatically.
+          </p>
+        </div>
+      </Shell>
+    );
   }
 
   if (!clip || !event) {
@@ -609,6 +635,9 @@ function cloudFromQuery(clipId: string): CloudShare | null {
     webViewLink: driveViewUrl(driveFileId),
   };
 }
+
+const GUEST_POLL_MS = 3_000;
+const GUEST_WAIT_MS = 4 * 60_000;
 
 function guestShareLink(
   clipId: string,
