@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import * as db from "./db";
@@ -20,6 +21,7 @@ import {
   materializeCustomMusicFile,
 } from "./music/ingest";
 import { forgetCustomMusicSrc } from "./music/resolve";
+import * as cloud from "./cloud/client";
 
 interface BoothStore {
   ready: boolean;
@@ -43,6 +45,11 @@ interface BoothStore {
   saveSettings: (settings: AppSettings) => Promise<void>;
   setActive: (id: string | null) => Promise<void>;
   resetAll: () => Promise<void>;
+  /** Cloud event/settings sync state (off when BOOTH_OWNER_KEY / Blob aren't set up). */
+  cloudStatus: cloud.CloudSyncStatus;
+  cloudSyncedAt: number | null;
+  setOwnerKey: (key: string) => Promise<void>;
+  syncNow: () => Promise<void>;
 }
 
 const Ctx = createContext<BoothStore | null>(null);
@@ -54,6 +61,10 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
   const [clips, setClips] = useState<Clip[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
+
+  const [cloudStatus, setCloudStatus] = useState<cloud.CloudSyncStatus>("needs-key");
+  const [cloudSyncedAt, setCloudSyncedAt] = useState<number | null>(null);
+  const syncing = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(async () => {
     const [nextEvents, nextClips, nextSettings, nextActive] = await Promise.all([
@@ -67,6 +78,73 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
     setSettings(nextSettings);
     setActiveEventId(nextActive);
   }, []);
+
+  /**
+   * Merge local IndexedDB events + tombstones with the cloud (last-write-wins by
+   * updatedAt), push local winners (first run = migration of existing events),
+   * and merge synced settings the same way. Never throws; offline stays local.
+   */
+  const syncNow = useCallback(async () => {
+    if (syncing.current) return syncing.current;
+    const run = (async () => {
+      const listed = await cloud.cloudListEvents();
+      setCloudStatus(listed.status);
+      if (listed.status !== "ok" || !listed.data) return;
+      const local = await db.listEvents();
+      const plan = cloud.planEventMerge(local, cloud.localTombstones(), listed.data.events);
+      for (const e of plan.applyLocal) await db.putEvent(e);
+      for (const id of plan.deleteLocal) {
+        await db.deleteEvent(id);
+        if ((await db.getActiveEventId()) === id) await db.setActiveEventId(null);
+      }
+      if (plan.push.length) await cloud.cloudPutEvents(plan.push);
+
+      const remote = await cloud.cloudGetSettings();
+      const localSettings = await db.getSettings();
+      const localAt = cloud.localSettingsUpdatedAt();
+      if (remote.status === "ok" && remote.data) {
+        if (remote.data.updatedAt > localAt) {
+          const merged = { ...localSettings, ...remote.data.settings };
+          await db.putSettings(merged);
+          cloud.markLocalSettings(merged, remote.data.updatedAt);
+        } else if (localAt > remote.data.updatedAt || !remote.data.updatedAt) {
+          const at = localAt || Date.now();
+          await cloud.cloudPutSettings({ updatedAt: at, settings: cloud.pickSynced(localSettings) });
+          cloud.markLocalSettings(localSettings, at);
+        }
+      }
+      setCloudSyncedAt(Date.now());
+      await refresh();
+    })().finally(() => {
+      syncing.current = null;
+    });
+    syncing.current = run;
+    return run;
+  }, [refresh]);
+
+  const setOwnerKey = useCallback(
+    async (key: string) => {
+      cloud.writeOwnerKey(key);
+      await syncNow();
+    },
+    [syncNow],
+  );
+
+  useEffect(() => {
+    if (!ready) return;
+    void syncNow();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void syncNow();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("online", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("online", onVisible);
+    };
+  }, [ready, syncNow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,15 +213,21 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
         }
         next = { ...event, customMusicBlobId: null, customMusicName: null };
       }
+      next = { ...next, updatedAt: Math.max(Date.now(), (next.updatedAt || 0) + 1) };
       await db.putEvent(next);
+      cloud.setLocalTombstone(next.id, null);
       if (makeActive) await db.setActiveEventId(next.id);
       await refresh();
+      void cloud.cloudPutEvent(cloud.toCloudEvent(next)).then((r) => setCloudStatus(r.status));
     },
     [refresh],
   );
 
   const removeEvent = useCallback(async (id: string) => {
     await db.deleteEvent(id);
+    const at = Date.now();
+    cloud.setLocalTombstone(id, at);
+    void cloud.cloudDeleteEvent(id, at).then((r) => setCloudStatus(r.status));
     const active = await db.getActiveEventId();
     if (active === id) await db.setActiveEventId(null);
     await refresh();
@@ -170,6 +254,9 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
   const saveSettings = useCallback(async (next: AppSettings) => {
     await db.putSettings(next);
     setSettings(next);
+    const at = Date.now();
+    cloud.markLocalSettings(next, at);
+    void cloud.cloudPutSettings({ updatedAt: at, settings: cloud.pickSynced(next) }).then((r) => setCloudStatus(r.status));
   }, []);
 
   const setActive = useCallback(async (id: string | null) => {
@@ -206,6 +293,10 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
       saveSettings,
       setActive,
       resetAll,
+      cloudStatus,
+      cloudSyncedAt,
+      setOwnerKey,
+      syncNow,
     }),
     [
       ready,
@@ -225,6 +316,10 @@ export function BoothProvider({ children }: { children: React.ReactNode }) {
       saveSettings,
       setActive,
       resetAll,
+      cloudStatus,
+      cloudSyncedAt,
+      setOwnerKey,
+      syncNow,
     ],
   );
 
