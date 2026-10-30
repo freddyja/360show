@@ -10,6 +10,7 @@ export function ShareActions({
   canDownload,
   downloadSubtitle,
 }: {
+  /** Empty while the clip is still uploading: link actions are hidden. */
   url: string;
   onDownload: () => void;
   canDownload: boolean;
@@ -30,25 +31,31 @@ export function ShareActions({
   const sms = `sms:?&body=${encodeURIComponent(`Your 360 spin is ready: ${url}`)}`;
 
   const items = [
-    {
-      key: "copy",
-      icon: Link2,
-      title: copied ? "Link copied" : "Share link",
-      subtitle: "Copy link to send",
-      onClick: copy,
-    },
-    {
-      key: "sms",
-      icon: MessageSquare,
-      title: "Text me the video",
-      subtitle: "Get it on your phone",
-      href: sms,
-    },
+    ...(url
+      ? [
+          {
+            key: "copy",
+            icon: Link2,
+            title: copied ? "Link copied" : "Share link",
+            subtitle: "Copy link to send",
+            onClick: copy,
+          },
+          {
+            key: "sms",
+            icon: MessageSquare,
+            title: "Text me the video",
+            subtitle: "Get it on your phone",
+            href: sms,
+          },
+        ]
+      : []),
     {
       key: "save",
       icon: Download,
       title: "Save to gallery",
-      subtitle: canDownload ? downloadSubtitle || "Download to this device" : "Demo file only",
+      subtitle: canDownload
+        ? downloadSubtitle || "Download to this device"
+        : "Demo file only",
       onClick: onDownload,
     },
   ];
@@ -62,10 +69,17 @@ export function ShareActions({
         );
         const inner = (
           <>
-            <Icon className="h-7 w-7 shrink-0 text-blue-400" strokeWidth={1.75} />
+            <Icon
+              className="h-7 w-7 shrink-0 text-blue-400"
+              strokeWidth={1.75}
+            />
             <span>
-              <span className="block text-lg font-medium text-white">{item.title}</span>
-              <span className="block text-sm text-slate-400">{item.subtitle}</span>
+              <span className="block text-lg font-medium text-white">
+                {item.title}
+              </span>
+              <span className="block text-sm text-slate-400">
+                {item.subtitle}
+              </span>
             </span>
           </>
         );
@@ -77,7 +91,12 @@ export function ShareActions({
           );
         }
         return (
-          <button key={item.key} type="button" onClick={item.onClick} className={className}>
+          <button
+            key={item.key}
+            type="button"
+            onClick={item.onClick}
+            className={className}
+          >
             {inner}
           </button>
         );

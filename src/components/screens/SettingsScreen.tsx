@@ -1,5 +1,7 @@
 "use client";
 
+import { BUILD_ID, shortBuildId } from "@/lib/version";
+import { CloudSyncPanel } from "@/components/CloudSyncPanel";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Cloud, HardDrive } from "lucide-react";
@@ -69,6 +71,10 @@ export function SettingsScreen({ eventId }: { eventId: string }) {
     <OperatorShell eventId={eventId}>
       <h1 className="text-3xl font-semibold text-white">Settings</h1>
       <p className="mt-1 text-slate-400">This tablet’s booth identity. Cloud sharing is optional.</p>
+      <p className="mt-1 text-xs text-slate-500" data-testid="app-version">
+        App version {shortBuildId(BUILD_ID)} · updates automatically when idle
+      </p>
+      <CloudSyncPanel />
 
       <div className="mt-8 grid max-w-2xl gap-6">
         <label className="block">

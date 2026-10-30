@@ -1,5 +1,6 @@
+import { assertBoothRole } from "@/lib/deviceRole";
 import { DEMO_ASSET_PATH } from "../types";
-import { getCameraStream, stopStream } from "../hardware/camera";
+import { openCamera, stopStream, type CameraFacing } from "../hardware/camera";
 import { createDemoScene } from "./demoScene";
 import { createVideoRecorder, resolveVideoQuality, typedVideoBlob, videoQualityProfile, type VideoQuality } from "./quality";
 
@@ -14,6 +15,7 @@ async function recordStream(
   stream: MediaStream,
   durationMs: number,
   quality: VideoQuality,
+  signal?: AbortSignal,
 ): Promise<Blob | null> {
   if (typeof MediaRecorder === "undefined") return null;
   const recorder = createVideoRecorder(stream, videoQualityProfile(quality).bitrate);
@@ -34,13 +36,26 @@ async function recordStream(
   });
 
   recorder.start(250);
-  await wait(durationMs);
+  await waitOrAbort(durationMs, signal);
   if (recorder.state !== "inactive") recorder.stop();
   return blobPromise;
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Resolves after `ms`, or as soon as `signal` aborts (remote STOP). */
+export function waitOrAbort(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
 }
 
 async function blobFromDemoAsset() {
@@ -56,17 +71,24 @@ async function blobFromDemoAsset() {
 export async function beginLivePreview(
   preferCamera: boolean,
   quality: VideoQuality = "high",
+  facing?: CameraFacing,
 ): Promise<{
   stream: MediaStream;
   source: "camera" | "demo";
   stop: () => void;
+  facing?: CameraFacing | null;
+  fellBack?: boolean;
 }> {
+  assertBoothRole("beginLivePreview");
   const resolved = resolveVideoQuality(quality);
   if (preferCamera) {
     try {
-      const stream = await getCameraStream(resolved);
+      const opened = await openCamera(resolved, facing);
+      const stream = opened.stream;
       return {
         stream,
+        facing: opened.actual,
+        fellBack: opened.fellBack,
         source: "camera",
         stop: () => stopStream(stream),
       };
@@ -92,8 +114,10 @@ export async function recordCapture(
   durationMs: number,
   live: { stream: MediaStream; source: "camera" | "demo" },
   quality: VideoQuality = "high",
+  signal?: AbortSignal,
 ): Promise<Omit<RecordResult, "previewStream" | "stopPreview">> {
-  let blob = await recordStream(live.stream, durationMs, resolveVideoQuality(quality));
+  assertBoothRole("recordCapture");
+  let blob = await recordStream(live.stream, durationMs, resolveVideoQuality(quality), signal);
   if (!blob || blob.size < 1000) {
     blob = await blobFromDemoAsset();
   }

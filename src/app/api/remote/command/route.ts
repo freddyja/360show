@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isFrameStyleId } from "@/lib/share/types";
 import {
   enqueueCommand,
+  enqueueSettingCommand,
   musicUnavailableMessage,
   newCommandId,
   publicViewNow,
@@ -20,9 +21,13 @@ import {
   isAccentColor,
   isCaptureDurationSec,
   isCloudDestination,
+  isClientCommandId,
   isEventId,
   isMusicBedLabel,
+  isRemoteCameraFacing,
   isRemoteCommandType,
+  isRemoteSettingCommand,
+  SETTINGS_LOCKED_MESSAGE,
   isVideoQuality,
   type RemoteCommand,
   type RemoteCommandPayload,
@@ -45,6 +50,7 @@ export async function POST(request: Request) {
     token?: string;
     type?: string;
     payload?: RemoteCommandPayload;
+    clientId?: string;
   } | null;
 
   const eventId = body?.eventId?.trim() || "";
@@ -58,8 +64,43 @@ export async function POST(request: Request) {
   }
 
   const incoming = body.payload || {};
+  const now0 = Date.now();
+  // Idempotent retries: the tablet resends the same clientId after a dropped
+  // connection; answer with the original command instead of queueing it twice.
+  const clientId = isClientCommandId(body.clientId) ? body.clientId : null;
+  const fixedId = clientId ? `rcmd_c_${clientId}` : null;
+  if (fixedId) {
+    const pendingNow = await readCommands(eventId);
+    if (pendingNow.some((cmd) => cmd.id === fixedId) || session.lastAck?.commandId === fixedId) {
+      await touchOperatorPing(eventId, now0);
+      return NextResponse.json({
+        ok: true,
+        duplicate: true,
+        commandId: fixedId,
+        view: await publicViewNow(session, pendingNow[0] ?? null, now0),
+      });
+    }
+  }
+  if (body.type === "stopSpin") {
+    const pendingNow = await readCommands(eventId);
+    const existingStop = pendingNow.find((cmd) => cmd.type === "stopSpin");
+    if (existingStop) {
+      await touchOperatorPing(eventId, now0);
+      return NextResponse.json({
+        ok: true,
+        duplicate: true,
+        commandId: existingStop.id,
+        view: await publicViewNow(session, pendingNow[0] ?? null, now0),
+      });
+    }
+  }
+  // Settings lock: the phone also enforces this, but answering here gives the
+  // remote an immediate, clear reply instead of a queued command that fails.
+  if (isRemoteSettingCommand(body.type) && session.boothPhase !== "idle") {
+    return NextResponse.json({ error: SETTINGS_LOCKED_MESSAGE, locked: true }, { status: 423 });
+  }
   const command: RemoteCommand = {
-    id: newCommandId(),
+    id: fixedId || newCommandId(),
     type: body.type,
     createdAt: Date.now(),
     payload: {},
@@ -114,6 +155,10 @@ export async function POST(request: Request) {
     if (incoming.driveFolderName !== undefined && !folder) return invalid("Drive folder name cannot be empty.");
     if (folder) command.payload.driveFolderName = folder;
   }
+  if (command.type === "setCameraFacing") {
+    if (!isRemoteCameraFacing(incoming.cameraFacing)) return invalid("Camera must be user (front) or environment (back).");
+    command.payload.cameraFacing = incoming.cameraFacing;
+  }
   if (command.type === "setCustomMusic") {
     if (!(await remoteMusicAvailable())) {
       return NextResponse.json(
@@ -143,8 +188,13 @@ export async function POST(request: Request) {
 
   const now = Date.now();
   await touchOperatorPing(eventId, now);
+  let superseded: string[] = [];
   try {
-    await enqueueCommand(eventId, command);
+    if (isRemoteSettingCommand(command.type) && command.type !== "setCustomMusic") {
+      superseded = await enqueueSettingCommand(eventId, command);
+    } else {
+      await enqueueCommand(eventId, command);
+    }
   } catch (error) {
     if (error instanceof Error && error.message === "START_SPIN_PENDING") {
       return NextResponse.json({ error: "A START SPIN is already waiting on the booth." }, { status: 409 });
@@ -156,6 +206,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     commandId: command.id,
+    ...(superseded.length ? { superseded } : {}),
     view: await publicViewNow(session, pending[0] ?? null, now),
   });
 }

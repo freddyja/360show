@@ -17,6 +17,7 @@ export const REMOTE_POLL_MS = 1_500;
 
 export const REMOTE_COMMAND_TYPES = [
   "startSpin",
+  "stopSpin",
   "setSpinLength",
   "setMusicBed",
   "setFrameStyle",
@@ -26,6 +27,7 @@ export const REMOTE_COMMAND_TYPES = [
   "setBoothMusicMuted",
   "setCloudDestination",
   "setCustomMusic",
+  "setCameraFacing",
 ] as const;
 
 export type RemoteCommandType = (typeof REMOTE_COMMAND_TYPES)[number];
@@ -54,7 +56,59 @@ export interface RemoteEventSnapshot {
   driveConfigured: boolean;
   blobConfigured: boolean;
   remoteMusicAvailable?: boolean;
+  /** Choices the phone (booth controller) accepts, so remotes never hard-code them. */
+  options?: RemoteBoothOptions;
+  /** Booth phone camera: chosen facing, what actually opened, and what exists. */
+  camera?: RemoteCameraInfo;
+  /** Build id the booth phone is running (version skew check on the tablet). */
+  buildId?: string;
 }
+
+export type RemoteCameraFacing = "user" | "environment";
+
+export interface RemoteCameraInfo {
+  facing: RemoteCameraFacing;
+  actual: RemoteCameraFacing | null;
+  fellBack: boolean;
+  /** null = the phone can't tell (unlabelled cameras). */
+  front: boolean | null;
+  back: boolean | null;
+  count: number;
+  note: string | null;
+}
+
+export function isRemoteCameraFacing(value: unknown): value is RemoteCameraFacing {
+  return value === "user" || value === "environment";
+}
+
+export interface RemoteBoothOptions {
+  frames: { id: FrameStyleId; name: string }[];
+  musicBeds: MusicBedLabel[];
+  spinLengths: CaptureDurationSec[];
+  videoQualities: VideoQuality[];
+  /** Fixed on the booth today; reported read-only. */
+  countdownSec: number;
+}
+
+/** Setting changes the tablet may send. The phone rejects them unless idle. */
+export const REMOTE_SETTING_COMMANDS = [
+  "setSpinLength",
+  "setMusicBed",
+  "setFrameStyle",
+  "setEventBranding",
+  "setSlowMo",
+  "setVideoQuality",
+  "setBoothMusicMuted",
+  "setCloudDestination",
+  "setCustomMusic",
+  "setCameraFacing",
+] as const satisfies readonly RemoteCommandType[];
+
+export function isRemoteSettingCommand(type: RemoteCommandType) {
+  return (REMOTE_SETTING_COMMANDS as readonly string[]).includes(type);
+}
+
+export const SETTINGS_LOCKED_MESSAGE = "Settings are locked while the booth is busy. Try again when it is idle.";
 
 export interface RemoteCommandPayload {
   captureDurationSec?: CaptureDurationSec;
@@ -71,6 +125,7 @@ export interface RemoteCommandPayload {
   fileName?: string;
   contentType?: string;
   size?: number;
+  cameraFacing?: RemoteCameraFacing;
 }
 
 export interface RemoteCommand {
@@ -117,6 +172,15 @@ export interface RemotePublicView {
   pendingCommand: { id: string; type: RemoteCommandType; createdAt: number } | null;
   snapshot: RemoteEventSnapshot;
   pairCode: string;
+}
+
+/** Operator-chosen id so a retried POST after a dropped connection is not queued twice. */
+export function isClientCommandId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(value);
+}
+
+export function remotePairCodeIndexPath(pairCode: string) {
+  return `remote/codes/${pairCode}.json`;
 }
 
 export function isEventId(value: string) {

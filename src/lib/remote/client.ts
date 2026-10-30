@@ -1,13 +1,17 @@
 "use client";
 
+import { BUILD_ID } from "@/lib/version";
 import { upload } from "@vercel/blob/client";
 import { formatBlobWriteError, isBlobAccessMismatch, isBlobUnusableError, type BlobAccess } from "@/lib/share/access";
 import { validateCustomMusicFile } from "@/lib/music/custom";
 import { materializeCustomMusicFile } from "@/lib/music/ingest";
-import { normalizeMusicBedLabel, type MusicBedLabel } from "@/lib/music/beds";
+import { MUSIC_BEDS, normalizeMusicBedLabel, type MusicBedLabel } from "@/lib/music/beds";
+import { FRAME_STYLES } from "@/lib/frames";
+import { CAPTURE_DURATION_SECS, COUNTDOWN_SECONDS, VIDEO_QUALITIES } from "@/lib/types";
 import type { AppSettings, CaptureDurationSec, CloudDestination, FrameStyleId, VideoQuality } from "@/lib/types";
 import type {
   RemoteBoothPhase,
+  RemoteCameraInfo,
   RemoteCommandPayload,
   RemoteCommandType,
   RemoteEventSnapshot,
@@ -312,6 +316,7 @@ export function snapshotFromBooth(
   },
   settings: Pick<AppSettings, "slowMoEnabled" | "videoQuality" | "boothMusicMuted" | "cloudDestination" | "driveFolderName">,
   cloud: RemoteCloudFlags = { blobConfigured: false, remoteMusicAvailable: false, driveConfigured: false, driveConnected: false },
+  camera?: RemoteCameraInfo | null,
 ): RemoteEventSnapshot {
   const hasCustom = Boolean(event.customMusicBlobId);
   const prefer = Boolean(event.preferBundledBed);
@@ -335,6 +340,15 @@ export function snapshotFromBooth(
     driveConfigured: cloud.driveConfigured,
     blobConfigured: cloud.blobConfigured,
     remoteMusicAvailable: Boolean(cloud.remoteMusicAvailable),
+    buildId: BUILD_ID,
+    options: {
+      frames: FRAME_STYLES.map((f) => ({ id: f.id, name: f.name })),
+      musicBeds: [...MUSIC_BEDS],
+      spinLengths: [...CAPTURE_DURATION_SECS],
+      videoQualities: [...VIDEO_QUALITIES],
+      countdownSec: COUNTDOWN_SECONDS,
+    },
+    ...(camera ? { camera } : {}),
   };
 }
 

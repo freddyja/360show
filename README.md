@@ -328,3 +328,10 @@ Dark nightclub wash: hot magenta, cyan, violet, and neon gold, painted on `html`
 - GoPro Open GoPro / USB webcam ingest
 - Real platform motor (ESP32 / GRBL / vendor SDK)
 - AI / custom frame builder
+
+## Booth phone vs. tablet remote
+
+- **Phone (booth controller):** stays wired to the booth and runs `/e/<id>/capture`. It alone opens the camera (`getUserMedia`), records, burns look-pack frames, mixes music, drives hardware, and applies settings.
+- **Tablet (`/tablet`):** remote surface only. It pairs by QR or 6-character code and sends `startSpin` / `stopSpin` / setting commands through `/api/remote/command` (with a `clientId` for retry dedupe). It renders the phone's reported state and setting options from the heartbeat snapshot.
+- **Settings** (look pack/frame, music track, spin length, video quality, slow-mo, booth speaker mute) are locked while the booth is in countdown/recording/processing: the API answers `423`, and the phone rejects any that slip through. Repeated changes of the same setting coalesce in the queue (last value wins).
+- **Guards:** `npm run lint` runs ESLint `no-restricted-imports` on tablet files plus `scripts/check-tablet-split.mjs`, which fails if anything reachable from `/tablet` imports capture, camera, music, or Capture code. At runtime, `/tablet` marks the window as `tablet`, and camera/recorder/mix entry points throw via `assertBoothRole()`. `/tablet` also skips the booth's local IndexedDB store.
