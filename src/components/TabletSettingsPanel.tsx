@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { RemoteCommandPayload, RemoteCommandType, RemoteEventSnapshot } from "@/lib/remote/types";
+import type { RemoteCameraFacing, RemoteCommandPayload, RemoteCommandType, RemoteEventSnapshot } from "@/lib/remote/types";
 
 /**
  * Session settings picker for the tablet remote. Choices come from the phone's
@@ -34,6 +34,12 @@ export function TabletSettingsPanel({
 }) {
   // Optimistic value per setting until the phone's snapshot confirms it.
   const [pending, setPending] = useState<Partial<Record<SettingKey, string | number | boolean>>>({});
+
+  const [pendingCamera, setPendingCamera] = useState<RemoteCameraFacing | null>(null);
+  const reportedCamera = snapshot?.camera?.facing;
+  useEffect(() => {
+    if (reportedCamera && reportedCamera === pendingCamera) setPendingCamera(null);
+  }, [reportedCamera, pendingCamera]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -68,6 +74,14 @@ export function TabletSettingsPanel({
         return copy;
       });
     }
+  }
+
+  async function changeCamera(next: RemoteCameraFacing) {
+    const current = pendingCamera ?? snapshot?.camera?.facing;
+    if (locked || current === next) return;
+    setPendingCamera(next);
+    const ok = await onSend("setCameraFacing", { cameraFacing: next });
+    if (!ok) setPendingCamera(null);
   }
 
   const chip = (active: boolean, waiting: boolean) =>
@@ -142,6 +156,29 @@ export function TabletSettingsPanel({
             </button>
           ))}
         </Row>
+        {snapshot.camera && (
+          <Row label="Booth camera">
+            {(["user", "environment"] as const).map((f) => {
+              const cam = snapshot.camera!;
+              const known = f === "user" ? cam.front : cam.back;
+              const current = (pendingCamera ?? cam.facing) === f;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  disabled={locked || (known === false && !current)}
+                  title={known === false ? "Not available on the booth phone" : undefined}
+                  className={chip(current, pendingCamera === f)}
+                  onClick={() => void changeCamera(f)}
+                >
+                  {f === "user" ? "Front" : "Back"}
+                  {known === false ? " (n/a)" : ""}
+                </button>
+              );
+            })}
+            {snapshot.camera.note && <p className="w-full text-sm text-amber-200">{snapshot.camera.note}</p>}
+          </Row>
+        )}
         <Row label="Booth speaker">
           {[false, true].map((muted) => (
             <button key={String(muted)} type="button" disabled={locked} className={chip(value("boothMusicMuted") === muted, pending.boothMusicMuted === muted)} onClick={() => void change("boothMusicMuted", muted)}>

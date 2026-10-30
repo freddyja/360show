@@ -10,6 +10,7 @@ import { CAPTURE_DURATION_SECS, COUNTDOWN_SECONDS, VIDEO_QUALITIES } from "@/lib
 import type { AppSettings, CaptureDurationSec, CloudDestination, FrameStyleId, VideoQuality } from "@/lib/types";
 import type {
   RemoteBoothPhase,
+  RemoteCameraInfo,
   RemoteCommandPayload,
   RemoteCommandType,
   RemoteEventSnapshot,
@@ -314,6 +315,7 @@ export function snapshotFromBooth(
   },
   settings: Pick<AppSettings, "slowMoEnabled" | "videoQuality" | "boothMusicMuted" | "cloudDestination" | "driveFolderName">,
   cloud: RemoteCloudFlags = { blobConfigured: false, remoteMusicAvailable: false, driveConfigured: false, driveConnected: false },
+  camera?: RemoteCameraInfo | null,
 ): RemoteEventSnapshot {
   const hasCustom = Boolean(event.customMusicBlobId);
   const prefer = Boolean(event.preferBundledBed);
@@ -344,6 +346,7 @@ export function snapshotFromBooth(
       videoQualities: [...VIDEO_QUALITIES],
       countdownSec: COUNTDOWN_SECONDS,
     },
+    ...(camera ? { camera } : {}),
   };
 }
 

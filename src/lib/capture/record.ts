@@ -1,6 +1,6 @@
 import { assertBoothRole } from "@/lib/deviceRole";
 import { DEMO_ASSET_PATH } from "../types";
-import { getCameraStream, stopStream } from "../hardware/camera";
+import { openCamera, stopStream, type CameraFacing } from "../hardware/camera";
 import { createDemoScene } from "./demoScene";
 import { createVideoRecorder, resolveVideoQuality, typedVideoBlob, videoQualityProfile, type VideoQuality } from "./quality";
 
@@ -71,18 +71,24 @@ async function blobFromDemoAsset() {
 export async function beginLivePreview(
   preferCamera: boolean,
   quality: VideoQuality = "high",
+  facing?: CameraFacing,
 ): Promise<{
   stream: MediaStream;
   source: "camera" | "demo";
   stop: () => void;
+  facing?: CameraFacing | null;
+  fellBack?: boolean;
 }> {
   assertBoothRole("beginLivePreview");
   const resolved = resolveVideoQuality(quality);
   if (preferCamera) {
     try {
-      const stream = await getCameraStream(resolved);
+      const opened = await openCamera(resolved, facing);
+      const stream = opened.stream;
       return {
         stream,
+        facing: opened.actual,
+        fellBack: opened.fellBack,
         source: "camera",
         stop: () => stopStream(stream),
       };

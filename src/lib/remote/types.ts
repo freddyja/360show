@@ -27,6 +27,7 @@ export const REMOTE_COMMAND_TYPES = [
   "setBoothMusicMuted",
   "setCloudDestination",
   "setCustomMusic",
+  "setCameraFacing",
 ] as const;
 
 export type RemoteCommandType = (typeof REMOTE_COMMAND_TYPES)[number];
@@ -57,6 +58,25 @@ export interface RemoteEventSnapshot {
   remoteMusicAvailable?: boolean;
   /** Choices the phone (booth controller) accepts, so remotes never hard-code them. */
   options?: RemoteBoothOptions;
+  /** Booth phone camera: chosen facing, what actually opened, and what exists. */
+  camera?: RemoteCameraInfo;
+}
+
+export type RemoteCameraFacing = "user" | "environment";
+
+export interface RemoteCameraInfo {
+  facing: RemoteCameraFacing;
+  actual: RemoteCameraFacing | null;
+  fellBack: boolean;
+  /** null = the phone can't tell (unlabelled cameras). */
+  front: boolean | null;
+  back: boolean | null;
+  count: number;
+  note: string | null;
+}
+
+export function isRemoteCameraFacing(value: unknown): value is RemoteCameraFacing {
+  return value === "user" || value === "environment";
 }
 
 export interface RemoteBoothOptions {
@@ -79,6 +99,7 @@ export const REMOTE_SETTING_COMMANDS = [
   "setBoothMusicMuted",
   "setCloudDestination",
   "setCustomMusic",
+  "setCameraFacing",
 ] as const satisfies readonly RemoteCommandType[];
 
 export function isRemoteSettingCommand(type: RemoteCommandType) {
@@ -102,6 +123,7 @@ export interface RemoteCommandPayload {
   fileName?: string;
   contentType?: string;
   size?: number;
+  cameraFacing?: RemoteCameraFacing;
 }
 
 export interface RemoteCommand {

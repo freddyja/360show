@@ -24,6 +24,7 @@ import {
   isClientCommandId,
   isEventId,
   isMusicBedLabel,
+  isRemoteCameraFacing,
   isRemoteCommandType,
   isRemoteSettingCommand,
   SETTINGS_LOCKED_MESSAGE,
@@ -153,6 +154,10 @@ export async function POST(request: Request) {
     const folder = incoming.driveFolderName !== undefined ? clipText(incoming.driveFolderName, 64) : undefined;
     if (incoming.driveFolderName !== undefined && !folder) return invalid("Drive folder name cannot be empty.");
     if (folder) command.payload.driveFolderName = folder;
+  }
+  if (command.type === "setCameraFacing") {
+    if (!isRemoteCameraFacing(incoming.cameraFacing)) return invalid("Camera must be user (front) or environment (back).");
+    command.payload.cameraFacing = incoming.cameraFacing;
   }
   if (command.type === "setCustomMusic") {
     if (!(await remoteMusicAvailable())) {

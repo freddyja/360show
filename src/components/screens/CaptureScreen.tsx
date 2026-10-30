@@ -19,7 +19,15 @@ import { usesCustomMusic, musicCaption } from "@/lib/music/custom";
 import { formatCustomMusicError, materializeCustomMusicFile } from "@/lib/music/ingest";
 import { nudgeBoothMusic, syncBoothMusic, useBoothMusic } from "@/lib/music/player";
 import { resolveEventMusic, useEventMusicSrc } from "@/lib/music/resolve";
-import { createStubMotor, probeCamera, type CameraStatus } from "@/lib/hardware";
+import {
+  createStubMotor,
+  isCameraFacing,
+  probeCameraFacing,
+  readCameraFacing,
+  writeCameraFacing,
+  type CameraFacing,
+  type CameraStatus,
+} from "@/lib/hardware";
 import { cn } from "@/lib/cn";
 import { createId } from "@/lib/ids";
 import { getFrameStyle, rampProfileForFrame } from "@/lib/frames";
@@ -50,6 +58,7 @@ import {
   isCloudDestination,
   isMusicBedLabel,
   isVideoQuality,
+  type RemoteCameraInfo,
   type RemoteCommandPayload,
   type RemoteCommandType,
   type RemotePublicView,
@@ -96,6 +105,10 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   messageRef.current = message;
   const latestClipRef = useRef(latestClip);
   latestClipRef.current = latestClip;
+  const [cameraFacing, setCameraFacing] = useState<CameraFacing>("environment");
+  const [cameraInfo, setCameraInfo] = useState<RemoteCameraInfo | null>(null);
+  const cameraFacingRef = useRef<CameraFacing>("environment");
+  const cameraInfoRef = useRef<RemoteCameraInfo | null>(null);
   /** True from the moment a remote START is taken until runSpin returns (covers music load before countdown). */
   const remoteSpinBusyRef = useRef(false);
   const settingsRef = useRef(settings);
@@ -134,15 +147,49 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     });
   }, [event, latestClip, phase, count]);
 
-  useEffect(() => {
-    let cancelled = false;
-    probeCamera().then((status) => {
-      if (!cancelled) setCamera(status);
-    });
-    return () => {
-      cancelled = true;
+  /** Open the chosen camera briefly to learn status, real facing, and fallback (phone only). */
+  const refreshCamera = useCallback(async (facing: CameraFacing): Promise<RemoteCameraInfo> => {
+    const r = await probeCameraFacing(settingsRef.current.videoQuality, facing);
+    const want = facing === "user" ? "Front" : "Back";
+    const note =
+      r.status === "denied"
+        ? "Camera permission denied on this phone."
+        : r.status === "unavailable"
+          ? "No camera could be opened; spins will use the demo scene."
+          : r.fellBack
+            ? `${want} camera not available — using the ${r.actual === "user" ? "front" : "back"} camera.`
+            : null;
+    const info: RemoteCameraInfo = {
+      facing,
+      actual: r.actual,
+      fellBack: r.fellBack,
+      front: r.availability.front,
+      back: r.availability.back,
+      count: r.availability.count,
+      note,
     };
+    setCamera(r.status);
+    cameraInfoRef.current = info;
+    setCameraInfo(info);
+    return info;
   }, []);
+
+  const chooseCameraFacing = useCallback(
+    async (facing: CameraFacing) => {
+      cameraFacingRef.current = facing;
+      setCameraFacing(facing);
+      writeCameraFacing(facing);
+      return refreshCamera(facing);
+    },
+    [refreshCamera],
+  );
+
+  useEffect(() => {
+    const facing = readCameraFacing();
+    cameraFacingRef.current = facing;
+    setCameraFacing(facing);
+    void refreshCamera(facing);
+  }, [refreshCamera]);
 
   useEffect(() => {
     const stored = readStoredPair(eventId);
@@ -199,7 +246,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     setPhase("countdown");
     setLivePreview(true);
 
-    const live = await beginLivePreview(true, boothSettings.videoQuality);
+    const live = await beginLivePreview(true, boothSettings.videoQuality, cameraFacingRef.current);
+    if (live.source === "camera" && cameraInfoRef.current && live.facing !== undefined) {
+      const info = { ...cameraInfoRef.current, actual: live.facing ?? null, fellBack: Boolean(live.fellBack) };
+      cameraInfoRef.current = info;
+      setCameraInfo(info);
+    }
     if (live.source === "camera") setCamera("ok");
     if (videoRef.current) {
       videoRef.current.srcObject = live.stream;
@@ -289,7 +341,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   const boothSnapshot = useCallback(() => {
     const current = eventRef.current;
     if (!current) return null;
-    return snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current);
+    return snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current, cameraInfoRef.current);
   }, []);
 
   const refreshCloudFlags = useCallback(async () => {
@@ -341,7 +393,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         boothPhase: phaseRef.current,
         boothStatus: boothStatusForPhase(phaseRef.current, messageRef.current),
         lastClipId: latestClipRef.current?.id ?? null,
-        snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current),
+        snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current, cameraInfoRef.current),
         acks,
       });
       const remaining = new Set((result.pendingCommands || []).map((item) => item.id));
@@ -396,6 +448,16 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         // Settings lock: never change look, music, or length mid-spin.
         if (isRemoteSettingCommand(cmd.type) && (phaseRef.current !== "idle" || remoteSpinBusyRef.current)) {
           ack(false, SETTINGS_LOCKED_MESSAGE);
+          return;
+        }
+        if (cmd.type === "setCameraFacing") {
+          const facing = cmd.payload?.cameraFacing;
+          if (!isCameraFacing(facing)) {
+            ack(false, "Unknown camera");
+            return;
+          }
+          const info = await chooseCameraFacing(facing);
+          ack(!info.note || info.fellBack, info.note || `Camera: ${facing === "user" ? "front" : "back"}`);
           return;
         }
         if (cmd.type === "setCustomMusic") {
@@ -585,7 +647,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         ack(false, error instanceof Error ? error.message : "Command failed on booth");
       }
     },
-    [eventId, flushRemoteAcks, refreshCloudFlags, saveEvent, saveSettings],
+    [chooseCameraFacing, eventId, flushRemoteAcks, refreshCloudFlags, saveEvent, saveSettings],
   );
 
   useEffect(() => {
@@ -615,7 +677,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           boothPhase: phaseRef.current,
           boothStatus: boothStatusForPhase(phaseRef.current, messageRef.current),
           lastClipId: latestClipRef.current?.id ?? null,
-          snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current),
+          snapshot: boothSnapshot() || snapshotFromBooth(current, settingsRef.current, cloudFlagsRef.current, cameraInfoRef.current),
           acks,
         });
         if (cancelled) return;
@@ -658,7 +720,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         boothPhase: "idle",
         boothStatus: "Capture closed",
         lastClipId: latestClipRef.current?.id ?? null,
-        snapshot: boothSnapshot() || snapshotFromBooth(eventRef.current || event, settingsRef.current, cloudFlagsRef.current),
+        snapshot: boothSnapshot() || snapshotFromBooth(eventRef.current || event, settingsRef.current, cloudFlagsRef.current, cameraInfoRef.current),
       }).catch(() => undefined);
     };
   }, [applyRemoteCommand, boothSnapshot, event, eventId, remoteEnabled, remotePair]);
@@ -678,7 +740,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         setRemoteEnabled(false);
         return;
       }
-      const data = await pairRemote(event.id, snapshotFromBooth(event, settings, cloudFlagsRef.current));
+      const data = await pairRemote(event.id, snapshotFromBooth(event, settings, cloudFlagsRef.current, cameraInfoRef.current));
       setRemotePair({ token: data.token, pairCode: data.pairCode, remoteUrl: data.remoteUrl });
       setRemoteView(data.view);
       setRemoteEnabled(true);
@@ -719,6 +781,26 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       <div className="flex min-h-0 flex-1 flex-col">
       <StatusBar camera={camera} settings={settings} offline={offline} />
 
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Camera">
+        <span className="text-slate-400">Camera</span>
+        {(["user", "environment"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            aria-pressed={cameraFacing === f}
+            disabled={phase !== "idle" || (f === "user" ? cameraInfo?.front === false : cameraInfo?.back === false) && cameraFacing !== f}
+            onClick={() => void chooseCameraFacing(f)}
+            className={cn(
+              "rounded-full border px-4 py-1.5 font-medium disabled:opacity-40",
+              cameraFacing === f ? "border-cyan-300 bg-cyan-400/20 text-white" : "border-white/15 text-slate-300",
+            )}
+          >
+            {f === "user" ? "Front" : "Back"}
+          </button>
+        ))}
+        {cameraInfo?.note && <span className="text-amber-200">{cameraInfo.note}</span>}
+      </div>
+
       <div className="mt-6">
         <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
           {event.name} — {event.clientNames}
@@ -747,6 +829,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           className={cn(
             "absolute inset-0 h-full w-full rounded-[28px] object-cover",
             livePreview ? "opacity-100" : "opacity-0",
+            // Preview-only selfie mirror; the recorded stream is never flipped.
+            (cameraInfo?.actual ?? cameraFacing) === "user" && "-scale-x-100",
           )}
           muted
           playsInline
