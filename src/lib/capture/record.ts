@@ -14,6 +14,7 @@ async function recordStream(
   stream: MediaStream,
   durationMs: number,
   quality: VideoQuality,
+  signal?: AbortSignal,
 ): Promise<Blob | null> {
   if (typeof MediaRecorder === "undefined") return null;
   const recorder = createVideoRecorder(stream, videoQualityProfile(quality).bitrate);
@@ -34,13 +35,26 @@ async function recordStream(
   });
 
   recorder.start(250);
-  await wait(durationMs);
+  await waitOrAbort(durationMs, signal);
   if (recorder.state !== "inactive") recorder.stop();
   return blobPromise;
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Resolves after `ms`, or as soon as `signal` aborts (remote STOP). */
+export function waitOrAbort(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
 }
 
 async function blobFromDemoAsset() {
@@ -92,8 +106,9 @@ export async function recordCapture(
   durationMs: number,
   live: { stream: MediaStream; source: "camera" | "demo" },
   quality: VideoQuality = "high",
+  signal?: AbortSignal,
 ): Promise<Omit<RecordResult, "previewStream" | "stopPreview">> {
-  let blob = await recordStream(live.stream, durationMs, resolveVideoQuality(quality));
+  let blob = await recordStream(live.stream, durationMs, resolveVideoQuality(quality), signal);
   if (!blob || blob.size < 1000) {
     blob = await blobFromDemoAsset();
   }

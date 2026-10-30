@@ -6,6 +6,20 @@ import { QRCodeSVG } from "qrcode.react";
 import { cn } from "@/lib/cn";
 import { operatorIsFresh, type RemotePublicView } from "@/lib/remote/types";
 
+/** Tablet remote link built from the laptop link: /e/{id}/remote?k=… → /tablet?e={id}&k=… */
+export function tabletUrlFromRemoteUrl(remoteUrl: string | null) {
+  if (!remoteUrl) return null;
+  try {
+    const url = new URL(remoteUrl);
+    const match = url.pathname.match(/^\/e\/([^/]+)\/remote\/?$/);
+    const token = url.searchParams.get("k");
+    if (!match || !token) return null;
+    return `${url.origin}/tablet?e=${match[1]}&k=${encodeURIComponent(token)}`;
+  } catch {
+    return null;
+  }
+}
+
 export function RemoteEnablePanel({
   enabled,
   remoteUrl,
@@ -30,6 +44,7 @@ export function RemoteEnablePanel({
   onDisable: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const tabletUrl = tabletUrlFromRemoteUrl(remoteUrl);
   const laptop = view ? operatorIsFresh(view) : false;
   const status = !enabled ? "off" : error ? "error" : laptop ? "paired" : "waiting";
 
@@ -81,11 +96,24 @@ export function RemoteEnablePanel({
 
       {enabled && (
         <div className="mt-4 grid gap-4 sm:grid-cols-[auto_1fr]">
-          {remoteUrl && (
-            <div className="mx-auto w-fit rounded-2xl bg-white p-2">
-              <QRCodeSVG value={remoteUrl} size={148} bgColor="#ffffff" fgColor="#07101c" />
-            </div>
-          )}
+          <div className="mx-auto flex w-fit gap-3">
+            {remoteUrl && (
+              <figure className="text-center">
+                <div className="rounded-2xl bg-white p-2">
+                  <QRCodeSVG value={remoteUrl} size={148} bgColor="#ffffff" fgColor="#07101c" />
+                </div>
+                <figcaption className="mt-1 text-xs text-slate-400">Laptop</figcaption>
+              </figure>
+            )}
+            {tabletUrl && (
+              <figure className="text-center">
+                <div className="rounded-2xl bg-white p-2">
+                  <QRCodeSVG value={tabletUrl} size={148} bgColor="#ffffff" fgColor="#07101c" />
+                </div>
+                <figcaption className="mt-1 text-xs text-slate-400">Tablet (Start / Stop)</figcaption>
+              </figure>
+            )}
+          </div>
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Pair status</p>
             <p
@@ -105,7 +133,7 @@ export function RemoteEnablePanel({
             )}
             <p className="mt-2 flex items-center gap-2 text-sm text-slate-400">
               <Smartphone className="h-4 w-4" />
-              Laptop opens this link (or types the code on `/remote` for this event).
+              Laptop opens this link (or types the code on `/remote` for this event). Tablet scans the Tablet QR, or opens /tablet and types the code.
             </p>
             {remoteUrl && (
               <button

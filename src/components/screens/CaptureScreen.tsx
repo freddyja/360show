@@ -12,7 +12,7 @@ import { CrowdOpenControls } from "@/components/CrowdOpenControls";
 import { RemoteEnablePanel } from "@/components/RemoteEnablePanel";
 import { OperatorShell } from "@/components/OperatorShell";
 import { publishCrowd } from "@/lib/crowd/channel";
-import { beginLivePreview, recordCapture, thumbnailFromVideo } from "@/lib/capture/record";
+import { beginLivePreview, recordCapture, thumbnailFromVideo, waitOrAbort } from "@/lib/capture/record";
 import { bakeSourceForClip, ensureBakedClip, needsExportBake } from "@/lib/capture/ensureBaked";
 import { hasMusicBed, normalizeMusicBedLabel } from "@/lib/music/beds";
 import { usesCustomMusic, musicCaption } from "@/lib/music/custom";
@@ -101,6 +101,8 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
   remoteTokenRef.current = remotePair?.token ?? null;
   const handledCommands = useRef(new Set<string>());
   const runSpinRef = useRef<() => Promise<void>>(async () => undefined);
+  /** Aborted by a remote STOP (tablet operator) to cancel countdown or end recording early. */
+  const spinAbortRef = useRef<AbortController | null>(null);
   const cloudFlagsRef = useRef<RemoteCloudFlags>({
     blobConfigured: false,
     remoteMusicAvailable: false,
@@ -187,6 +189,9 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     nudgeBoothMusic();
     setMessage(null);
     setPreviewOpen(false);
+    const abort = new AbortController();
+    spinAbortRef.current = abort;
+    phaseRef.current = "countdown";
     setPhase("countdown");
     setLivePreview(true);
 
@@ -198,10 +203,24 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     }
 
     for (let i = COUNTDOWN_SECONDS; i >= 1; i -= 1) {
+      if (abort.signal.aborted) break;
       setCount(i);
-      await wait(700);
+      await waitOrAbort(700, abort.signal);
     }
 
+    if (abort.signal.aborted) {
+      // Remote STOP during countdown: nothing recorded, back to idle.
+      live.stop();
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setLivePreview(false);
+      spinAbortRef.current = null;
+      phaseRef.current = "idle";
+      setPhase("idle");
+      setMessage("Spin cancelled from the remote.");
+      return;
+    }
+
+    phaseRef.current = "recording";
     setPhase("recording");
     setProgress(0);
     const started = Date.now();
@@ -210,13 +229,17 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
     }, 80);
 
     void motor.spin(spinMs);
-    const recorded = await recordCapture(spinMs, live, boothSettings.videoQuality);
+    const recorded = await recordCapture(spinMs, live, boothSettings.videoQuality, abort.signal);
+    const stoppedEarly = abort.signal.aborted;
+    const recordedMs = stoppedEarly ? Math.max(1000, Date.now() - started) : spinMs;
+    spinAbortRef.current = null;
     window.clearInterval(tick);
     setProgress(1);
     live.stop();
     if (videoRef.current) videoRef.current.srcObject = null;
     setLivePreview(false);
 
+    phaseRef.current = "processing";
     setPhase("processing");
     const blob = recorded.blob;
     const src = blob ? URL.createObjectURL(blob) : DEMO_ASSET_PATH;
@@ -226,7 +249,7 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       id: createId("clip"),
       eventId: current.id,
       createdAt: Date.now(),
-      durationMs: spinMs,
+      durationMs: recordedMs,
       source: recorded.source,
       hasBlob: Boolean(blob),
       demoAssetPath: blob ? null : DEMO_ASSET_PATH,
@@ -238,9 +261,12 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
       void bakeExportInBackground(clip, blob);
     }
     await wait(600);
+    phaseRef.current = "idle";
     setPhase("idle");
     setMessage(
-      recorded.source === "demo"
+      stoppedEarly
+        ? "Spin stopped early from the remote and saved."
+        : recorded.source === "demo"
         ? boothSettings.slowMoEnabled !== false
           ? "Demo spin saved — camera was unavailable. Baking export in the background."
           : hasMusicBed(current.musicBedLabel) || usesCustomMusic(current)
@@ -340,6 +366,22 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
           }
           await runSpinRef.current();
           ack(true, "Spin captured");
+          void flushRemoteAcks();
+          return;
+        }
+        if (cmd.type === "stopSpin") {
+          const phaseNow = phaseRef.current;
+          if (phaseNow === "idle") {
+            ack(true, "Booth already idle");
+            return;
+          }
+          if (phaseNow === "processing") {
+            ack(true, "Already saving the spin");
+            return;
+          }
+          spinAbortRef.current?.abort();
+          ack(true, phaseNow === "countdown" ? "Countdown cancelled" : "Recording stopped");
+          void flushRemoteAcks();
           return;
         }
         if (cmd.type === "setCustomMusic") {
@@ -569,9 +611,15 @@ export function CaptureScreen({ eventId }: { eventId: string }) {
         setRemoteView(result.view);
         setRemoteError(null);
         const cmds = (result.pendingCommands || (result.pendingCommand ? [result.pendingCommand] : [])) as PendingRemoteCommand[];
-        for (const cmd of cmds) {
+        const lastStopIndex = cmds.map((item) => item?.type).lastIndexOf("stopSpin");
+        for (const [index, cmd] of cmds.entries()) {
           if (!cmd?.id || handledCommands.current.has(cmd.id)) continue;
           handledCommands.current.add(cmd.id);
+          if (cmd.type === "startSpin" && index < lastStopIndex) {
+            // START and STOP both queued while the booth was unreachable: STOP wins.
+            pendingAcksRef.current.push({ commandId: cmd.id, ok: false, message: "Cancelled by STOP" });
+            continue;
+          }
           if (cmd.type === "startSpin") void applyRemoteCommand(cmd);
           else await applyRemoteCommand(cmd);
         }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  eventIdForPairCode,
   pairCodeMatches,
   publicViewNow,
   readCommand,
@@ -20,8 +21,9 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as { eventId?: string; pairCode?: string } | null;
-  const eventId = body?.eventId?.trim() || "";
   const pairCode = body?.pairCode || "";
+  // Tablet operator may join with only the code; resolve the event from the code index.
+  const eventId = body?.eventId?.trim() || (await eventIdForPairCode(pairCode)) || "";
   if (!isEventId(eventId) || pairCode.trim().length < 4) {
     return NextResponse.json({ error: "Enter the 6-character code shown on Capture." }, { status: 400 });
   }
@@ -35,6 +37,7 @@ export async function POST(request: Request) {
   await touchOperatorPing(eventId, now);
   const pending = await readCommand(eventId);
   return NextResponse.json({
+    eventId,
     token: session.token,
     pairCode: session.pairCode,
     view: await publicViewNow(session, pending, now),

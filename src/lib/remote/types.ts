@@ -17,6 +17,7 @@ export const REMOTE_POLL_MS = 1_500;
 
 export const REMOTE_COMMAND_TYPES = [
   "startSpin",
+  "stopSpin",
   "setSpinLength",
   "setMusicBed",
   "setFrameStyle",
@@ -117,6 +118,15 @@ export interface RemotePublicView {
   pendingCommand: { id: string; type: RemoteCommandType; createdAt: number } | null;
   snapshot: RemoteEventSnapshot;
   pairCode: string;
+}
+
+/** Operator-chosen id so a retried POST after a dropped connection is not queued twice. */
+export function isClientCommandId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(value);
+}
+
+export function remotePairCodeIndexPath(pairCode: string) {
+  return `remote/codes/${pairCode}.json`;
 }
 
 export function isEventId(value: string) {

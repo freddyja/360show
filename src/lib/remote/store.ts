@@ -10,6 +10,7 @@ import {
   cacheDeleteKey,
   cacheGetJson,
   cacheOperatorKey,
+  cachePairCodeKey,
   cacheSessionKey,
   cacheSetJson,
   runtimeCacheReady,
@@ -23,6 +24,7 @@ import {
   remoteMusicMetaPath,
   remoteMusicPath,
   remoteOperatorPath,
+  remotePairCodeIndexPath,
   remoteSessionPath,
   type RemoteAck,
   type RemoteCommand,
@@ -38,6 +40,13 @@ type RemoteMusicFile = {
   fileName: string;
   contentType: string;
 };
+
+const memoryCodes = globalThis as unknown as { __360showRemoteCodes?: Map<string, string> };
+
+function memoryCodeMap() {
+  if (!memoryCodes.__360showRemoteCodes) memoryCodes.__360showRemoteCodes = new Map();
+  return memoryCodes.__360showRemoteCodes;
+}
 
 type MemoryBucket = {
   session: RemoteSession | null;
@@ -390,7 +399,34 @@ export async function createPairSession(eventId: string, snapshot: RemoteEventSn
   };
   await writeSession(session);
   await writeCommand(eventId, null);
+  await writePairCodeIndex(session.pairCode, eventId).catch(() => undefined);
   return session;
+}
+
+/** Lets a tablet pair with only the 6-character code (no event id typed). */
+async function writePairCodeIndex(pairCode: string, eventId: string) {
+  const code = normalizePairCode(pairCode);
+  const mode = await resolveRemoteStoreMode();
+  if (mode === "blob") {
+    await writeJsonBlob(remotePairCodeIndexPath(code), { eventId });
+    return;
+  }
+  if (mode === "cache") {
+    await cacheSetJson(cachePairCodeKey(code), { eventId });
+    return;
+  }
+  if (mode === "memory") memoryCodeMap().set(code, eventId);
+}
+
+export async function eventIdForPairCode(pairCode: string): Promise<string | null> {
+  const code = normalizePairCode(pairCode);
+  if (code.length !== 6) return null;
+  const mode = await resolveRemoteStoreMode();
+  let eventId: string | null | undefined = null;
+  if (mode === "blob") eventId = (await readJsonBlob<{ eventId?: string }>(remotePairCodeIndexPath(code)))?.eventId;
+  else if (mode === "cache") eventId = (await cacheGetJson<{ eventId?: string }>(cachePairCodeKey(code)))?.eventId;
+  else if (mode === "memory") eventId = memoryCodeMap().get(code);
+  return eventId && isEventId(eventId) ? eventId : null;
 }
 
 export async function expireSession(eventId: string) {

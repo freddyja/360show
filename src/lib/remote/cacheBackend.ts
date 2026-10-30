@@ -19,6 +19,10 @@ export function cacheCommandKey(eventId: string) {
   return `commands:${eventId}`;
 }
 
+export function cachePairCodeKey(pairCode: string) {
+  return `paircode:${pairCode}`;
+}
+
 export function cacheOperatorKey(eventId: string) {
   return `operator:${eventId}`;
 }

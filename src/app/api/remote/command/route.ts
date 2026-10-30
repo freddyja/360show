@@ -20,6 +20,7 @@ import {
   isAccentColor,
   isCaptureDurationSec,
   isCloudDestination,
+  isClientCommandId,
   isEventId,
   isMusicBedLabel,
   isRemoteCommandType,
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
     token?: string;
     type?: string;
     payload?: RemoteCommandPayload;
+    clientId?: string;
   } | null;
 
   const eventId = body?.eventId?.trim() || "";
@@ -58,8 +60,38 @@ export async function POST(request: Request) {
   }
 
   const incoming = body.payload || {};
+  const now0 = Date.now();
+  // Idempotent retries: the tablet resends the same clientId after a dropped
+  // connection; answer with the original command instead of queueing it twice.
+  const clientId = isClientCommandId(body.clientId) ? body.clientId : null;
+  const fixedId = clientId ? `rcmd_c_${clientId}` : null;
+  if (fixedId) {
+    const pendingNow = await readCommands(eventId);
+    if (pendingNow.some((cmd) => cmd.id === fixedId) || session.lastAck?.commandId === fixedId) {
+      await touchOperatorPing(eventId, now0);
+      return NextResponse.json({
+        ok: true,
+        duplicate: true,
+        commandId: fixedId,
+        view: await publicViewNow(session, pendingNow[0] ?? null, now0),
+      });
+    }
+  }
+  if (body.type === "stopSpin") {
+    const pendingNow = await readCommands(eventId);
+    const existingStop = pendingNow.find((cmd) => cmd.type === "stopSpin");
+    if (existingStop) {
+      await touchOperatorPing(eventId, now0);
+      return NextResponse.json({
+        ok: true,
+        duplicate: true,
+        commandId: existingStop.id,
+        view: await publicViewNow(session, pendingNow[0] ?? null, now0),
+      });
+    }
+  }
   const command: RemoteCommand = {
-    id: newCommandId(),
+    id: fixedId || newCommandId(),
     type: body.type,
     createdAt: Date.now(),
     payload: {},
